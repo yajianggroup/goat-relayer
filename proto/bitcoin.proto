@@ -1,0 +1,24 @@
+// bitcoin.proto
+syntax = "proto3";
+
+option go_package = "github.com/goatnetwork/goat-relayer/proto";
+
+package proto;
+
+service BitcoinLightWallet {
+  rpc NewTransaction (NewTransactionRequest) returns (NewTransactionResponse);
+}
+
+message NewTransactionRequest {
+  string transaction_id = 1;
+  uint64 block_height = 2;
+  bytes block_hash = 3;
+  bytes raw_transaction = 4;
+  // evm_address is the user wallet address in goat evm
+  bytes evm_address = 5;
+}
+
+message NewTransactionResponse {
+  string transaction_id = 1;
+  string error_message = 2;
+}
