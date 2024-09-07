@@ -4,8 +4,6 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
-
-	"gorm.io/gorm"
 )
 
 type BTCTransaction struct {
@@ -48,8 +46,8 @@ type Participant struct {
 	Address string `gorm:"uniqueIndex;not null"`
 }
 
-func MigrateDB(db *gorm.DB) {
-	if err := db.AutoMigrate(&BTCTransaction{}, &EVMSyncStatus{}, &WithdrawalRecord{}, &SubmitterRotation{}, &Participant{}); err != nil {
+func (dm *DatabaseManager) migrateDB() {
+	if err := dm.db.AutoMigrate(&BTCTransaction{}, &EVMSyncStatus{}, &WithdrawalRecord{}, &SubmitterRotation{}, &Participant{}); err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}
 }

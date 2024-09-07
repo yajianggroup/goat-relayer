@@ -1,6 +1,12 @@
 package main
 
 import (
+	"context"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
+
 	"github.com/goatnetwork/goat-relayer/internal/btc"
 	"github.com/goatnetwork/goat-relayer/internal/config"
 	"github.com/goatnetwork/goat-relayer/internal/db"
@@ -8,44 +14,76 @@ import (
 	"github.com/goatnetwork/goat-relayer/internal/layer2"
 	"github.com/goatnetwork/goat-relayer/internal/p2p"
 	"github.com/goatnetwork/goat-relayer/internal/rpc"
-	"github.com/goatnetwork/goat-relayer/internal/tss"
+	log "github.com/sirupsen/logrus"
 )
 
 type Application struct {
-	ConfigManager   config.ConfigManager
-	DatabaseManager db.DatabaseManager
-	Layer2Monitor   layer2.Layer2Monitor
-	HTTPServer      http.HTTPServer
-	LibP2PService   p2p.LibP2PService
-	TSSService      tss.TSSService
-	BTCListener     btc.BTCListener
-	UTXOService     rpc.UTXOService
+	DatabaseManager *db.DatabaseManager
+	Layer2Listener  *layer2.Layer2Listener
+	HTTPServer      *http.HTTPServer
+	LibP2PService   *p2p.LibP2PService
+	BTCListener     *btc.BTCListener
+	UTXOService     *rpc.UTXOService
 }
 
 func NewApplication() *Application {
+	config.InitConfig()
+
+	databaseManager := db.NewDatabaseManager()
+	libP2PService := p2p.NewLibP2PService(databaseManager)
+	layer2Listener := layer2.NewLayer2Listener(libP2PService, databaseManager)
+	httpServer := http.NewHTTPServer(libP2PService, databaseManager)
+	btcListener := btc.NewBTCListener(libP2PService, databaseManager)
+
 	return &Application{
-		ConfigManager:   &config.ConfigManagerImpl{},
-		DatabaseManager: &db.DatabaseManagerImpl{},
-		Layer2Monitor:   &layer2.Layer2MonitorImpl{},
-		HTTPServer:      &http.HTTPServerImpl{},
-		LibP2PService:   &p2p.LibP2PServiceImpl{},
-		TSSService:      &tss.TSSServiceImpl{},
-		BTCListener:     &btc.BTCListenerImpl{},
-		UTXOService:     &rpc.UTXOServiceImpl{},
+		DatabaseManager: databaseManager,
+		Layer2Listener:  layer2Listener,
+		LibP2PService:   libP2PService,
+		HTTPServer:      httpServer,
+		BTCListener:     btcListener,
 	}
 }
 
 func (app *Application) Run() {
-	app.ConfigManager.InitConfig()
-	app.DatabaseManager.InitDB()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	if config.AppConfig.EnableRelayer {
-		go app.Layer2Monitor.StartLayer2Monitor()
-	}
-	app.HTTPServer.StartHTTPServer()
-	app.LibP2PService.StartLibp2p(app.TSSService, app.HTTPServer)
-	app.BTCListener.StartBTCListener(app.LibP2PService, app.DatabaseManager)
-	app.UTXOService.StartUTXOService(app.BTCListener)
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 
-	select {}
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		app.Layer2Listener.Start(ctx)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		app.LibP2PService.Start(ctx)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		app.HTTPServer.Start(ctx)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		app.BTCListener.Start(ctx)
+	}()
+
+	<-stop
+	log.Info("Receiving exit signal...")
+
+	cancel()
+
+	wg.Wait()
+	log.Info("Server stopped")
+
+	// app.UTXOService.StartUTXOService(app.BTCListener)
 }

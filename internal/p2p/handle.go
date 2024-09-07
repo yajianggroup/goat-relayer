@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/goatnetwork/goat-relayer/internal/tss"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -45,7 +44,7 @@ func publishMessage(ctx context.Context, msg Message) {
 	}
 }
 
-func handlePubSubMessages(ctx context.Context, sub *pubsub.Subscription, node host.Host, tssKeyCh chan<- tss.KeygenMessage, tssSignCh chan<- tss.SigningMessage) {
+func handlePubSubMessages(ctx context.Context, sub *pubsub.Subscription, node host.Host) {
 	for {
 		msg, err := sub.Next(ctx)
 		if err != nil {
@@ -67,10 +66,10 @@ func handlePubSubMessages(ctx context.Context, sub *pubsub.Subscription, node ho
 		log.Infof("Received message via pubsub: ID=%d, Content=%s", receivedMsg.MessageType, receivedMsg.Content)
 
 		switch receivedMsg.MessageType {
-		case MessageTypeKeygen:
-			tssKeyCh <- tss.KeygenMessage{Content: receivedMsg.Content}
-		case MessageTypeSigning:
-			tssSignCh <- tss.SigningMessage{Content: receivedMsg.Content}
+		// case MessageTypeKeygen:
+		// 	tssKeyCh <- tss.KeygenMessage{Content: receivedMsg.Content}
+		// case MessageTypeSigning:
+		// 	tssSignCh <- tss.SigningMessage{Content: receivedMsg.Content}
 		default:
 			log.Warnf("Unknown message type: %d", receivedMsg.MessageType)
 		}

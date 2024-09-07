@@ -11,16 +11,19 @@ import (
 	"gorm.io/gorm"
 )
 
-type DatabaseManager interface {
-	InitDB()
-	GetDB() *gorm.DB
+type DatabaseManager struct {
+	db *gorm.DB
 }
 
-type DatabaseManagerImpl struct {
-	DB *gorm.DB
+func NewDatabaseManager() *DatabaseManager {
+	dm := &DatabaseManager{}
+
+	dm.initDB()
+
+	return dm
 }
 
-func (dm *DatabaseManagerImpl) InitDB() {
+func (dm *DatabaseManager) initDB() {
 	dbDir := config.AppConfig.DbDir
 	if err := os.MkdirAll(dbDir, os.ModePerm); err != nil {
 		log.Fatalf("Failed to create database directory: %v", err)
@@ -31,13 +34,13 @@ func (dm *DatabaseManagerImpl) InitDB() {
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
 	}
-	dm.DB = db
+	dm.db = db
 	log.Debugf("Database connected successfully, path: %s", dbPath)
 
-	MigrateDB(dm.DB)
+	dm.migrateDB()
 	log.Debugf("Database migration completed successfully")
 }
 
-func (dm *DatabaseManagerImpl) GetDB() *gorm.DB {
-	return dm.DB
+func (dm *DatabaseManager) GetDB() *gorm.DB {
+	return dm.db
 }
