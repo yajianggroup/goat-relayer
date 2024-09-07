@@ -2,11 +2,11 @@ package btc
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
 	"path/filepath"
 	"time"
 
@@ -17,19 +17,23 @@ import (
 	"github.com/goatnetwork/goat-relayer/internal/config"
 	"github.com/goatnetwork/goat-relayer/internal/db"
 	"github.com/goatnetwork/goat-relayer/internal/p2p"
+	log "github.com/sirupsen/logrus"
 	"github.com/syndtr/goleveldb/leveldb"
 )
 
-type BTCListener interface {
-	StartBTCListener(p2p.LibP2PService, db.DatabaseManager)
+type BTCListener struct {
+	libp2p *p2p.LibP2PService
+	db     *db.DatabaseManager
 }
 
-type BTCListenerImpl struct {
-	p2p.LibP2PService
-	db.DatabaseManager
+func NewBTCListener(libp2p *p2p.LibP2PService, dbm *db.DatabaseManager) *BTCListener {
+	return &BTCListener{
+		libp2p: libp2p,
+		db:     dbm,
+	}
 }
 
-func (bl *BTCListenerImpl) StartBTCListener(libp2p p2p.LibP2PService, dbman db.DatabaseManager) {
+func (bl *BTCListener) Start(ctx context.Context) {
 	connConfig := &rpcclient.ConnConfig{
 		Host:         config.AppConfig.BTCRPC, // RPC server address
 		HTTPPostMode: true,                    // Bitcoin core only supports HTTP POST mode
@@ -50,58 +54,93 @@ func (bl *BTCListenerImpl) StartBTCListener(libp2p p2p.LibP2PService, dbman db.D
 	}
 	defer db.Close()
 
-	listenAndCacheBTCBlocks(client, db)
+	go listenAndCacheBTCBlocks(ctx, client, db)
+
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+
 	go func() {
-		for range time.NewTicker(24 * time.Hour).C {
-			purgeOldData(db)
+		for {
+			select {
+			case <-ctx.Done():
+				log.Info("Stopping BTCListener purgeOldData task...")
+				return
+			case <-ticker.C:
+				purgeOldData(db)
+			}
 		}
 	}()
+
+	<-ctx.Done()
+
+	log.Info("BTCListener is stopping...")
 }
 
-func listenAndCacheBTCBlocks(client *rpcclient.Client, db *leveldb.DB) {
+func listenAndCacheBTCBlocks(ctx context.Context, client *rpcclient.Client, db *leveldb.DB) {
+	// TODO first time read from DB, L2 also give event
 	currentHeight := config.AppConfig.BTCStartHeight
+	retryInterval := 10 * time.Second
+	pollInterval := 1 * time.Minute
 	for {
-		// Get the current block hash
-		blockHash, err := client.GetBlockHash(int64(currentHeight))
-		if err != nil {
-			log.Printf("Error getting block hash: %v", err)
-			time.Sleep(10 * time.Second)
-			continue
+		select {
+		case <-ctx.Done():
+			log.Info("Stopping listenAndCacheBTCBlocks...")
+			return
+		default:
+			// Get the current block hash
+			blockHash, err := client.GetBlockHash(int64(currentHeight))
+			if err != nil {
+				log.Errorf("Error getting block hash at height %d: %v", currentHeight, err)
+				waitFor(ctx, retryInterval)
+				continue
+			}
+
+			// Get the block
+			msgBlock, err := client.GetBlock(blockHash)
+			if err != nil {
+				log.Errorf("Error getting msg block at height %d: %v", currentHeight, err)
+				waitFor(ctx, retryInterval)
+				continue
+			}
+
+			// Convert to *btcutil.Block
+			block := btcutil.NewBlock(msgBlock)
+
+			// Cache block data
+			CacheBlockData(db, block)
+			SendBlockData(block)
+
+			log.Infof("Successfully cached block at height: %d", currentHeight)
+
+			// TODO save current block to DB
+
+			// Move to the next block
+			currentHeight++
+
+			// Check if the latest block has been reached
+			bestHeight, err := client.GetBlockCount()
+			if err != nil {
+				log.Printf("Error getting latest block height: %v", err)
+				waitFor(ctx, retryInterval)
+				continue
+			}
+
+			if int64(currentHeight) > bestHeight {
+				log.Printf("Reached the latest block, waiting for new blocks...")
+				currentHeight = int(bestHeight)
+				waitFor(ctx, pollInterval)
+				continue
+			}
 		}
+		waitFor(ctx, pollInterval)
+	}
+}
 
-		// Get the block
-		msgBlock, err := client.GetBlock(blockHash)
-		if err != nil {
-			log.Printf("Error getting block: %v", err)
-			time.Sleep(10 * time.Second)
-			continue
-		}
-
-		// Convert to *btcutil.Block
-		block := btcutil.NewBlock(msgBlock)
-
-		// Cache block data
-		CacheBlockData(db, block)
-		SendBlockData(block)
-
-		log.Printf("Cached block height: %d", currentHeight)
-
-		// Move to the next block
-		currentHeight++
-
-		// Check if the latest block has been reached
-		bestHeight, err := client.GetBlockCount()
-		if err != nil {
-			log.Printf("Error getting latest block height: %v", err)
-			time.Sleep(10 * time.Second)
-			continue
-		}
-
-		if int64(currentHeight) > bestHeight {
-			log.Printf("Reached the latest block, waiting for new blocks...")
-			time.Sleep(10 * time.Second)
-			currentHeight = int(bestHeight)
-		}
+func waitFor(ctx context.Context, duration time.Duration) {
+	select {
+	case <-ctx.Done():
+		return
+	case <-time.After(duration):
 	}
 }
 

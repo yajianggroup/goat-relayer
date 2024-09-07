@@ -10,9 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bnb-chain/tss-lib/v2/common"
-	"github.com/bnb-chain/tss-lib/v2/ecdsa/keygen"
-	tsslib "github.com/bnb-chain/tss-lib/v2/tss"
 	libp2p "github.com/libp2p/go-libp2p"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/crypto"
@@ -26,8 +23,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/goatnetwork/goat-relayer/internal/config"
-	"github.com/goatnetwork/goat-relayer/internal/http"
-	"github.com/goatnetwork/goat-relayer/internal/tss"
+	"github.com/goatnetwork/goat-relayer/internal/db"
 )
 
 const (
@@ -41,28 +37,24 @@ const (
 
 var messageTopic *pubsub.Topic
 
-type LibP2PService interface {
-	StartLibp2p(tss tss.TSSService, httpsrv http.HTTPServer)
+type LibP2PService struct {
+	db *db.DatabaseManager
 }
 
-type LibP2PServiceImpl struct {
-	tss.TSSService
-	http.HTTPServer
+func NewLibP2PService(db *db.DatabaseManager) *LibP2PService {
+	return &LibP2PService{
+		db: db,
+	}
 }
 
-func (lp *LibP2PServiceImpl) StartLibp2p(tsssrv tss.TSSService, httpsrv http.HTTPServer) {
-	lp.TSSService = tsssrv
-	lp.HTTPServer = httpsrv
+func (lp *LibP2PService) Start(ctx context.Context) {
 	// Start libp2p node
-	tssKeyInCh := make(chan tss.KeygenMessage)
-	tssKeyOutCh := make(chan tsslib.Message)
-	tssKeyEndCh := make(chan *keygen.LocalPartySaveData)
-	tssSignInCh := make(chan tss.SigningMessage)
-	tssSignOutCh := make(chan tsslib.Message)
-	tssSignEndCh := make(chan *common.SignatureData)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	// tssKeyInCh := make(chan tss.KeygenMessage)
+	// tssKeyOutCh := make(chan tsslib.Message)
+	// tssKeyEndCh := make(chan *keygen.LocalPartySaveData)
+	// tssSignInCh := make(chan tss.SigningMessage)
+	// tssSignOutCh := make(chan tsslib.Message)
+	// tssSignEndCh := make(chan *common.SignatureData)
 
 	node, ps, err := createNodeWithPubSub(ctx)
 	if err != nil {
@@ -108,9 +100,7 @@ func (lp *LibP2PServiceImpl) StartLibp2p(tsssrv tss.TSSService, httpsrv http.HTT
 		log.Fatalf("Failed to subscribe to heartbeat topic: %v", err)
 	}
 
-	go handlePubSubMessages(ctx, sub, node, tssKeyInCh, tssSignInCh)
-	go lp.HandleKeygenMessages(ctx, tssKeyInCh, tssKeyOutCh, tssKeyEndCh)
-	go lp.HandleSigningMessages(ctx, tssSignInCh, tssSignOutCh, tssSignEndCh)
+	go handlePubSubMessages(ctx, sub, node)
 	go handleHeartbeatMessages(ctx, hbSub, node)
 	go startHeartbeat(ctx, node, hbTopic)
 
@@ -125,12 +115,20 @@ func (lp *LibP2PServiceImpl) StartLibp2p(tsssrv tss.TSSService, httpsrv http.HTT
 
 	<-ctx.Done()
 
-	close(tssKeyInCh)
-	close(tssKeyOutCh)
-	close(tssKeyEndCh)
-	close(tssSignInCh)
-	close(tssSignOutCh)
-	close(tssSignEndCh)
+	log.Info("LibP2PService is stopping...")
+
+	if err := node.Close(); err != nil {
+		log.Errorf("Error closing libp2p node: %v", err)
+	}
+
+	log.Info("LibP2PService has stopped.")
+
+	// close(tssKeyInCh)
+	// close(tssKeyOutCh)
+	// close(tssKeyEndCh)
+	// close(tssSignInCh)
+	// close(tssSignOutCh)
+	// close(tssSignEndCh)
 }
 
 func createNodeWithPubSub(ctx context.Context) (host.Host, *pubsub.PubSub, error) {
