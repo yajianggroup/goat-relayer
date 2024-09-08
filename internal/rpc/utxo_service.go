@@ -10,8 +10,6 @@ import (
 	"github.com/goatnetwork/goat-relayer/internal/btc"
 	"github.com/goatnetwork/goat-relayer/internal/config"
 	pb "github.com/goatnetwork/goat-relayer/proto"
-	bitcointypes "github.com/goatnetwork/goat/x/bitcoin/types"
-	relayertypes "github.com/goatnetwork/goat/x/relayer/types"
 	grpc "google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
@@ -66,15 +64,7 @@ func (s *UtxoServer) NewTransaction(ctx context.Context, req *pb.NewTransactionR
 		return nil, err
 	}
 
-	deposit := &bitcointypes.Deposit{
-		EvmAddress:    req.EvmAddress,
-		NoWitnessTx:   req.RawTransaction,
-		RelayerPubkey: &relayertypes.PublicKey{}, // Need to fill in the correct RelayerPubkey
-		OutputIndex:   uint32(0),                 // Assuming output index is 0, adjust according to actual situation
-		Version:       uint32(0),                 // Assuming version is 0, adjust according to actual situation
-	}
-
-	btc.SendDepositData(deposit)
+	// TODO: Send the transaction to the consensus layer
 
 	return &pb.NewTransactionResponse{
 		TransactionId: "txhash",
