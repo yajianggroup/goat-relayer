@@ -14,11 +14,13 @@ import (
 	"github.com/goatnetwork/goat-relayer/internal/layer2"
 	"github.com/goatnetwork/goat-relayer/internal/p2p"
 	"github.com/goatnetwork/goat-relayer/internal/rpc"
+	"github.com/goatnetwork/goat-relayer/internal/state"
 	log "github.com/sirupsen/logrus"
 )
 
 type Application struct {
 	DatabaseManager *db.DatabaseManager
+	State           *state.State
 	Layer2Listener  *layer2.Layer2Listener
 	HTTPServer      *http.HTTPServer
 	LibP2PService   *p2p.LibP2PService
@@ -29,14 +31,16 @@ type Application struct {
 func NewApplication() *Application {
 	config.InitConfig()
 
-	databaseManager := db.NewDatabaseManager()
-	libP2PService := p2p.NewLibP2PService(databaseManager)
-	layer2Listener := layer2.NewLayer2Listener(libP2PService, databaseManager)
-	httpServer := http.NewHTTPServer(libP2PService, databaseManager)
-	btcListener := btc.NewBTCListener(libP2PService, databaseManager)
+	dbm := db.NewDatabaseManager()
+	state := state.InitializeState(dbm)
+	libP2PService := p2p.NewLibP2PService(dbm)
+	layer2Listener := layer2.NewLayer2Listener(libP2PService, state, dbm)
+	httpServer := http.NewHTTPServer(libP2PService, state, dbm)
+	btcListener := btc.NewBTCListener(libP2PService, state, dbm)
 
 	return &Application{
-		DatabaseManager: databaseManager,
+		DatabaseManager: dbm,
+		State:           state,
 		Layer2Listener:  layer2Listener,
 		LibP2PService:   libP2PService,
 		HTTPServer:      httpServer,
