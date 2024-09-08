@@ -17,6 +17,7 @@ State
 |
 |- BTC head
 |  |- Confirmed (from cosmos)
+|     |- state: start_height, latest_height
 |     |- block list: <block> height, hash,
 |  |- Unconfirm queue (BTC)
 |     |- block: height, hash, status(init, pending, confirmed)

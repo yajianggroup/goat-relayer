@@ -6,48 +6,144 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type BTCTransaction struct {
-	ID          uint      `gorm:"primaryKey"`
-	TxID        string    `gorm:"uniqueIndex;not null"`
-	RawTxData   string    `gorm:"type:text;not null"`
-	ReceivedAt  time.Time `gorm:"not null"`
-	Processed   bool      `gorm:"default:false"`
-	ProcessedAt time.Time
+// L2SyncStatus model
+type L2SyncStatus struct {
+	ID            uint      `gorm:"primaryKey" json:"id"`
+	LastSyncBlock uint64    `gorm:"not null" json:"last_sync_block"`
+	UpdatedAt     time.Time `gorm:"not null" json:"updated_at"`
 }
 
-type EVMSyncStatus struct {
-	ID            uint      `gorm:"primaryKey"`
-	LastSyncBlock uint64    `gorm:"not null"`
-	UpdatedAt     time.Time `gorm:"not null"`
+// L2 Info model (only 1 record)
+type L2Info struct {
+	ID              uint      `gorm:"primaryKey" json:"id"`
+	Height          uint64    `gorm:"not null" json:"height"`
+	Syncing         bool      `gorm:"not null" json:"syncing"`
+	Threshold       string    `json:"threshold"`
+	StartBtcHeight  uint64    `gorm:"not null" json:"start_btc_height"`
+	LatestBtcHeight uint64    `gorm:"not null" json:"latest_btc_height"`
+	UpdatedAt       time.Time `gorm:"not null" json:"updated_at"`
 }
 
-type WithdrawalRecord struct {
-	ID           uint      `gorm:"primaryKey"`
-	WithdrawalID string    `gorm:"uniqueIndex;not null"`
-	UserAddress  string    `gorm:"not null"`
-	Amount       string    `gorm:"not null"`
-	DetectedAt   time.Time `gorm:"not null"`
-	OnChain      bool      `gorm:"default:false"`
-	OnChainTxID  string
-	Processed    bool `gorm:"default:false"`
-	ProcessedAt  time.Time
+// Voter model
+type Voter struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	VoteAddr  string    `gorm:"not null" json:"vote_addr"`
+	VoteKey   string    `gorm:"not null" json:"vote_key"`
+	Height    uint64    `gorm:"not null" json:"height"` // join block height
+	UpdatedAt time.Time `gorm:"not null" json:"updated_at"`
 }
 
-// SubmitterRotation contains block number and current submitter
-type SubmitterRotation struct {
-	ID               uint64 `gorm:"primaryKey"`
-	BlockNumber      uint64 `gorm:"not null"`
-	CurrentSubmitter string `gorm:"not null"`
+// EpochVoter model (only 1 record)
+type EpochVoter struct {
+	ID           uint      `gorm:"primaryKey" json:"id"`
+	VoteAddrList string    `gorm:"not null" json:"vote_addr_list"`
+	VoteKeyList  string    `gorm:"not null" json:"vote_key_list"`
+	Epoch        uint      `gorm:"not null" json:"epoch"`
+	Height       uint      `gorm:"not null" json:"height"`   // rotate block height
+	Proposer     string    `gorm:"not null" json:"proposer"` // proposer address
+	UpdatedAt    time.Time `gorm:"not null" json:"updated_at"`
 }
 
-// Participant save all participants
-type Participant struct {
-	ID      uint64 `gorm:"primaryKey"`
-	Address string `gorm:"uniqueIndex;not null"`
+// VoterQueue model (for adding/removing voters)
+type VoterQueue struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	VoteAddr  string    `gorm:"not null" json:"vote_addr"`
+	VoteKey   string    `gorm:"not null" json:"vote_key"`
+	Epoch     uint      `gorm:"not null" json:"epoch"`
+	Action    string    `gorm:"not null" json:"action"` // "add" or "remove"
+	Status    string    `gorm:"not null" json:"status"` // "init", "pending", "processed"
+	UpdatedAt time.Time `gorm:"not null" json:"updated_at"`
 }
 
-func (dm *DatabaseManager) migrateDB() {
-	if err := dm.db.AutoMigrate(&BTCTransaction{}, &EVMSyncStatus{}, &WithdrawalRecord{}, &SubmitterRotation{}, &Participant{}); err != nil {
-		log.Fatalf("Failed to migrate database: %v", err)
+// BtcBlock model
+type BtcBlock struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	Height    uint64    `gorm:"not null;uniqueIndex" json:"height"`
+	Hash      string    `gorm:"not null" json:"hash"`
+	Status    string    `gorm:"not null" json:"status"` // "unconfirm", "confirmed", "signing", "pending", "processed"
+	UpdatedAt time.Time `gorm:"not null" json:"updated_at"`
+}
+
+// Utxo model (wallet UTXO)
+type Utxo struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	Uid       string    `gorm:"not null" json:"uid"`
+	Txid      string    `gorm:"not null;index:unique_txid_out_index,unique" json:"txid"`
+	OutIndex  uint      `gorm:"not null;index:unique_txid_out_index,unique" json:"out_index"`
+	Amount    float64   `gorm:"type:decimal(20,8)" json:"amount"` // BTC precision up to 8 decimal places
+	Receiver  string    `gorm:"not null" json:"receiver"`         // it is MPC address here
+	Sender    string    `gorm:"not null" json:"sender"`
+	EvmAddr   string    `json:"evm_addr"`               // deposit to L2
+	Source    string    `gorm:"not null" json:"source"` // "deposit", "unknown"
+	Status    string    `gorm:"not null" json:"status"` // "unconfirm", "confirmed", "pending", "spent"
+	UpdatedAt time.Time `gorm:"not null" json:"updated_at"`
+}
+
+// Withdraw model (for managing withdrawals)
+type Withdraw struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	EvmTxId   string    `gorm:"not null;uniqueIndex" json:"evm_tx_id"`
+	Block     uint64    `gorm:"not null" json:"block"`
+	Amount    float64   `gorm:"type:decimal(20,8)" json:"amount"` // BTC precision up to 8 decimal places
+	MaxTxFee  uint      `gorm:"not null" json:"max_tx_fee"`       // Unit is satoshis
+	From      string    `gorm:"not null" json:"from"`
+	To        string    `gorm:"not null" json:"to"`
+	Status    string    `gorm:"not null" json:"status"` // "init", "signing", "pending", "processed"
+	OrderId   string    `json:"order_id"`               // update when signing
+	UpdatedAt time.Time `gorm:"not null" json:"updated_at"`
+}
+
+// SendOrder model (should send withdraw, vin, vout via off-chain consensus)
+type SendOrder struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	OrderId   string    `gorm:"not null;uniqueIndex" json:"order_id"`
+	Proposer  string    `gorm:"not null" json:"proposer"`
+	Amount    float64   `gorm:"type:decimal(20,8)" json:"amount"` // BTC precision up to 8 decimal places
+	MaxTxFee  uint      `gorm:"not null" json:"max_tx_fee"`
+	Status    string    `gorm:"not null" json:"status"` // "init", "signing", "pending", "feedback", "processed"
+	UpdatedAt time.Time `gorm:"not null" json:"updated_at"`
+}
+
+// Vin model (sent transaction input)
+type Vin struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	OrderId   string    `json:"order_id"`
+	Txid      string    `gorm:"not null" json:"txid"`
+	VinTxid   string    `gorm:"not null" json:"vin_txid"`
+	VinVout   int       `gorm:"not null" json:"vin_vout"`
+	Amount    float64   `gorm:"type:decimal(20,8)" json:"amount"` // BTC precision up to 8 decimal places
+	Sender    string    `json:"sender"`
+	Source    string    `gorm:"not null" json:"source"` // "withdraw", "unknown"
+	Status    string    `gorm:"not null" json:"status"` // "init", "signing", "pending", "processed"
+	UpdatedAt time.Time `gorm:"not null" json:"updated_at"`
+}
+
+// Vout model (sent transaction output)
+type Vout struct {
+	ID         uint      `gorm:"primaryKey" json:"id"`
+	OrderId    string    `json:"order_id"`
+	Txid       string    `gorm:"not null" json:"txid"`
+	OutIndex   int       `gorm:"not null" json:"out_index"`
+	WithdrawId string    `json:"withdraw_id"`                      // EvmTxId
+	Amount     float64   `gorm:"type:decimal(20,8)" json:"amount"` // BTC precision up to 8 decimal places
+	Receiver   string    `gorm:"not null" json:"receiver"`         // withdraw To
+	Sender     string    `json:"sender"`                           // MPC address
+	Source     string    `gorm:"not null" json:"source"`           // "withdraw", "unknown"
+	Status     string    `gorm:"not null" json:"status"`           // "init", "signing", "pending", "processed"
+	UpdatedAt  time.Time `gorm:"not null" json:"updated_at"`
+}
+
+func (dm *DatabaseManager) autoMigrate() {
+	if err := dm.l2SyncDb.AutoMigrate(&L2SyncStatus{}); err != nil {
+		log.Fatalf("Failed to migrate database 1: %v", err)
+	}
+	if err := dm.l2InfoDb.AutoMigrate(&L2Info{}, &Voter{}, &EpochVoter{}, &VoterQueue{}); err != nil {
+		log.Fatalf("Failed to migrate database 2: %v", err)
+	}
+	if err := dm.btcLightDb.AutoMigrate(&BtcBlock{}); err != nil {
+		log.Fatalf("Failed to migrate database 3: %v", err)
+	}
+	if err := dm.walletDb.AutoMigrate(&Utxo{}, &Withdraw{}, &SendOrder{}, &Vin{}, &Vout{}); err != nil {
+		log.Fatalf("Failed to migrate database 4: %v", err)
 	}
 }

@@ -11,17 +11,20 @@ import (
 	"github.com/goatnetwork/goat-relayer/internal/config"
 	"github.com/goatnetwork/goat-relayer/internal/db"
 	"github.com/goatnetwork/goat-relayer/internal/p2p"
+	"github.com/goatnetwork/goat-relayer/internal/state"
 )
 
 type HTTPServer struct {
 	libp2p *p2p.LibP2PService
 	db     *db.DatabaseManager
+	state  *state.State
 }
 
-func NewHTTPServer(libp2p *p2p.LibP2PService, db *db.DatabaseManager) *HTTPServer {
+func NewHTTPServer(libp2p *p2p.LibP2PService, state *state.State, db *db.DatabaseManager) *HTTPServer {
 	return &HTTPServer{
 		libp2p: libp2p,
 		db:     db,
+		state:  state,
 	}
 }
 
