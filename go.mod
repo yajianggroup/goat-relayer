@@ -8,6 +8,7 @@ require (
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0
 	github.com/ethereum/go-ethereum v1.14.8
 	github.com/gin-gonic/gin v1.10.0
+	github.com/goatnetwork/goat v0.0.0-00010101000000-000000000000
 	github.com/go-errors/errors v1.4.2
 	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/libp2p/go-libp2p v0.36.2
@@ -223,4 +224,5 @@ require (
 replace (
 	github.com/agl/ed25519 => github.com/bnb-chain/edwards25519 v0.0.0-20200305024217-f36fc4b53d43
 	github.com/ethereum/go-ethereum => github.com/GOATNetwork/goat-geth v0.0.0-20240904132236-852e3254aff5
+	github.com/goatnetwork/goat => ../goat
 )
