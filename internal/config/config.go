@@ -45,8 +45,8 @@ func InitConfig() {
 	viper.SetDefault("GOATCHAIN_GRPC_URI", "127.0.0.1:9090")
 	viper.SetDefault("GOATCHAIN_ID", "goat")
 	viper.SetDefault("GOATCHAIN_ACCOUNT_PREFIX", "goat")
-	viper.SetDefault("RELAYER_PRIVATE_KEY", "")
 	viper.SetDefault("GOATCHAIN_DENOM", "ugoat")
+	viper.SetDefault("RELAYER_PRIVATE_KEY", "")
 
 	logLevel, err := logrus.ParseLevel(strings.ToLower(viper.GetString("LOG_LEVEL")))
 	if err != nil {
@@ -90,8 +90,8 @@ func InitConfig() {
 		GoatChainGRPCURI:       viper.GetString("GOATCHAIN_GRPC_URI"),
 		GoatChainID:            viper.GetString("GOATCHAIN_ID"),
 		GoatChainAccountPrefix: viper.GetString("GOATCHAIN_ACCOUNT_PREFIX"),
-		RelayerPriKey:          viper.GetString("RELAYER_PRIVATE_KEY"),
 		GoatChainDenom:         viper.GetString("GOATCHAIN_DENOM"),
+		RelayerPriKey:          viper.GetString("RELAYER_PRIVATE_KEY"),
 	}
 
 	logrus.SetOutput(os.Stdout)
@@ -125,6 +125,6 @@ type Config struct {
 	GoatChainGRPCURI       string
 	GoatChainID            string
 	GoatChainAccountPrefix string
-	RelayerPriKey          string
 	GoatChainDenom         string
+	RelayerPriKey          string
 }
