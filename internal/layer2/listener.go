@@ -18,6 +18,7 @@ import (
 	"github.com/goatnetwork/goat-relayer/internal/db"
 	"github.com/goatnetwork/goat-relayer/internal/layer2/abis"
 	"github.com/goatnetwork/goat-relayer/internal/p2p"
+	"github.com/goatnetwork/goat-relayer/internal/state"
 	"gorm.io/gorm"
 )
 
@@ -25,6 +26,7 @@ import (
 type Layer2Listener struct {
 	libp2p    *p2p.LibP2PService
 	db        *db.DatabaseManager
+	state     *state.State
 	ethClient *ethclient.Client
 
 	contractBitcoin *abis.BitcoinContract
@@ -32,7 +34,7 @@ type Layer2Listener struct {
 	contractRelayer *abis.RelayerContract
 }
 
-func NewLayer2Listener(libp2p *p2p.LibP2PService, db *db.DatabaseManager) *Layer2Listener {
+func NewLayer2Listener(libp2p *p2p.LibP2PService, state *state.State, db *db.DatabaseManager) *Layer2Listener {
 	ethClient, err := DialEthClient()
 	if err != nil {
 		log.Fatalf("Error creating Layer2 EVM RPC client: %v", err)
@@ -54,6 +56,7 @@ func NewLayer2Listener(libp2p *p2p.LibP2PService, db *db.DatabaseManager) *Layer
 	return &Layer2Listener{
 		libp2p:    libp2p,
 		db:        db,
+		state:     state,
 		ethClient: ethClient,
 
 		contractBitcoin: contractBitcoin,
@@ -86,8 +89,8 @@ func DialEthClient() (*ethclient.Client, error) {
 
 func (lis *Layer2Listener) Start(ctx context.Context) {
 	// Get latest sync height
-	var syncStatus db.EVMSyncStatus
-	db := lis.db.GetDB()
+	var syncStatus db.L2SyncStatus
+	db := lis.db.GetL2SyncDB()
 	result := db.First(&syncStatus)
 	if result.Error != nil && result.Error == gorm.ErrRecordNotFound {
 		syncStatus.LastSyncBlock = uint64(config.AppConfig.L2StartHeight)

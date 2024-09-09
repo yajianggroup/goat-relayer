@@ -7,17 +7,19 @@ import (
 	"github.com/goatnetwork/goat-relayer/internal/config"
 	"github.com/goatnetwork/goat-relayer/internal/db"
 	"github.com/goatnetwork/goat-relayer/internal/p2p"
+	"github.com/goatnetwork/goat-relayer/internal/state"
 	log "github.com/sirupsen/logrus"
 )
 
 type BTCListener struct {
 	libp2p *p2p.LibP2PService
 	dbm    *db.DatabaseManager
+	state  *state.State
 
 	notifier *BTCNotifier
 }
 
-func NewBTCListener(libp2p *p2p.LibP2PService, dbm *db.DatabaseManager) *BTCListener {
+func NewBTCListener(libp2p *p2p.LibP2PService, state *state.State, dbm *db.DatabaseManager) *BTCListener {
 	db := dbm.GetCacheDB()
 	cache := NewBTCCache(db)
 	poller := NewBTCPoller(db)
@@ -36,6 +38,7 @@ func NewBTCListener(libp2p *p2p.LibP2PService, dbm *db.DatabaseManager) *BTCList
 	return &BTCListener{
 		libp2p:   libp2p,
 		dbm:      dbm,
+		state:    state,
 		notifier: notifier,
 	}
 }

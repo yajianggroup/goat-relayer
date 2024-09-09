@@ -13,7 +13,11 @@ import (
 )
 
 type DatabaseManager struct {
-	db    *gorm.DB
+	l2SyncDb   *gorm.DB
+	l2InfoDb   *gorm.DB
+	btcLightDb *gorm.DB
+	walletDb   *gorm.DB
+
 	cache *leveldb.DB
 }
 
@@ -30,15 +34,39 @@ func (dm *DatabaseManager) initDB() {
 		log.Fatalf("Failed to create database directory: %v", err)
 	}
 
-	dbPath := filepath.Join(dbDir, "relayer_data.db")
-	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
+	l2SyncPath := filepath.Join(dbDir, "l2_sync.db")
+	l2SyncDb, err := gorm.Open(sqlite.Open(l2SyncPath), &gorm.Config{})
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		log.Fatalf("Failed to connect to database 1: %v", err)
 	}
-	dm.db = db
-	log.Debugf("Database connected successfully, path: %s", dbPath)
+	dm.l2SyncDb = l2SyncDb
+	log.Debugf("Database 1 connected successfully, path: %s", l2SyncPath)
 
-	dm.migrateDB()
+	l2InfoPath := filepath.Join(dbDir, "l2_info.db")
+	l2InfoDb, err := gorm.Open(sqlite.Open(l2InfoPath), &gorm.Config{})
+	if err != nil {
+		log.Fatalf("Failed to connect to database 2: %v", err)
+	}
+	dm.l2InfoDb = l2InfoDb
+	log.Debugf("Database 2 connected successfully, path: %s", l2InfoPath)
+
+	btcLightPath := filepath.Join(dbDir, "btc_light.db")
+	btcLightDb, err := gorm.Open(sqlite.Open(btcLightPath), &gorm.Config{})
+	if err != nil {
+		log.Fatalf("Failed to connect to database 3: %v", err)
+	}
+	dm.btcLightDb = btcLightDb
+	log.Debugf("Database 3 connected successfully, path: %s", btcLightPath)
+
+	walletPath := filepath.Join(dbDir, "wallet_order.db")
+	walletDb, err := gorm.Open(sqlite.Open(walletPath), &gorm.Config{})
+	if err != nil {
+		log.Fatalf("Failed to connect to database 4: %v", err)
+	}
+	dm.walletDb = walletDb
+	log.Debugf("Database 4 connected successfully, path: %s", walletPath)
+
+	dm.autoMigrate()
 	log.Debugf("Database migration completed successfully")
 }
 
@@ -52,8 +80,20 @@ func (dm *DatabaseManager) initCache() {
 	log.Debugf("Cache database connected successfully, path: %s", dbPath)
 }
 
-func (dm *DatabaseManager) GetDB() *gorm.DB {
-	return dm.db
+func (dm *DatabaseManager) GetL2SyncDB() *gorm.DB {
+	return dm.l2SyncDb
+}
+
+func (dm *DatabaseManager) GetL2InfoDB() *gorm.DB {
+	return dm.l2InfoDb
+}
+
+func (dm *DatabaseManager) GetBtcLightDB() *gorm.DB {
+	return dm.btcLightDb
+}
+
+func (dm *DatabaseManager) GetWalletDB() *gorm.DB {
+	return dm.walletDb
 }
 
 func (dm *DatabaseManager) GetCacheDB() *leveldb.DB {
