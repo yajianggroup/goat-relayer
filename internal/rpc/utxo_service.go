@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/btcsuite/btcd/chaincfg"
 	"google.golang.org/grpc/credentials/insecure"
 	"net"
 
+	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/goatnetwork/goat-relayer/internal/btc"
 	"github.com/goatnetwork/goat-relayer/internal/config"
@@ -88,14 +90,20 @@ func (s *UtxoServer) QueryDepositAddress(ctx context.Context, req *pb.QueryDepos
 
 	pubKeyRequest := bitcointypes.QueryPubkeyRequest{}
 	client := bitcointypes.NewQueryClient(grpcConn)
-	_, err = client.Pubkey(ctx, &pubKeyRequest)
+	pubKeyResponse, err := client.Pubkey(ctx, &pubKeyRequest)
 	if err != nil {
 		log.Errorf("query pubkey error: %v", err)
 		return nil, err
 	}
 
+	publicKey := pubKeyResponse.PublicKey.GetSecp256K1()
+	network := &chaincfg.MainNetParams
+	p2wpkh, err := btcutil.NewAddressWitnessPubKeyHash(btcutil.Hash160(publicKey), network)
+	if err != nil {
+		return nil, err
+	}
+
 	return &pb.QueryDepositAddressResponse{
-		// todo return the btc deposit address
-		DepositAddress: "address",
+		DepositAddress: p2wpkh.EncodeAddress(),
 	}, nil
 }
