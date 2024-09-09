@@ -88,7 +88,7 @@ func (s *UtxoServer) QueryDepositAddress(ctx context.Context, req *pb.QueryDepos
 
 	pubKeyRequest := bitcointypes.QueryPubkeyRequest{}
 	client := bitcointypes.NewQueryClient(grpcConn)
-	_, err = client.Pubkey(context.Background(), &pubKeyRequest)
+	_, err = client.Pubkey(ctx, &pubKeyRequest)
 	if err != nil {
 		log.Printf("query pubey error: %v", err)
 		return nil, err
