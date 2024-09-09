@@ -21,17 +21,84 @@ import (
 	authsigning "github.com/cosmos/cosmos-sdk/x/auth/signing"
 	txtypes "github.com/cosmos/cosmos-sdk/x/auth/tx"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
+	"github.com/goatnetwork/goat-relayer/internal/bls"
+	"github.com/goatnetwork/goat-relayer/internal/db"
+	"github.com/goatnetwork/goat-relayer/internal/p2p"
+	"github.com/goatnetwork/goat-relayer/internal/state"
 	bitcointypes "github.com/goatnetwork/goat/x/bitcoin/types"
+	relayertypes "github.com/goatnetwork/goat/x/relayer/types"
+	"github.com/kelindar/bitmap"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 )
 
-func SubmitInfoToChain(msg interface{}) error {
+type Proposal struct {
+	blsHelper *bls.SignatureHelper
+	state     *state.State
+}
+
+func NewProposal(state *state.State, blsHelper *bls.SignatureHelper, p2pService *p2p.LibP2PService) *Proposal {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	p := &Proposal{
+		blsHelper: blsHelper,
+		state:     state,
+	}
+
+	btcHeadChan := make(chan interface{}, 100)
+	state.GetEventBus().Subscribe("btcHeadStateUpdated", btcHeadChan)
+
+	go p.handleBtcBlocks(ctx, btcHeadChan)
+
+	return p
+}
+
+func (p *Proposal) handleBtcBlocks(ctx context.Context, btcHeadChan chan interface{}) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case data := <-btcHeadChan:
+			block, ok := data.(db.BtcBlock)
+			if !ok {
+				continue
+			}
+			p.sendTxMsgNewBlockHashes(ctx, &block)
+		}
+	}
+}
+
+func (p *Proposal) sendTxMsgNewBlockHashes(ctx context.Context, block *db.BtcBlock) {
+	voters := make(bitmap.Bitmap, 256)
+
+	votes := &relayertypes.Votes{
+		Sequence:  0,
+		Epoch:     0,
+		Voters:    voters.ToBytes(),
+		Signature: nil,
+	}
+
+	msgBlock := bitcointypes.MsgNewBlockHashes{
+		Proposer:         "",
+		Vote:             votes,
+		StartBlockNumber: block.Height,
+		BlockHash:        [][]byte{[]byte(block.Hash)},
+	}
+
+	signature := p.blsHelper.SignDoc(ctx, msgBlock.VoteSigDoc())
+
+	votes.Signature = signature.Compress()
+	msgBlock.Vote = votes
+
+	p.submitToConsensus(ctx, &msgBlock)
+}
+
+func (p *Proposal) submitToConsensus(ctx context.Context, msg interface{}) {
 	var err error
 	var rpcClient *rpchttp.HTTP
 	var grpcClient *grpc.ClientConn
 	var authClient authtypes.QueryClient
-	ctx := context.Background()
 	accountPrefix := config.AppConfig.GoatChainAccountPrefix
 	chainID := config.AppConfig.GoatChainID
 	privKeyStr := config.AppConfig.RelayerPriKey
@@ -54,19 +121,17 @@ func SubmitInfoToChain(msg interface{}) error {
 
 	if rpcClient, err = rpchttp.New(rpcURI, "/websocket"); err != nil {
 		log.Errorf("unable to connect to goat chain rpc server: %v", err)
-		return err
 	}
 
 	if grpcClient, err = grpc.NewClient(grpcURI, grpc.WithTransportCredentials(insecure.NewCredentials())); err != nil {
 		log.Errorf("unable to connect to goat chain grpc server: %v", err)
-		return err
 	}
 
 	authClient = authtypes.NewQueryClient(grpcClient)
 
 	privKeyBytes, err := hex.DecodeString(privKeyStr)
 	if err != nil {
-		return err
+		log.Error(err)
 	}
 	privKey := &secp256k1.PrivKey{Key: privKeyBytes}
 	address := sdk.AccAddress(privKey.PubKey().Address().Bytes()).String()
@@ -74,12 +139,12 @@ func SubmitInfoToChain(msg interface{}) error {
 	accountReq := &authtypes.QueryAccountRequest{Address: address}
 	accountResp, err := authClient.Account(ctx, accountReq)
 	if err != nil {
-		return err
+		log.Error(err)
 	}
 
 	var account sdk.AccountI
 	if err = protoCodec.UnpackAny(accountResp.GetAccount(), &account); err != nil {
-		return err
+		log.Error(err)
 	}
 
 	sequence := account.GetSequence()
@@ -89,16 +154,16 @@ func SubmitInfoToChain(msg interface{}) error {
 	txBuilder := txConfig.NewTxBuilder()
 
 	if msgNewDeposits, msgNewBlockHashes, err := convertToTypes(msg); err != nil {
-		return err
+		log.Error(err)
 	} else if msgNewDeposits != nil {
 		err = txBuilder.SetMsgs(msgNewDeposits)
 		if err != nil {
-			return err
+			log.Error(err)
 		}
 	} else if msgNewBlockHashes != nil {
 		err = txBuilder.SetMsgs(msgNewBlockHashes)
 		if err != nil {
-			return err
+			log.Error(err)
 		}
 	}
 
@@ -115,7 +180,7 @@ func SubmitInfoToChain(msg interface{}) error {
 		},
 		Sequence: sequence,
 	}); err != nil {
-		return err
+		log.Error(err)
 	}
 
 	signerData := authsigning.SignerData{
@@ -125,16 +190,16 @@ func SubmitInfoToChain(msg interface{}) error {
 	}
 	sigV2, err := tx.SignWithPrivKey(ctx, signing.SignMode(txConfig.SignModeHandler().DefaultMode()), signerData, txBuilder, privKey, txConfig, sequence)
 	if err != nil {
-		return err
+		log.Error(err)
 	}
 	if err = txBuilder.SetSignatures(sigV2); err != nil {
-		return err
+		log.Error(err)
 	}
 
 	tx := txBuilder.GetTx()
 	txBytes, err := txConfig.TxEncoder()(tx)
 	if err != nil {
-		return err
+		log.Error(err)
 	}
 
 	serviceClient := sdktx.NewServiceClient(grpcClient)
@@ -144,7 +209,7 @@ func SubmitInfoToChain(msg interface{}) error {
 		TxBytes: txBytes},
 	)
 	if err != nil {
-		return err
+		log.Error(err)
 	}
 
 	// wait tx to be included in a block
@@ -152,21 +217,18 @@ func SubmitInfoToChain(msg interface{}) error {
 
 	hashBytes, err := hex.DecodeString(txResp.TxResponse.TxHash)
 	if err != nil {
-		return err
+		log.Error(err)
 	}
 
 	resultTx, err := rpcClient.Tx(ctx, hashBytes, false)
 	if err != nil {
-		return err
+		log.Error(err)
 	}
 
 	// if code = 0, tx success
 	if resultTx.TxResult.Code != 0 {
 		log.Errorf("submit tx error: %v", resultTx.TxResult)
-		return errors.New(resultTx.TxResult.Log)
 	}
-
-	return nil
 }
 
 func convertToTypes(msg interface{}) (*bitcointypes.MsgNewDeposits, *bitcointypes.MsgNewBlockHashes, error) {
