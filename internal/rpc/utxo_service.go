@@ -12,7 +12,7 @@ import (
 	"github.com/goatnetwork/goat-relayer/internal/config"
 	pb "github.com/goatnetwork/goat-relayer/proto"
 	bitcointypes "github.com/goatnetwork/goat/x/bitcoin/types"
-	grpc "google.golang.org/grpc"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
 	log "github.com/sirupsen/logrus"
@@ -75,13 +75,13 @@ func (s *UtxoServer) NewTransaction(ctx context.Context, req *pb.NewTransactionR
 }
 
 func (s *UtxoServer) QueryDepositAddress(ctx context.Context, req *pb.QueryDepositAddressRequest) (*pb.QueryDepositAddressResponse, error) {
-	// Connect to gRPC server
+	// Connect to grpc server
 	grpcConn, err := grpc.NewClient(
-		config.AppConfig.L2RPC,
+		config.AppConfig.GoatChainGRPCURI,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
-		log.Printf("Unable to connect to gRPC server: %v", err)
+		log.Errorf("unable to connect to goat chain grpc server: %v", err)
 		return nil, err
 	}
 	defer grpcConn.Close()
@@ -90,7 +90,7 @@ func (s *UtxoServer) QueryDepositAddress(ctx context.Context, req *pb.QueryDepos
 	client := bitcointypes.NewQueryClient(grpcConn)
 	_, err = client.Pubkey(ctx, &pubKeyRequest)
 	if err != nil {
-		log.Printf("query pubey error: %v", err)
+		log.Errorf("query pubkey error: %v", err)
 		return nil, err
 	}
 

@@ -22,6 +22,7 @@ import (
 	txtypes "github.com/cosmos/cosmos-sdk/x/auth/tx"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	bitcointypes "github.com/goatnetwork/goat/x/bitcoin/types"
+	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 )
 
@@ -32,7 +33,7 @@ func SubmitInfoToChain(msg interface{}) error {
 	var authClient authtypes.QueryClient
 	ctx := context.Background()
 	accountPrefix := config.AppConfig.GoatChainAccountPrefix
-	ChainID := config.AppConfig.GoatChainID
+	chainID := config.AppConfig.GoatChainID
 	privKeyStr := config.AppConfig.RelayerPriKey
 	rpcURI := config.AppConfig.GoatChainRPCURI
 	grpcURI := config.AppConfig.GoatChainGRPCURI
@@ -52,10 +53,12 @@ func SubmitInfoToChain(msg interface{}) error {
 	std.RegisterInterfaces(interfaceRegistry)
 
 	if rpcClient, err = rpchttp.New(rpcURI, "/websocket"); err != nil {
+		log.Errorf("unable to connect to goat chain rpc server: %v", err)
 		return err
 	}
 
 	if grpcClient, err = grpc.NewClient(grpcURI, grpc.WithTransportCredentials(insecure.NewCredentials())); err != nil {
+		log.Errorf("unable to connect to goat chain grpc server: %v", err)
 		return err
 	}
 
@@ -116,7 +119,7 @@ func SubmitInfoToChain(msg interface{}) error {
 	}
 
 	signerData := authsigning.SignerData{
-		ChainID:       ChainID,
+		ChainID:       chainID,
 		AccountNumber: accountNumber,
 		Sequence:      sequence,
 	}
@@ -159,6 +162,7 @@ func SubmitInfoToChain(msg interface{}) error {
 
 	// if code = 0, tx success
 	if resultTx.TxResult.Code != 0 {
+		log.Errorf("submit tx error: %v", resultTx.TxResult)
 		return errors.New(resultTx.TxResult.Log)
 	}
 
