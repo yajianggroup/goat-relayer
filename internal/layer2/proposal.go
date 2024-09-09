@@ -33,17 +33,41 @@ import (
 )
 
 type Proposal struct {
-	blsHelper *bls.SignatureHelper
-	state     *state.State
+	blsHelper  *bls.SignatureHelper
+	state      *state.State
+	rpcClient  *rpchttp.HTTP
+	grpcClient *grpc.ClientConn
+	authClient authtypes.QueryClient
 }
 
 func NewProposal(state *state.State, blsHelper *bls.SignatureHelper, p2pService *p2p.LibP2PService) *Proposal {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	var err error
+	var rpcClient *rpchttp.HTTP
+	var grpcClient *grpc.ClientConn
+	var authClient authtypes.QueryClient
+
+	rpcURI := config.AppConfig.GoatChainRPCURI
+	grpcURI := config.AppConfig.GoatChainGRPCURI
+
+	if rpcClient, err = rpchttp.New(rpcURI, "/websocket"); err != nil {
+		log.Errorf("unable to connect to goat chain rpc server: %v", err)
+	}
+
+	if grpcClient, err = grpc.NewClient(grpcURI, grpc.WithTransportCredentials(insecure.NewCredentials())); err != nil {
+		log.Errorf("unable to connect to goat chain grpc server: %v", err)
+	}
+
+	authClient = authtypes.NewQueryClient(grpcClient)
+
 	p := &Proposal{
-		blsHelper: blsHelper,
-		state:     state,
+		blsHelper:  blsHelper,
+		state:      state,
+		rpcClient:  rpcClient,
+		grpcClient: grpcClient,
+		authClient: authClient,
 	}
 
 	btcHeadChan := make(chan interface{}, 100)
@@ -96,14 +120,9 @@ func (p *Proposal) sendTxMsgNewBlockHashes(ctx context.Context, block *db.BtcBlo
 
 func (p *Proposal) submitToConsensus(ctx context.Context, msg interface{}) {
 	var err error
-	var rpcClient *rpchttp.HTTP
-	var grpcClient *grpc.ClientConn
-	var authClient authtypes.QueryClient
 	accountPrefix := config.AppConfig.GoatChainAccountPrefix
 	chainID := config.AppConfig.GoatChainID
 	privKeyStr := config.AppConfig.RelayerPriKey
-	rpcURI := config.AppConfig.GoatChainRPCURI
-	grpcURI := config.AppConfig.GoatChainGRPCURI
 	denom := config.AppConfig.GoatChainDenom
 
 	sdkConfig := sdk.GetConfig()
@@ -119,16 +138,6 @@ func (p *Proposal) submitToConsensus(ctx context.Context, msg interface{}) {
 	authtypes.RegisterInterfaces(interfaceRegistry)
 	std.RegisterInterfaces(interfaceRegistry)
 
-	if rpcClient, err = rpchttp.New(rpcURI, "/websocket"); err != nil {
-		log.Errorf("unable to connect to goat chain rpc server: %v", err)
-	}
-
-	if grpcClient, err = grpc.NewClient(grpcURI, grpc.WithTransportCredentials(insecure.NewCredentials())); err != nil {
-		log.Errorf("unable to connect to goat chain grpc server: %v", err)
-	}
-
-	authClient = authtypes.NewQueryClient(grpcClient)
-
 	privKeyBytes, err := hex.DecodeString(privKeyStr)
 	if err != nil {
 		log.Error(err)
@@ -137,7 +146,7 @@ func (p *Proposal) submitToConsensus(ctx context.Context, msg interface{}) {
 	address := sdk.AccAddress(privKey.PubKey().Address().Bytes()).String()
 
 	accountReq := &authtypes.QueryAccountRequest{Address: address}
-	accountResp, err := authClient.Account(ctx, accountReq)
+	accountResp, err := p.authClient.Account(ctx, accountReq)
 	if err != nil {
 		log.Error(err)
 	}
@@ -202,7 +211,7 @@ func (p *Proposal) submitToConsensus(ctx context.Context, msg interface{}) {
 		log.Error(err)
 	}
 
-	serviceClient := sdktx.NewServiceClient(grpcClient)
+	serviceClient := sdktx.NewServiceClient(p.grpcClient)
 
 	txResp, err := serviceClient.BroadcastTx(ctx, &sdktx.BroadcastTxRequest{
 		Mode:    sdktx.BroadcastMode_BROADCAST_MODE_SYNC,
@@ -220,7 +229,7 @@ func (p *Proposal) submitToConsensus(ctx context.Context, msg interface{}) {
 		log.Error(err)
 	}
 
-	resultTx, err := rpcClient.Tx(ctx, hashBytes, false)
+	resultTx, err := p.rpcClient.Tx(ctx, hashBytes, false)
 	if err != nil {
 		log.Error(err)
 	}
