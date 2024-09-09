@@ -70,7 +70,7 @@ func TestFireblocksWebhookData(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.Default()
 	// TODO args cannot be nil
-	server := NewHTTPServer(nil, nil)
+	server := NewHTTPServer(nil, nil, nil)
 	router.POST("/api/fireblocks/webhook", server.handleFireblocksWebhook)
 
 	rawJson := `{"type":"TRANSACTION_CREATED","tenantId":"c6d2ba75-71bc-4587-8ceb-dbf1388b7139","timestamp":1725612415366,"data":{"id":"d2180931-ee56-4d63-851f-9bffcfa35f0c","createdAt":1725612274925,"lastUpdated":1725612274959,"assetId":"BTC_TEST","source":{"id":"","type":"UNKNOWN","name":"External","subType":""},"destination":{"id":"1","type":"VAULT_ACCOUNT","name":"goattest1","subType":""},"amount":0.00001,"networkFee":0.00001,"netAmount":0.00001,"sourceAddress":"tb1qqkwwqeraapk0jekl53jk5zznp6u0yemjalqk6e","destinationAddress":"tb1qysxt7h98c60z77wz0hpwkr793pfmptln88afef","destinationAddressDescription":"","destinationTag":"","status":"CONFIRMING","txHash":"b8fb5ecf4fe2f9de5d2aff07cd860cac853d32373ff2ece75f20255905583fc3","subStatus":"PENDING_BLOCKCHAIN_CONFIRMATIONS","signedBy":[],"createdBy":"","rejectedBy":"","amountUSD":0.56,"addressType":"","note":"","exchangeTxId":"","requestedAmount":0.00001,"feeCurrency":"BTC_TEST","operation":"TRANSFER","customerRefId":null,"numOfConfirmations":0,"amountInfo":{"amount":"0.00001","requestedAmount":"0.00001","netAmount":"0.00001","amountUSD":"0.56"},"feeInfo":{"networkFee":"0.00001"},"destinations":[],"externalTxId":null,"blockInfo":{"blockHash":null},"signedMessages":[],"index":0,"assetType":"BASE_ASSET"}}`
@@ -79,7 +79,7 @@ func TestFireblocksWebhookData(t *testing.T) {
 	assert.NoError(t, err)
 
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("fireblocks-signature", "f1hpfT3JDXzLDfcpqN4Ql8iYPYvweh+zma7zZt9COSgCL96l+dxxhNop+MiSHkDJbxyJSIfAOdzPzLLB4uQpP+7njpVF7SRlmuI7iW7mshMEgQeTAGmyzMDom9shUs9uDkVGRg6Khp7u8f6wsp5HcIfKI9IU4+s95Akkkk0inzWiNrYdkm3rduUKcaG2rJQ/L6MT+2sOKOtBmc6lDsamK7zAcRFTLh4kazVuUiPPHl07zF4qgbGOCMStzApBKsI7R82zD6dVvVNb/ne88KJySR70v+LWTySWgUkzjhJscyY3vk6gO46nyD2gazAhuwxyaxEPnSFNVW0WXUTT7vPEUEbX5Ct/ltD7E7/yed0XR1Z3WFfDmVOHdGP5WsGsBI/Bzm4R5TZXtfMq4MwvLH6p68CkpakTE0wRupLaoOPMPszUQtcj2XEFQOZ1eQM3+r8MvbuCzBMmxiZ3c8p8EpTE4ZQObCAMMkIwGdb6tLLrAQ6KxVx0Qbnxvhr6/S0tru5JLuE9A2fc5VAcmQpVDe3DrNoVyM8KbXVFuKU2KZwEa4ZCTM+fPTKBaEfn9FFXVSksieNF0HIIoNbRcBceo/DfU6R6KJ/6zP09+Pnw4J4Y83RK2sAoVokf+bbxHUFYeYu91foq0h7nQLbTRz+sidPwavJpkVsaKeZ2vvJRbZxdXgc=") // 假设签名是正确的
+	req.Header.Set("fireblocks-signature", "f1hpfT3JDXzLDfcpqN4Ql8iYPYvweh+zma7zZt9COSgCL96l+dxxhNop+MiSHkDJbxyJSIfAOdzPzLLB4uQpP+7njpVF7SRlmuI7iW7mshMEgQeTAGmyzMDom9shUs9uDkVGRg6Khp7u8f6wsp5HcIfKI9IU4+s95Akkkk0inzWiNrYdkm3rduUKcaG2rJQ/L6MT+2sOKOtBmc6lDsamK7zAcRFTLh4kazVuUiPPHl07zF4qgbGOCMStzApBKsI7R82zD6dVvVNb/ne88KJySR70v+LWTySWgUkzjhJscyY3vk6gO46nyD2gazAhuwxyaxEPnSFNVW0WXUTT7vPEUEbX5Ct/ltD7E7/yed0XR1Z3WFfDmVOHdGP5WsGsBI/Bzm4R5TZXtfMq4MwvLH6p68CkpakTE0wRupLaoOPMPszUQtcj2XEFQOZ1eQM3+r8MvbuCzBMmxiZ3c8p8EpTE4ZQObCAMMkIwGdb6tLLrAQ6KxVx0Qbnxvhr6/S0tru5JLuE9A2fc5VAcmQpVDe3DrNoVyM8KbXVFuKU2KZwEa4ZCTM+fPTKBaEfn9FFXVSksieNF0HIIoNbRcBceo/DfU6R6KJ/6zP09+Pnw4J4Y83RK2sAoVokf+bbxHUFYeYu91foq0h7nQLbTRz+sidPwavJpkVsaKeZ2vvJRbZxdXgc=")
 
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
