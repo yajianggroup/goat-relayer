@@ -17,18 +17,18 @@ func (lis *Layer2Listener) processGoatLogs(vLog types.Log) {
 	var err error
 	switch vLog.Address {
 	case abis.BitcoinAddress:
-		err = lis.processBitcoinEvent(vLog)
+		err = lis.processBitcoinLog(vLog)
 	case abis.BridgeAddress:
-		err = lis.processBridgeEvent(vLog)
+		err = lis.processBridgeLog(vLog)
 	case abis.RelayerAddress:
-		err = lis.processRelayerEvent(vLog)
+		err = lis.processRelayerLog(vLog)
 	}
 	if err != nil {
 		log.Errorf("Error processing log: %v", err)
 	}
 }
 
-func (lis *Layer2Listener) processBitcoinEvent(vLog types.Log) error {
+func (lis *Layer2Listener) processBitcoinLog(vLog types.Log) error {
 	event, err := lis.contractBitcoin.BitcoinContractFilterer.ParseNewBlockHash(vLog)
 	if err != nil {
 		log.Warnf("Unpacking NewBlockHash event from ContractBitcoin: %v", err)
@@ -45,7 +45,7 @@ func (lis *Layer2Listener) processBitcoinEvent(vLog types.Log) error {
 	return nil
 }
 
-func (lis *Layer2Listener) processBridgeEvent(vLog types.Log) error {
+func (lis *Layer2Listener) processBridgeLog(vLog types.Log) error {
 	eventDeposit, err := lis.contractBridge.BridgeContractFilterer.ParseDeposit(vLog)
 	if err == nil {
 		log.Infof("Bridge deposit updated, target %s, amount: %s, txid: %s, txout: %d", eventDeposit.Target.Hex(), eventDeposit.Amount.String(), hex.EncodeToString(eventDeposit.Txid[:]), eventDeposit.Txout)
@@ -85,7 +85,7 @@ func (lis *Layer2Listener) processBridgeEvent(vLog types.Log) error {
 	return nil
 }
 
-func (lis *Layer2Listener) processRelayerEvent(vLog types.Log) error {
+func (lis *Layer2Listener) processRelayerLog(vLog types.Log) error {
 	eventAdd, err := lis.contractRelayer.RelayerContractFilterer.ParseAddedVoter(vLog)
 	if err == nil {
 		log.Infof("Relayer add voter, address %s, key hash: %s", hex.EncodeToString(eventAdd.Voter[:]), hex.EncodeToString(eventAdd.KeyHash[:]))

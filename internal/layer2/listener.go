@@ -2,14 +2,14 @@ package layer2
 
 import (
 	"context"
-	"math/big"
 	"strings"
 	"time"
 
 	"github.com/go-errors/errors"
 	log "github.com/sirupsen/logrus"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
-	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/node"
@@ -20,9 +20,12 @@ import (
 	"github.com/goatnetwork/goat-relayer/internal/p2p"
 	"github.com/goatnetwork/goat-relayer/internal/state"
 	"gorm.io/gorm"
+
+	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
+	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 )
 
-// TODO cosmos client
+// cosmos client
 type Layer2Listener struct {
 	libp2p    *p2p.LibP2PService
 	db        *db.DatabaseManager
@@ -32,6 +35,10 @@ type Layer2Listener struct {
 	contractBitcoin *abis.BitcoinContract
 	contractBridge  *abis.BridgeContract
 	contractRelayer *abis.RelayerContract
+
+	goatRpcClient   *rpchttp.HTTP
+	goatGrpcConn    *grpc.ClientConn
+	goatQueryClient authtypes.QueryClient
 }
 
 func NewLayer2Listener(libp2p *p2p.LibP2PService, state *state.State, db *db.DatabaseManager) *Layer2Listener {
@@ -53,6 +60,11 @@ func NewLayer2Listener(libp2p *p2p.LibP2PService, state *state.State, db *db.Dat
 		log.Fatalf("Failed to instantiate contract bridge: %v", err)
 	}
 
+	goatRpcClient, goatGrpcConn, goatQueryCLient, err := DialCosmosClient()
+	if err != nil {
+		log.Fatalf("Error creating Layer2 Cosmos RPC client: %v", err)
+	}
+
 	return &Layer2Listener{
 		libp2p:    libp2p,
 		db:        db,
@@ -62,9 +74,14 @@ func NewLayer2Listener(libp2p *p2p.LibP2PService, state *state.State, db *db.Dat
 		contractBitcoin: contractBitcoin,
 		contractBridge:  contractBridge,
 		contractRelayer: contractRelayer,
+
+		goatRpcClient:   goatRpcClient,
+		goatGrpcConn:    goatGrpcConn,
+		goatQueryClient: goatQueryCLient,
 	}
 }
 
+// New an eth client
 func DialEthClient() (*ethclient.Client, error) {
 	var opts []rpc.ClientOption
 
@@ -87,6 +104,21 @@ func DialEthClient() (*ethclient.Client, error) {
 	return ethclient.NewClient(client), nil
 }
 
+// New a cosmos client, contains rpcClient & queryClient
+func DialCosmosClient() (*rpchttp.HTTP, *grpc.ClientConn, authtypes.QueryClient, error) {
+	// An http client without websocket, if use websocket, should start and stop
+	rpcClient, err := rpchttp.New(config.AppConfig.GoatChainRPCURI, "/")
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	grpcConn, err := grpc.NewClient("localhost:9090", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	queryClient := authtypes.NewQueryClient(grpcConn)
+	return rpcClient, grpcConn, queryClient, nil
+}
+
 func (lis *Layer2Listener) Start(ctx context.Context) {
 	// Get latest sync height
 	var syncStatus db.L2SyncStatus
@@ -107,15 +139,35 @@ func (lis *Layer2Listener) Start(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			log.Info("Layer2Listener stoping...")
+			lis.stop()
 			return
 		default:
+			// ctx1, cancel1 := context.WithTimeout(ctx, clientTimeout)
+			// latestBlock, err := lis.ethClient.BlockNumber(ctx1)
+			// cancel1()
+			// if err != nil {
+			// 	log.Errorf("Error getting latest block number: %v", err)
+			// 	time.Sleep(l2RequestInterval)
+			// 	continue
+			// }
+
 			ctx1, cancel1 := context.WithTimeout(ctx, clientTimeout)
-			latestBlock, err := lis.ethClient.BlockNumber(ctx1)
+			status, err := lis.goatRpcClient.Status(ctx1)
 			cancel1()
 			if err != nil {
-				log.Errorf("Error getting latest block number: %v", err)
+				log.Errorf("Error getting goat chain status: %v", err)
 				time.Sleep(l2RequestInterval)
 				continue
+			}
+
+			latestBlock := uint64(status.SyncInfo.LatestBlockHeight)
+
+			// Update l2 info
+			lis.processChainStatus(latestBlock, status.SyncInfo.CatchingUp)
+			if status.SyncInfo.CatchingUp {
+				log.Debugf("Goat chain is catching up, current height %d", latestBlock)
+			} else {
+				log.Debugf("Goat chain is up to date, current height %d", latestBlock)
 			}
 
 			targetBlock := latestBlock - l2Confirmations
@@ -128,37 +180,78 @@ func (lis *Layer2Listener) Start(ctx context.Context) {
 					"toBlock":   toBlock,
 				}).Info("Syncing L2 goat events")
 
-				filterQuery := ethereum.FilterQuery{
-					FromBlock: big.NewInt(int64(fromBlock)),
-					ToBlock:   big.NewInt(int64(toBlock)),
-					Addresses: []common.Address{abis.BridgeAddress, abis.BitcoinAddress, abis.RelayerAddress},
+				//// Filter evm event
+				// filterQuery := ethereum.FilterQuery{
+				// 	FromBlock: big.NewInt(int64(fromBlock)),
+				// 	ToBlock:   big.NewInt(int64(toBlock)),
+				// 	Addresses: []common.Address{abis.BridgeAddress, abis.BitcoinAddress, abis.RelayerAddress},
+				// }
+
+				// ctx2, cancel2 := context.WithTimeout(ctx, clientTimeout)
+				// logs, err := lis.ethClient.FilterLogs(ctx2, filterQuery)
+				// cancel2()
+				// if err != nil {
+				// 	log.Errorf("Failed to filter logs: %v", err)
+				// 	time.Sleep(l2RequestInterval)
+				// 	continue
+				// }
+
+				// for _, vLog := range logs {
+				// 	lis.processGoatLogs(vLog)
+				// 	// if syncStatus.LastSyncBlock < vLog.BlockNumber {
+				// 	// 	syncStatus.LastSyncBlock = vLog.BlockNumber
+				// 	// }
+				// }
+
+				if fromBlock == 1 {
+					// TODO query genesis based info Threshold, DepositKey, StartBtcHeight
+					// TODO query genesis based votes
 				}
 
-				ctx2, cancel2 := context.WithTimeout(ctx, clientTimeout)
-				logs, err := lis.ethClient.FilterLogs(ctx2, filterQuery)
-				cancel2()
-				if err != nil {
-					log.Errorf("Failed to filter logs: %v", err)
-					time.Sleep(l2RequestInterval)
-					continue
-				}
-
-				for _, vLog := range logs {
-					lis.processGoatLogs(vLog)
-					if syncStatus.LastSyncBlock < vLog.BlockNumber {
-						syncStatus.LastSyncBlock = vLog.BlockNumber
+				// Query cosmos tx or event
+				goatRpcAbort := false
+				for height := fromBlock; height <= toBlock; height++ {
+					block := int64(height)
+					ctx3, cancel3 := context.WithTimeout(ctx, clientTimeout)
+					blockResults, err := lis.goatRpcClient.BlockResults(ctx3, &block)
+					cancel3()
+					if err != nil {
+						log.Errorf("Failed to get cosmos block results at height %d: %v", height, err)
+						goatRpcAbort = true
+						break
 					}
+
+					syncStatus.LastSyncBlock = height
+
+					for _, txResult := range blockResults.TxsResults {
+						for _, event := range txResult.Events {
+							lis.processEvent(height, event)
+						}
+					}
+					lis.processEndBlock(height)
 				}
 
 				// Save sync status
 				syncStatus.UpdatedAt = time.Now()
 				db.Save(&syncStatus)
+
+				if goatRpcAbort {
+					time.Sleep(l2RequestInterval)
+					continue
+				}
 			} else {
 				log.Debugf("Sync to tip, target block: %d", targetBlock)
 			}
 
 			time.Sleep(l2RequestInterval)
 		}
+	}
+}
+
+// stop ctx
+func (lis *Layer2Listener) stop() {
+	if lis.goatGrpcConn != nil {
+		lis.goatGrpcConn.Close()
 	}
 }
 

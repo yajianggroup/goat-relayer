@@ -13,9 +13,9 @@ type Layer2State struct {
 
 // BtcHeadState to manage BTC head
 type BtcHeadState struct {
-	Confirmed      *db.BtcBlock
-	UnconfirmQueue []*db.BtcBlock
-	SigQueue       []*db.BtcBlock // TODO other requirement
+	Latest         *db.BtcBlock
+	UnconfirmQueue []*db.BtcBlock // status in 'unconfirm', 'confirmed'
+	SigQueue       []*db.BtcBlock // status in 'signing', 'pending'
 }
 
 // WalletState to manage withdrawal Queue and associated Vin/Vout

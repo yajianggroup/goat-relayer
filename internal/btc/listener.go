@@ -44,10 +44,10 @@ func NewBTCListener(libp2p *p2p.LibP2PService, state *state.State, dbm *db.Datab
 }
 
 func (bl *BTCListener) Start(ctx context.Context) {
-	go bl.notifier.Start(ctx)
+	// go bl.notifier.Start(ctx)
 
-	log.Info("BTCListener started all modules")
+	// log.Info("BTCListener started all modules")
 
-	<-ctx.Done()
-	log.Info("BTCListener is stopping...")
+	// <-ctx.Done()
+	// log.Info("BTCListener is stopping...")
 }

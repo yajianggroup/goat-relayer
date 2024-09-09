@@ -19,6 +19,7 @@ type L2Info struct {
 	Height          uint64    `gorm:"not null" json:"height"`
 	Syncing         bool      `gorm:"not null" json:"syncing"`
 	Threshold       string    `json:"threshold"`
+	DepositKey      string    `gorm:"not null" json:"deposit_key"` // type,pubKey
 	StartBtcHeight  uint64    `gorm:"not null" json:"start_btc_height"`
 	LatestBtcHeight uint64    `gorm:"not null" json:"latest_btc_height"`
 	UpdatedAt       time.Time `gorm:"not null" json:"updated_at"`
@@ -39,7 +40,7 @@ type EpochVoter struct {
 	VoteAddrList string    `gorm:"not null" json:"vote_addr_list"`
 	VoteKeyList  string    `gorm:"not null" json:"vote_key_list"`
 	Epoch        uint      `gorm:"not null" json:"epoch"`
-	Height       uint      `gorm:"not null" json:"height"`   // rotate block height
+	Height       uint64    `gorm:"not null" json:"height"`   // rotate block height
 	Proposer     string    `gorm:"not null" json:"proposer"` // proposer address
 	UpdatedAt    time.Time `gorm:"not null" json:"updated_at"`
 }

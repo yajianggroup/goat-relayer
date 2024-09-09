@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"time"
+
 	"github.com/cosmos/cosmos-sdk/std"
 	"github.com/goatnetwork/goat-relayer/internal/config"
 	"google.golang.org/grpc/credentials/insecure"
-	"time"
 
 	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
 	"github.com/cosmos/cosmos-sdk/client/flags"
@@ -71,7 +72,7 @@ func NewProposal(state *state.State, blsHelper *bls.SignatureHelper, p2pService 
 	}
 
 	btcHeadChan := make(chan interface{}, 100)
-	state.GetEventBus().Subscribe("btcHeadStateUpdated", btcHeadChan)
+	state.EventBus.Subscribe("btcHeadStateUpdated", btcHeadChan)
 
 	go p.handleBtcBlocks(ctx, btcHeadChan)
 

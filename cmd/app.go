@@ -32,7 +32,7 @@ func NewApplication() *Application {
 	config.InitConfig()
 
 	dbm := db.NewDatabaseManager()
-	state := state.InitializeState(dbm, state.NewEventBus())
+	state := state.InitializeState(dbm)
 	libP2PService := p2p.NewLibP2PService(dbm)
 	layer2Listener := layer2.NewLayer2Listener(libP2PService, state, dbm)
 	httpServer := http.NewHTTPServer(libP2PService, state, dbm)

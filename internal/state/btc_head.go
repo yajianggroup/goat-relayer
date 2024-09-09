@@ -16,12 +16,48 @@ func (s *State) AddUnconfirmBtcBlock(block *db.BtcBlock) error {
 	return nil
 }
 
-func (s *State) UpdateConfirmBtcBlock(block *db.BtcBlock) error {
+func (s *State) UpdateProcessedBtcBlock(block uint64, height uint64, hash string) error {
 	s.btcHeadMu.Lock()
 	defer s.btcHeadMu.Unlock()
 
+	var btcBlock db.BtcBlock
+	result := s.dbm.GetBtcLightDB().Where("height = ?", height).FirstOrCreate(&btcBlock)
+	if result.Error != nil {
+		return result.Error
+	}
+	btcBlock.Height = height
+	btcBlock.Hash = hash
+	btcBlock.Status = "processed"
+
+	result = s.dbm.GetBtcLightDB().Save(&btcBlock)
+	if result.Error != nil {
+		return result.Error
+	}
+
+	s.btcHeadState.Latest = &btcBlock
+	for i, bb := range s.btcHeadState.UnconfirmQueue {
+		if bb.Height == height {
+			if i == len(s.btcHeadState.UnconfirmQueue)-1 {
+				s.btcHeadState.UnconfirmQueue = s.btcHeadState.UnconfirmQueue[:i]
+			} else {
+				s.btcHeadState.UnconfirmQueue = append(s.btcHeadState.UnconfirmQueue[:i], s.btcHeadState.UnconfirmQueue[i+1:]...)
+			}
+			break
+		}
+	}
+	for i, bb := range s.btcHeadState.SigQueue {
+		if bb.Height == height {
+			if i == len(s.btcHeadState.SigQueue)-1 {
+				s.btcHeadState.SigQueue = s.btcHeadState.SigQueue[:i]
+			} else {
+				s.btcHeadState.SigQueue = append(s.btcHeadState.SigQueue[:i], s.btcHeadState.SigQueue[i+1:]...)
+			}
+			break
+		}
+	}
+
 	// TODO
-	s.eventBus.Publish("btcHeadStateUpdated", block)
+	s.EventBus.Publish("btcHeadStateUpdated", block)
 	return nil
 }
 
@@ -30,5 +66,5 @@ func (s *State) GetCurrentBtcBlock() (db.BtcBlock, error) {
 	s.btcHeadMu.RLock()
 	defer s.btcHeadMu.RUnlock()
 
-	return *s.btcHeadState.Confirmed, nil
+	return *s.btcHeadState.Latest, nil
 }
