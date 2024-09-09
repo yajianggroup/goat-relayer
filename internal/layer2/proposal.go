@@ -88,7 +88,7 @@ func SubmitInfoToChain(msg interface{}) error {
 	txConfig := txtypes.NewTxConfig(protoCodec, txtypes.DefaultSignModes)
 	txBuilder := txConfig.NewTxBuilder()
 
-	if msgNewDeposits, msgNewBlockHashes, err := ConvertToTypes(msg); err != nil {
+	if msgNewDeposits, msgNewBlockHashes, err := convertToTypes(msg); err != nil {
 		return err
 	} else if msgNewDeposits != nil {
 		err = txBuilder.SetMsgs(msgNewDeposits)
@@ -169,7 +169,7 @@ func SubmitInfoToChain(msg interface{}) error {
 	return nil
 }
 
-func ConvertToTypes(msg interface{}) (*bitcointypes.MsgNewDeposits, *bitcointypes.MsgNewBlockHashes, error) {
+func convertToTypes(msg interface{}) (*bitcointypes.MsgNewDeposits, *bitcointypes.MsgNewBlockHashes, error) {
 	if msgNewDeposits, ok := msg.(*bitcointypes.MsgNewDeposits); ok {
 		return msgNewDeposits, nil, nil
 	}
