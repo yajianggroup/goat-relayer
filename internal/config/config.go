@@ -41,6 +41,12 @@ func InitConfig() {
 	viper.SetDefault("WITHDRAW_CONTRACT", "")
 	viper.SetDefault("FIREBLOCKS_PUBKEY", "")
 	viper.SetDefault("FIREBLOCKS_PRIVKEY", "")
+	viper.SetDefault("GOATCHAIN_RPC_URI", "tcp://127.0.0.1:26657")
+	viper.SetDefault("GOATCHAIN_GRPC_URI", "127.0.0.1:9090")
+	viper.SetDefault("GOATCHAIN_ID", "goat")
+	viper.SetDefault("GOATCHAIN_ACCOUNT_PREFIX", "goat")
+	viper.SetDefault("GOATCHAIN_DENOM", "ugoat")
+	viper.SetDefault("RELAYER_PRIVATE_KEY", "")
 
 	logLevel, err := logrus.ParseLevel(strings.ToLower(viper.GetString("LOG_LEVEL")))
 	if err != nil {
@@ -58,28 +64,34 @@ func InitConfig() {
 	}
 
 	AppConfig = Config{
-		HTTPPort:          viper.GetString("HTTP_PORT"),
-		RPCPort:           viper.GetString("RPC_PORT"),
-		Libp2pPort:        viper.GetInt("LIBP2P_PORT"),
-		Libp2pBootNodes:   viper.GetString("LIBP2P_BOOT_NODES"),
-		BTCRPC:            viper.GetString("BTC_RPC"),
-		BTCStartHeight:    viper.GetInt("BTC_START_HEIGHT"),
-		L2RPC:             viper.GetString("L2_RPC"),
-		L2JwtSecret:       viper.GetString("L2_JWT_SECRET"),
-		L2PrivateKey:      l2PrivateKey,
-		L2ChainId:         big.NewInt(l2ChainId),
-		L2StartHeight:     viper.GetInt("L2_START_HEIGHT"),
-		L2Confirmations:   viper.GetInt("L2_CONFIRMATIONS"),
-		L2MaxBlockRange:   viper.GetInt("L2_MAX_BLOCK_RANGE"),
-		L2RequestInterval: viper.GetDuration("L2_REQUEST_INTERVAL"),
-		FireblocksPubKey:  viper.GetString("FIREBLOCKS_PUBKEY"),
-		FireblocksPrivKey: viper.GetString("FIREBLOCKS_PRIVKEY"),
-		EnableWebhook:     viper.GetBool("ENABLE_WEBHOOK"),
-		EnableRelayer:     viper.GetBool("ENABLE_RELAYER"),
-		DbDir:             viper.GetString("DB_DIR"),
-		LogLevel:          logLevel,
-		VotingContract:    viper.GetString("VOTING_CONTRACT"),
-		WithdrawContract:  viper.GetString("WITHDRAW_CONTRACT"),
+		HTTPPort:               viper.GetString("HTTP_PORT"),
+		RPCPort:                viper.GetString("RPC_PORT"),
+		Libp2pPort:             viper.GetInt("LIBP2P_PORT"),
+		Libp2pBootNodes:        viper.GetString("LIBP2P_BOOT_NODES"),
+		BTCRPC:                 viper.GetString("BTC_RPC"),
+		BTCStartHeight:         viper.GetInt("BTC_START_HEIGHT"),
+		L2RPC:                  viper.GetString("L2_RPC"),
+		L2JwtSecret:            viper.GetString("L2_JWT_SECRET"),
+		L2PrivateKey:           l2PrivateKey,
+		L2ChainId:              big.NewInt(l2ChainId),
+		L2StartHeight:          viper.GetInt("L2_START_HEIGHT"),
+		L2Confirmations:        viper.GetInt("L2_CONFIRMATIONS"),
+		L2MaxBlockRange:        viper.GetInt("L2_MAX_BLOCK_RANGE"),
+		L2RequestInterval:      viper.GetDuration("L2_REQUEST_INTERVAL"),
+		FireblocksPubKey:       viper.GetString("FIREBLOCKS_PUBKEY"),
+		FireblocksPrivKey:      viper.GetString("FIREBLOCKS_PRIVKEY"),
+		EnableWebhook:          viper.GetBool("ENABLE_WEBHOOK"),
+		EnableRelayer:          viper.GetBool("ENABLE_RELAYER"),
+		DbDir:                  viper.GetString("DB_DIR"),
+		LogLevel:               logLevel,
+		VotingContract:         viper.GetString("VOTING_CONTRACT"),
+		WithdrawContract:       viper.GetString("WITHDRAW_CONTRACT"),
+		GoatChainRPCURI:        viper.GetString("GOATCHAIN_RPC_URI"),
+		GoatChainGRPCURI:       viper.GetString("GOATCHAIN_GRPC_URI"),
+		GoatChainID:            viper.GetString("GOATCHAIN_ID"),
+		GoatChainAccountPrefix: viper.GetString("GOATCHAIN_ACCOUNT_PREFIX"),
+		GoatChainDenom:         viper.GetString("GOATCHAIN_DENOM"),
+		RelayerPriKey:          viper.GetString("RELAYER_PRIVATE_KEY"),
 	}
 
 	logrus.SetOutput(os.Stdout)
@@ -87,26 +99,32 @@ func InitConfig() {
 }
 
 type Config struct {
-	HTTPPort          string
-	RPCPort           string
-	Libp2pPort        int
-	Libp2pBootNodes   string
-	BTCRPC            string
-	BTCStartHeight    int
-	L2RPC             string
-	L2JwtSecret       string
-	L2PrivateKey      *ecdsa.PrivateKey
-	L2ChainId         *big.Int
-	L2StartHeight     int
-	L2Confirmations   int
-	L2MaxBlockRange   int
-	L2RequestInterval time.Duration
-	FireblocksPubKey  string
-	FireblocksPrivKey string
-	EnableWebhook     bool
-	EnableRelayer     bool
-	DbDir             string
-	LogLevel          logrus.Level
-	VotingContract    string
-	WithdrawContract  string
+	HTTPPort               string
+	RPCPort                string
+	Libp2pPort             int
+	Libp2pBootNodes        string
+	BTCRPC                 string
+	BTCStartHeight         int
+	L2RPC                  string
+	L2JwtSecret            string
+	L2PrivateKey           *ecdsa.PrivateKey
+	L2ChainId              *big.Int
+	L2StartHeight          int
+	L2Confirmations        int
+	L2MaxBlockRange        int
+	L2RequestInterval      time.Duration
+	FireblocksPubKey       string
+	FireblocksPrivKey      string
+	EnableWebhook          bool
+	EnableRelayer          bool
+	DbDir                  string
+	LogLevel               logrus.Level
+	VotingContract         string
+	WithdrawContract       string
+	GoatChainRPCURI        string
+	GoatChainGRPCURI       string
+	GoatChainID            string
+	GoatChainAccountPrefix string
+	GoatChainDenom         string
+	RelayerPriKey          string
 }

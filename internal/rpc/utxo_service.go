@@ -4,13 +4,17 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/btcsuite/btcd/chaincfg"
+	"google.golang.org/grpc/credentials/insecure"
 	"net"
 
+	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/goatnetwork/goat-relayer/internal/btc"
 	"github.com/goatnetwork/goat-relayer/internal/config"
 	pb "github.com/goatnetwork/goat-relayer/proto"
-	grpc "google.golang.org/grpc"
+	bitcointypes "github.com/goatnetwork/goat/x/bitcoin/types"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
 	log "github.com/sirupsen/logrus"
@@ -69,5 +73,37 @@ func (s *UtxoServer) NewTransaction(ctx context.Context, req *pb.NewTransactionR
 	return &pb.NewTransactionResponse{
 		TransactionId: "txhash",
 		ErrorMessage:  "",
+	}, nil
+}
+
+func (s *UtxoServer) QueryDepositAddress(ctx context.Context, req *pb.QueryDepositAddressRequest) (*pb.QueryDepositAddressResponse, error) {
+	// Connect to grpc server
+	grpcConn, err := grpc.NewClient(
+		config.AppConfig.GoatChainGRPCURI,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		log.Errorf("unable to connect to goat chain grpc server: %v", err)
+		return nil, err
+	}
+	defer grpcConn.Close()
+
+	pubKeyRequest := bitcointypes.QueryPubkeyRequest{}
+	client := bitcointypes.NewQueryClient(grpcConn)
+	pubKeyResponse, err := client.Pubkey(ctx, &pubKeyRequest)
+	if err != nil {
+		log.Errorf("query pubkey error: %v", err)
+		return nil, err
+	}
+
+	publicKey := pubKeyResponse.PublicKey.GetSecp256K1()
+	network := &chaincfg.MainNetParams
+	p2wpkh, err := btcutil.NewAddressWitnessPubKeyHash(btcutil.Hash160(publicKey), network)
+	if err != nil {
+		return nil, err
+	}
+
+	return &pb.QueryDepositAddressResponse{
+		DepositAddress: p2wpkh.EncodeAddress(),
 	}, nil
 }

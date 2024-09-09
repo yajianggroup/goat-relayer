@@ -7,6 +7,7 @@ package proto;
 
 service BitcoinLightWallet {
   rpc NewTransaction (NewTransactionRequest) returns (NewTransactionResponse);
+  rpc QueryDepositAddress (QueryDepositAddressRequest) returns (QueryDepositAddressResponse);
 }
 
 message NewTransactionRequest {
@@ -21,4 +22,10 @@ message NewTransactionRequest {
 message NewTransactionResponse {
   string transaction_id = 1;
   string error_message = 2;
+}
+
+message QueryDepositAddressRequest {}
+
+message QueryDepositAddressResponse {
+  string deposit_address = 1;
 }
