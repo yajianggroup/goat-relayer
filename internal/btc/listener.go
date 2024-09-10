@@ -20,7 +20,7 @@ type BTCListener struct {
 }
 
 func NewBTCListener(libp2p *p2p.LibP2PService, state *state.State, dbm *db.DatabaseManager) *BTCListener {
-	db := dbm.GetCacheDB()
+	db := dbm.GetBtcCacheDB()
 	cache := NewBTCCache(db)
 	poller := NewBTCPoller(db)
 
