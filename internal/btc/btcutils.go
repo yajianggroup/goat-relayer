@@ -5,69 +5,35 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"path/filepath"
-
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
-	"github.com/goatnetwork/goat-relayer/internal/config"
-	log "github.com/sirupsen/logrus"
-	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/goatnetwork/goat-relayer/internal/db"
 )
 
 func GenerateSPVProof(msgTx *wire.MsgTx) (string, error) {
-	// Open or create the local storage
-	dbPath := filepath.Join(config.AppConfig.DbDir, "btc_cache.db")
-	db, err := leveldb.OpenFile(dbPath, nil)
-	if err != nil {
-		log.Fatalf("Failed to open local storage: %v", err)
-	}
-	defer db.Close()
+	dbm := db.NewDatabaseManager()
+	btcCacheDb := dbm.GetBtcCacheDB()
 
 	txHash := msgTx.TxHash()
 
-	// Get block hash
-	var blockHashBytes []byte
-	iter := db.NewIterator(nil, nil)
-	defer iter.Release()
-
-	for iter.Next() {
-		key := iter.Key()
-		if bytes.HasPrefix(key, []byte("utxo:")) {
-			value := iter.Value()
-			if bytes.Equal(value, txHash[:]) {
-				blockHashBytes = key[len("utxo:") : len("utxo:")+64]
-				break
-			}
-		}
-	}
-	if blockHashBytes == nil {
-		return "", fmt.Errorf("failed to find block hash for tx: %v", txHash)
+	var btcTXOutput db.BtcTXOutput
+	if err := btcCacheDb.Where("tx_hash = ?", txHash).First(&btcTXOutput).Error; err != nil {
+		return "", fmt.Errorf("failed to retrieve block data from database: %v", err)
 	}
 
+	blockHashBytes := btcTXOutput.PkScript[:32] // Assuming the block hash is the first 32 bytes of PkScript
 	blockHash, err := chainhash.NewHash(blockHashBytes)
 	if err != nil {
-		return "", fmt.Errorf("invalid block hash: %v", err)
+		return "", fmt.Errorf("failed to create hash from block hash bytes: %v", err)
 	}
 
-	// Get block header
-	headerBytes, err := db.Get([]byte("header:"+blockHash.String()), nil)
-	if err != nil {
-		return "", fmt.Errorf("failed to get block header from db: %v", err)
-	}
-	var header wire.BlockHeader
-	err = header.Deserialize(bytes.NewReader(headerBytes))
-	if err != nil {
-		return "", fmt.Errorf("failed to deserialize block header: %v", err)
+	var blockData db.BtcBlockData
+	if err := btcCacheDb.Where("block_hash = ?", blockHash.String()).First(&blockData).Error; err != nil {
+		return "", fmt.Errorf("failed to retrieve block header from database: %v", err)
 	}
 
-	// Get transaction hash list
-	txHashesBytes, err := db.Get([]byte("txhashes:"+blockHash.String()), nil)
-	if err != nil {
-		return "", fmt.Errorf("failed to get tx hashes from db: %v", err)
-	}
 	var txHashes []chainhash.Hash
-	err = json.Unmarshal(txHashesBytes, &txHashes)
-	if err != nil {
+	if err := json.Unmarshal([]byte(blockData.TxHashes), &txHashes); err != nil {
 		return "", fmt.Errorf("failed to unmarshal tx hashes: %v", err)
 	}
 
