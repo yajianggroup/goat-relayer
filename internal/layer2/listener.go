@@ -117,7 +117,7 @@ func DialCosmosClient() (*rpchttp.HTTP, *grpc.ClientConn, authtypes.QueryClient,
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	grpcConn, err := grpc.NewClient("localhost:9090", grpc.WithTransportCredentials(insecure.NewCredentials()))
+	grpcConn, err := grpc.NewClient(config.AppConfig.GoatChainGRPCURI, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, nil, nil, err
 	}

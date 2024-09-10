@@ -6,16 +6,12 @@ import (
 	"errors"
 	"time"
 
-	"github.com/cosmos/cosmos-sdk/std"
-	"github.com/goatnetwork/goat-relayer/internal/config"
-	"google.golang.org/grpc/credentials/insecure"
-
-	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
 	"github.com/cosmos/cosmos-sdk/client/flags"
 	"github.com/cosmos/cosmos-sdk/client/tx"
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
+	"github.com/cosmos/cosmos-sdk/std"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	sdktx "github.com/cosmos/cosmos-sdk/types/tx"
 	"github.com/cosmos/cosmos-sdk/types/tx/signing"
@@ -23,6 +19,7 @@ import (
 	txtypes "github.com/cosmos/cosmos-sdk/x/auth/tx"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	"github.com/goatnetwork/goat-relayer/internal/bls"
+	"github.com/goatnetwork/goat-relayer/internal/config"
 	"github.com/goatnetwork/goat-relayer/internal/db"
 	"github.com/goatnetwork/goat-relayer/internal/p2p"
 	"github.com/goatnetwork/goat-relayer/internal/state"
@@ -30,45 +27,22 @@ import (
 	relayertypes "github.com/goatnetwork/goat/x/relayer/types"
 	"github.com/kelindar/bitmap"
 	log "github.com/sirupsen/logrus"
-	"google.golang.org/grpc"
 )
 
 type Proposal struct {
-	blsHelper  *bls.SignatureHelper
-	state      *state.State
-	rpcClient  *rpchttp.HTTP
-	grpcClient *grpc.ClientConn
-	authClient authtypes.QueryClient
+	blsHelper      *bls.SignatureHelper
+	state          *state.State
+	layer2Listener *Layer2Listener
 }
 
-func NewProposal(state *state.State, blsHelper *bls.SignatureHelper, p2pService *p2p.LibP2PService) *Proposal {
+func NewProposal(state *state.State, blsHelper *bls.SignatureHelper, layer2Listener *Layer2Listener, p2pService *p2p.LibP2PService) *Proposal {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	var err error
-	var rpcClient *rpchttp.HTTP
-	var grpcClient *grpc.ClientConn
-	var authClient authtypes.QueryClient
-
-	rpcURI := config.AppConfig.GoatChainRPCURI
-	grpcURI := config.AppConfig.GoatChainGRPCURI
-
-	if rpcClient, err = rpchttp.New(rpcURI, "/websocket"); err != nil {
-		log.Errorf("unable to connect to goat chain rpc server: %v", err)
-	}
-
-	if grpcClient, err = grpc.NewClient(grpcURI, grpc.WithTransportCredentials(insecure.NewCredentials())); err != nil {
-		log.Errorf("unable to connect to goat chain grpc server: %v", err)
-	}
-
-	authClient = authtypes.NewQueryClient(grpcClient)
-
 	p := &Proposal{
-		blsHelper:  blsHelper,
-		state:      state,
-		rpcClient:  rpcClient,
-		grpcClient: grpcClient,
-		authClient: authClient,
+		blsHelper:      blsHelper,
+		state:          state,
+		layer2Listener: layer2Listener,
 	}
 
 	btcHeadChan := make(chan interface{}, 100)
@@ -147,7 +121,7 @@ func (p *Proposal) submitToConsensus(ctx context.Context, msg interface{}) {
 	address := sdk.AccAddress(privKey.PubKey().Address().Bytes()).String()
 
 	accountReq := &authtypes.QueryAccountRequest{Address: address}
-	accountResp, err := p.authClient.Account(ctx, accountReq)
+	accountResp, err := p.layer2Listener.goatQueryClient.Account(ctx, accountReq)
 	if err != nil {
 		log.Error(err)
 	}
@@ -212,7 +186,7 @@ func (p *Proposal) submitToConsensus(ctx context.Context, msg interface{}) {
 		log.Error(err)
 	}
 
-	serviceClient := sdktx.NewServiceClient(p.grpcClient)
+	serviceClient := sdktx.NewServiceClient(p.layer2Listener.goatGrpcConn)
 
 	txResp, err := serviceClient.BroadcastTx(ctx, &sdktx.BroadcastTxRequest{
 		Mode:    sdktx.BroadcastMode_BROADCAST_MODE_SYNC,
@@ -222,7 +196,7 @@ func (p *Proposal) submitToConsensus(ctx context.Context, msg interface{}) {
 		log.Error(err)
 	}
 
-	// wait tx to be included in a block
+	// todo if need to wait for confirmation in the block
 	time.Sleep(5 * time.Second)
 
 	hashBytes, err := hex.DecodeString(txResp.TxResponse.TxHash)
@@ -230,7 +204,7 @@ func (p *Proposal) submitToConsensus(ctx context.Context, msg interface{}) {
 		log.Error(err)
 	}
 
-	resultTx, err := p.rpcClient.Tx(ctx, hashBytes, false)
+	resultTx, err := p.layer2Listener.goatRpcClient.Tx(ctx, hashBytes, false)
 	if err != nil {
 		log.Error(err)
 	}
