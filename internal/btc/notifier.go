@@ -38,7 +38,7 @@ func (bn *BTCNotifier) listenForBTCBlocks(ctx context.Context) {
 			log.Info("Stopping BTC block listening...")
 			return
 		default:
-
+			time.Sleep(10 * time.Second)
 			bn.currentHeight++
 
 			bestHeight, err := bn.client.GetBlockCount()

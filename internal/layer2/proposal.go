@@ -87,7 +87,7 @@ func (p *Proposal) sendTxMsgNewBlockHashes(ctx context.Context, block *db.BtcBlo
 
 	signature := p.blsHelper.SignDoc(ctx, msgBlock.VoteSigDoc())
 
-	votes.Signature = signature.Compress()
+	votes.Signature = signature
 	msgBlock.Vote = votes
 
 	p.submitToConsensus(ctx, &msgBlock)
