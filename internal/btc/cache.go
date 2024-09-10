@@ -14,13 +14,18 @@ import (
 
 type BTCCache struct {
 	db        *gorm.DB
-	blockChan chan *wire.MsgBlock
+	blockChan chan BlockWithHeight
+}
+
+type BlockWithHeight struct {
+	Block  *wire.MsgBlock
+	Height uint64
 }
 
 func NewBTCCache(db *gorm.DB) *BTCCache {
 	return &BTCCache{
 		db:        db,
-		blockChan: make(chan *wire.MsgBlock, 100),
+		blockChan: make(chan BlockWithHeight, 100),
 	}
 }
 
@@ -56,7 +61,8 @@ func (bc *BTCCache) startPeriodicPurge(ctx context.Context) {
 	}
 }
 
-func (bc *BTCCache) cacheBlockData(block *wire.MsgBlock) {
+func (bc *BTCCache) cacheBlockData(blockWithHeight BlockWithHeight) {
+	block := blockWithHeight.Block
 	blockHash := block.BlockHash().String()
 	header := block.Header
 	difficulty := header.Bits
@@ -71,6 +77,7 @@ func (bc *BTCCache) cacheBlockData(block *wire.MsgBlock) {
 	txHashesJSON, _ := json.Marshal(txHashes)
 
 	blockData := db.BtcBlockData{
+		BlockHeight:  blockWithHeight.Height,
 		BlockHash:    blockHash,
 		Header:       headerStr,
 		Difficulty:   difficulty,
