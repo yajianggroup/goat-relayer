@@ -210,50 +210,12 @@ func (lis *Layer2Listener) Start(ctx context.Context) {
 				// }
 
 				if fromBlock == 1 {
-					interfaceRegistry := codectypes.NewInterfaceRegistry()
-					cdc := codec.NewProtoCodec(interfaceRegistry)
-
-					genesis, err := lis.goatRpcClient.Genesis(ctx)
+					l2Info, voters, err := lis.getGoatChainGenesisState(ctx)
 					if err != nil {
-						log.Errorf("Error getting goat chain genesis: %v", err)
+						log.Errorf("Failed to get genesis state: %v", err)
+					} else {
+						lis.processFirstBlock(l2Info, voters)
 					}
-
-					var appState map[string]json.RawMessage
-					if err := json.Unmarshal(genesis.Genesis.AppState, &appState); err != nil {
-						log.Errorf("Error unmarshalling genesis doc: %s", err)
-					}
-
-					var bitcoinState bitcointypes.GenesisState
-					if err := cdc.UnmarshalJSON(appState[bitcointypes.ModuleName], &bitcoinState); err != nil {
-						log.Errorf("Error unmarshalling bitcoin state: %s", err)
-					}
-
-					var relayerState relayertypes.GenesisState
-					if err := cdc.UnmarshalJSON(appState[relayertypes.ModuleName], &relayerState); err != nil {
-						log.Errorf("Error unmarshalling relayer state: %s", err)
-					}
-
-					l2Info := &db.L2Info{
-						Height:          1,
-						Syncing:         true,
-						Threshold:       "",
-						DepositKey:      hex.EncodeToString(bitcoinState.Pubkey.GetSecp256K1()),
-						StartBtcHeight:  bitcoinState.StartBlockNumber,
-						LatestBtcHeight: 0,
-						UpdatedAt:       time.Now(),
-					}
-
-					voters := []*db.Voter{}
-					for address, voter := range relayerState.Voters {
-						voters = append(voters, &db.Voter{
-							VoteAddr:  address,
-							VoteKey:   hex.EncodeToString(voter.VoteKey),
-							Height:    1,
-							UpdatedAt: time.Now(),
-						})
-					}
-
-					lis.processFirstBlock(l2Info, voters)
 				}
 
 				// Query cosmos tx or event
@@ -308,4 +270,57 @@ func min(a, b uint64) uint64 {
 		return a
 	}
 	return b
+}
+
+func (lis *Layer2Listener) getGoatChainGenesisState(ctx context.Context) (*db.L2Info, []*db.Voter, error) {
+	defer lis.stop()
+
+	interfaceRegistry := codectypes.NewInterfaceRegistry()
+	cdc := codec.NewProtoCodec(interfaceRegistry)
+
+	genesis, err := lis.goatRpcClient.Genesis(ctx)
+	if err != nil {
+		log.Errorf("Error getting goat chain genesis: %v", err)
+		return nil, nil, err
+	}
+
+	var appState map[string]json.RawMessage
+	if err := json.Unmarshal(genesis.Genesis.AppState, &appState); err != nil {
+		log.Errorf("Error unmarshalling genesis doc: %s", err)
+		return nil, nil, err
+	}
+
+	var bitcoinState bitcointypes.GenesisState
+	if err := cdc.UnmarshalJSON(appState[bitcointypes.ModuleName], &bitcoinState); err != nil {
+		log.Errorf("Error unmarshalling bitcoin state: %s", err)
+		return nil, nil, err
+	}
+
+	var relayerState relayertypes.GenesisState
+	if err := cdc.UnmarshalJSON(appState[relayertypes.ModuleName], &relayerState); err != nil {
+		log.Errorf("Error unmarshalling relayer state: %s", err)
+		return nil, nil, err
+	}
+
+	l2Info := &db.L2Info{
+		Height:          1,
+		Syncing:         true,
+		Threshold:       "2/3",
+		DepositKey:      hex.EncodeToString(bitcoinState.Pubkey.GetSecp256K1()),
+		StartBtcHeight:  bitcoinState.StartBlockNumber,
+		LatestBtcHeight: 0,
+		UpdatedAt:       time.Now(),
+	}
+
+	voters := []*db.Voter{}
+	for address, voter := range relayerState.Voters {
+		voters = append(voters, &db.Voter{
+			VoteAddr:  address,
+			VoteKey:   hex.EncodeToString(voter.VoteKey),
+			Height:    1,
+			UpdatedAt: time.Now(),
+		})
+	}
+
+	return l2Info, voters, nil
 }

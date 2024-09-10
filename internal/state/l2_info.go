@@ -48,6 +48,7 @@ func (s *State) UpdateL2InfoFirstBlock(info *db.L2Info) error {
 
 	err := s.saveL2Info(info)
 	if err != nil {
+		log.Errorf("Save L2 info error: %v", err)
 		return err
 	}
 
@@ -135,6 +136,7 @@ func (s *State) UpdateVotersFirstBlock(voters []*db.Voter) error {
 
 	err := s.saveVoters(voters)
 	if err != nil {
+		log.Errorf("Save voters error: %v", err)
 		return err
 	}
 
