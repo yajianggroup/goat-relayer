@@ -50,7 +50,7 @@ func (lis *Layer2Listener) processEndBlock(block uint64) {
 	lis.state.UpdateL2InfoEndBlock(block)
 }
 
-func (lis *Layer2Listener) processFirstBlock(info db.L2Info, voters []db.Voter) {
+func (lis *Layer2Listener) processFirstBlock(info *db.L2Info, voters []*db.Voter) {
 	lis.state.UpdateL2InfoFirstBlock(info)
 	lis.state.UpdateVotersFirstBlock(voters)
 }

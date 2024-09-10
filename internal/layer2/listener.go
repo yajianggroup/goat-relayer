@@ -233,7 +233,7 @@ func (lis *Layer2Listener) Start(ctx context.Context) {
 						log.Errorf("Error unmarshalling relayer state: %s", err)
 					}
 
-					l2Info := db.L2Info{
+					l2Info := &db.L2Info{
 						Height:          1,
 						Syncing:         true,
 						Threshold:       "",
@@ -243,9 +243,9 @@ func (lis *Layer2Listener) Start(ctx context.Context) {
 						UpdatedAt:       time.Now(),
 					}
 
-					voters := []db.Voter{}
+					voters := []*db.Voter{}
 					for address, voter := range relayerState.Voters {
-						voters = append(voters, db.Voter{
+						voters = append(voters, &db.Voter{
 							VoteAddr:  address,
 							VoteKey:   hex.EncodeToString(voter.VoteKey),
 							Height:    1,
