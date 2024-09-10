@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
 	"github.com/goatnetwork/goat-relayer/internal/db"
 	"gorm.io/gorm"
 
