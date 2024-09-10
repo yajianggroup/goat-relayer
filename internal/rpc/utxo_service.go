@@ -3,9 +3,10 @@ package rpc
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"github.com/btcsuite/btcd/chaincfg"
-	"google.golang.org/grpc/credentials/insecure"
+	"github.com/goatnetwork/goat-relayer/internal/state"
 	"net"
 
 	"github.com/btcsuite/btcd/btcutil"
@@ -13,7 +14,6 @@ import (
 	"github.com/goatnetwork/goat-relayer/internal/btc"
 	"github.com/goatnetwork/goat-relayer/internal/config"
 	pb "github.com/goatnetwork/goat-relayer/proto"
-	bitcointypes "github.com/goatnetwork/goat/x/bitcoin/types"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
 
@@ -49,10 +49,13 @@ func (us *UTXOServiceImpl) StartUTXOService(btcListener btc.BTCListener) {
 
 type UtxoServer struct {
 	pb.UnimplementedBitcoinLightWalletServer
+	l2State *state.State
 }
 
-func NewUtxoServer() *UtxoServer {
-	return &UtxoServer{}
+func NewUtxoServer(layer2State *state.State) *UtxoServer {
+	return &UtxoServer{
+		l2State: layer2State,
+	}
 }
 
 func (s *UtxoServer) NewTransaction(ctx context.Context, req *pb.NewTransactionRequest) (*pb.NewTransactionResponse, error) {
@@ -77,26 +80,13 @@ func (s *UtxoServer) NewTransaction(ctx context.Context, req *pb.NewTransactionR
 }
 
 func (s *UtxoServer) QueryDepositAddress(ctx context.Context, req *pb.QueryDepositAddressRequest) (*pb.QueryDepositAddressResponse, error) {
-	// Connect to grpc server
-	grpcConn, err := grpc.NewClient(
-		config.AppConfig.GoatChainGRPCURI,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-	)
-	if err != nil {
-		log.Errorf("unable to connect to goat chain grpc server: %v", err)
-		return nil, err
-	}
-	defer grpcConn.Close()
+	l2Info := s.l2State.GetL2Info()
 
-	pubKeyRequest := bitcointypes.QueryPubkeyRequest{}
-	client := bitcointypes.NewQueryClient(grpcConn)
-	pubKeyResponse, err := client.Pubkey(ctx, &pubKeyRequest)
+	publicKey, err := hex.DecodeString(l2Info.DepositKey)
 	if err != nil {
-		log.Errorf("query pubkey error: %v", err)
 		return nil, err
 	}
 
-	publicKey := pubKeyResponse.PublicKey.GetSecp256K1()
 	network := &chaincfg.MainNetParams
 	p2wpkh, err := btcutil.NewAddressWitnessPubKeyHash(btcutil.Hash160(publicKey), network)
 	if err != nil {
