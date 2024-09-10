@@ -42,6 +42,21 @@ func (s *State) UpdateL2InfoEndBlock(block uint64) error {
 	return nil
 }
 
+func (s *State) UpdateL2InfoFirstBlock(info *db.L2Info) error {
+	s.layer2Mu.Lock()
+	defer s.layer2Mu.Unlock()
+
+	err := s.saveL2Info(info)
+	if err != nil {
+		log.Errorf("Save L2 info error: %v", err)
+		return err
+	}
+
+	s.layer2State.L2Info = info
+
+	return nil
+}
+
 func (s *State) UpdateL2InfoWallet(block uint64, walletType string, walletKey string) error {
 	s.layer2Mu.Lock()
 	defer s.layer2Mu.Unlock()
@@ -115,6 +130,21 @@ func (s *State) UpdateL2InfoEpoch(block uint64, epoch uint, proposer string) err
 	return nil
 }
 
+func (s *State) UpdateVotersFirstBlock(voters []*db.Voter) error {
+	s.layer2Mu.Lock()
+	defer s.layer2Mu.Unlock()
+
+	err := s.saveVoters(voters)
+	if err != nil {
+		log.Errorf("Save voters error: %v", err)
+		return err
+	}
+
+	s.layer2State.Voters = voters
+
+	return nil
+}
+
 func (s *State) saveEpochVoter(epochVoter *db.EpochVoter) error {
 	result := s.dbm.GetL2InfoDB().Save(epochVoter)
 	if result.Error != nil {
@@ -128,6 +158,15 @@ func (s *State) saveL2Info(l2Info *db.L2Info) error {
 	result := s.dbm.GetL2InfoDB().Save(l2Info)
 	if result.Error != nil {
 		log.Errorf("State saveL2Info error: %v", result.Error)
+		return result.Error
+	}
+	return nil
+}
+
+func (s *State) saveVoters(voters []*db.Voter) error {
+	result := s.dbm.GetL2InfoDB().Save(voters)
+	if result.Error != nil {
+		log.Errorf("State saveVoters error: %v", result.Error)
 		return result.Error
 	}
 	return nil
