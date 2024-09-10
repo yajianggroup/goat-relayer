@@ -1,6 +1,7 @@
 package layer2
 
 import (
+	"github.com/goatnetwork/goat-relayer/internal/db"
 	"strconv"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -47,6 +48,11 @@ func (lis *Layer2Listener) processChainStatus(latestHeight uint64, catchingUp bo
 func (lis *Layer2Listener) processEndBlock(block uint64) {
 	log.Debugf("Abci end block %d", block)
 	lis.state.UpdateL2InfoEndBlock(block)
+}
+
+func (lis *Layer2Listener) processFirstBlock(info db.L2Info, voters []db.Voter) {
+	lis.state.UpdateL2InfoFirstBlock(info)
+	lis.state.UpdateVotersFirstBlock(voters)
 }
 
 func (lis *Layer2Listener) processFinalizeWithdrawal(block uint64, attributes []abcitypes.EventAttribute) {

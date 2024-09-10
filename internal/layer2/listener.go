@@ -2,6 +2,12 @@ package layer2
 
 import (
 	"context"
+	"encoding/hex"
+	"encoding/json"
+	"github.com/cosmos/cosmos-sdk/codec"
+	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
+	bitcointypes "github.com/goatnetwork/goat/x/bitcoin/types"
+	relayertypes "github.com/goatnetwork/goat/x/relayer/types"
 	"strings"
 	"time"
 
@@ -122,12 +128,12 @@ func DialCosmosClient() (*rpchttp.HTTP, *grpc.ClientConn, authtypes.QueryClient,
 func (lis *Layer2Listener) Start(ctx context.Context) {
 	// Get latest sync height
 	var syncStatus db.L2SyncStatus
-	db := lis.db.GetL2SyncDB()
-	result := db.First(&syncStatus)
+	l2SyncDB := lis.db.GetL2SyncDB()
+	result := l2SyncDB.First(&syncStatus)
 	if result.Error != nil && result.Error == gorm.ErrRecordNotFound {
 		syncStatus.LastSyncBlock = uint64(config.AppConfig.L2StartHeight)
 		syncStatus.UpdatedAt = time.Now()
-		db.Create(&syncStatus)
+		l2SyncDB.Create(&syncStatus)
 	}
 
 	l2RequestInterval := config.AppConfig.L2RequestInterval
@@ -204,8 +210,50 @@ func (lis *Layer2Listener) Start(ctx context.Context) {
 				// }
 
 				if fromBlock == 1 {
-					// TODO query genesis based info Threshold, DepositKey, StartBtcHeight
-					// TODO query genesis based votes
+					interfaceRegistry := codectypes.NewInterfaceRegistry()
+					cdc := codec.NewProtoCodec(interfaceRegistry)
+
+					genesis, err := lis.goatRpcClient.Genesis(ctx)
+					if err != nil {
+						log.Errorf("Error getting goat chain genesis: %v", err)
+					}
+
+					var appState map[string]json.RawMessage
+					if err := json.Unmarshal(genesis.Genesis.AppState, &appState); err != nil {
+						log.Errorf("Error unmarshalling genesis doc: %s", err)
+					}
+
+					var bitcoinState bitcointypes.GenesisState
+					if err := cdc.UnmarshalJSON(appState[bitcointypes.ModuleName], &bitcoinState); err != nil {
+						log.Errorf("Error unmarshalling bitcoin state: %s", err)
+					}
+
+					var relayerState relayertypes.GenesisState
+					if err := cdc.UnmarshalJSON(appState[relayertypes.ModuleName], &relayerState); err != nil {
+						log.Errorf("Error unmarshalling relayer state: %s", err)
+					}
+
+					l2Info := db.L2Info{
+						Height:          1,
+						Syncing:         true,
+						Threshold:       "",
+						DepositKey:      hex.EncodeToString(bitcoinState.Pubkey.GetSecp256K1()),
+						StartBtcHeight:  bitcoinState.StartBlockNumber,
+						LatestBtcHeight: 0,
+						UpdatedAt:       time.Now(),
+					}
+
+					voters := []db.Voter{}
+					for address, voter := range relayerState.Voters {
+						voters = append(voters, db.Voter{
+							VoteAddr:  address,
+							VoteKey:   hex.EncodeToString(voter.VoteKey),
+							Height:    1,
+							UpdatedAt: time.Now(),
+						})
+					}
+
+					lis.processFirstBlock(l2Info, voters)
 				}
 
 				// Query cosmos tx or event
@@ -233,7 +281,7 @@ func (lis *Layer2Listener) Start(ctx context.Context) {
 
 				// Save sync status
 				syncStatus.UpdatedAt = time.Now()
-				db.Save(&syncStatus)
+				l2SyncDB.Save(&syncStatus)
 
 				if goatRpcAbort {
 					time.Sleep(l2RequestInterval)
