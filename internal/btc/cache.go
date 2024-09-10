@@ -2,7 +2,6 @@ package btc
 
 import (
 	"context"
-	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"github.com/goatnetwork/goat-relayer/internal/db"
@@ -68,24 +67,16 @@ func (bc *BTCCache) cacheBlockData(block *wire.MsgBlock) {
 	headerStr := fmt.Sprintf("Version: %d, PrevBlock: %s, MerkleRoot: %s, Timestamp: %d, Bits: %d, Nonce: %d",
 		header.Version, header.PrevBlock, header.MerkleRoot, header.Timestamp.Unix(), header.Bits, header.Nonce)
 
-	difficultyLE := make([]byte, 4)
-	randomNumberLE := make([]byte, 4)
-	blockTimeLE := make([]byte, 8)
-
-	binary.LittleEndian.PutUint32(difficultyLE, difficulty)
-	binary.LittleEndian.PutUint32(randomNumberLE, randomNumber)
-	binary.LittleEndian.PutUint64(blockTimeLE, uint64(blockTime))
-
 	txHashes, _ := block.TxHashes()
 	txHashesJSON, _ := json.Marshal(txHashes)
 
 	blockData := db.BtcBlockData{
 		BlockHash:    blockHash,
 		Header:       headerStr,
-		Difficulty:   difficultyLE,
-		RandomNumber: randomNumberLE,
+		Difficulty:   difficulty,
+		RandomNumber: randomNumber,
 		MerkleRoot:   merkleRoot,
-		BlockTime:    blockTimeLE,
+		BlockTime:    blockTime,
 		TxHashes:     string(txHashesJSON),
 	}
 	bc.db.Save(&blockData)
