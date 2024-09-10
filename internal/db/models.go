@@ -136,6 +136,7 @@ type Vout struct {
 
 type BtcBlockData struct {
 	ID           uint   `gorm:"primaryKey" json:"id"`
+	BlockHeight  uint64 `gorm:"unique;not null" json:"block_height"`
 	BlockHash    string `gorm:"unique;not null" json:"block_hash"`
 	Header       string `json:"header"`
 	Difficulty   uint32 `json:"difficulty"`
