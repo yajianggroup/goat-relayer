@@ -4,10 +4,8 @@ import (
 	"os"
 	"path/filepath"
 
-	log "github.com/sirupsen/logrus"
-	"github.com/syndtr/goleveldb/leveldb"
-
 	"github.com/goatnetwork/goat-relayer/internal/config"
+	log "github.com/sirupsen/logrus"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -17,14 +15,12 @@ type DatabaseManager struct {
 	l2InfoDb   *gorm.DB
 	btcLightDb *gorm.DB
 	walletDb   *gorm.DB
-
-	cache *leveldb.DB
+	btcCacheDb *gorm.DB
 }
 
 func NewDatabaseManager() *DatabaseManager {
 	dm := &DatabaseManager{}
 	dm.initDB()
-	dm.initCache()
 	return dm
 }
 
@@ -66,18 +62,16 @@ func (dm *DatabaseManager) initDB() {
 	dm.walletDb = walletDb
 	log.Debugf("Database 4 connected successfully, path: %s", walletPath)
 
+	btcCachePath := filepath.Join(dbDir, "btc_cache.db")
+	btcCacheDb, err := gorm.Open(sqlite.Open(btcCachePath), &gorm.Config{})
+	if err != nil {
+		log.Fatalf("Failed to connect to database 5: %v", err)
+	}
+	dm.btcCacheDb = btcCacheDb
+	log.Debugf("Database 5 connected successfully, path: %s", btcCachePath)
+
 	dm.autoMigrate()
 	log.Debugf("Database migration completed successfully")
-}
-
-func (dm *DatabaseManager) initCache() {
-	dbPath := filepath.Join(config.AppConfig.DbDir, "btc_cache.db")
-	db, err := leveldb.OpenFile(dbPath, nil)
-	if err != nil {
-		log.Fatalf("Failed to open cache database: %v", err)
-	}
-	dm.cache = db
-	log.Debugf("Cache database connected successfully, path: %s", dbPath)
 }
 
 func (dm *DatabaseManager) GetL2SyncDB() *gorm.DB {
@@ -96,12 +90,6 @@ func (dm *DatabaseManager) GetWalletDB() *gorm.DB {
 	return dm.walletDb
 }
 
-func (dm *DatabaseManager) GetCacheDB() *leveldb.DB {
-	return dm.cache
-}
-
-func (dm *DatabaseManager) Close() {
-	if dm.cache != nil {
-		dm.cache.Close()
-	}
+func (dm *DatabaseManager) GetBtcCacheDB() *gorm.DB {
+	return dm.btcCacheDb
 }

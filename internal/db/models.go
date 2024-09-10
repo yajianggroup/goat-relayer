@@ -134,6 +134,25 @@ type Vout struct {
 	UpdatedAt  time.Time `gorm:"not null" json:"updated_at"`
 }
 
+type BtcBlockData struct {
+	ID           uint   `gorm:"primaryKey" json:"id"`
+	BlockHash    string `gorm:"unique;not null" json:"block_hash"`
+	Header       string `json:"header"`
+	Difficulty   uint32 `json:"difficulty"`
+	RandomNumber uint32 `json:"random_number"`
+	MerkleRoot   string `json:"merkle_root"`
+	BlockTime    int64  `json:"block_time"`
+	TxHashes     string `json:"tx_hashes"`
+}
+
+type BtcTXOutput struct {
+	ID       uint   `gorm:"primaryKey" json:"id"`
+	BlockID  uint   `json:"block_data_id"`
+	TxHash   string `json:"tx_hash"`
+	Value    uint64 `json:"value"`
+	PkScript []byte `json:"pk_script"`
+}
+
 func (dm *DatabaseManager) autoMigrate() {
 	if err := dm.l2SyncDb.AutoMigrate(&L2SyncStatus{}); err != nil {
 		log.Fatalf("Failed to migrate database 1: %v", err)
@@ -146,5 +165,8 @@ func (dm *DatabaseManager) autoMigrate() {
 	}
 	if err := dm.walletDb.AutoMigrate(&Utxo{}, &Withdraw{}, &SendOrder{}, &Vin{}, &Vout{}); err != nil {
 		log.Fatalf("Failed to migrate database 4: %v", err)
+	}
+	if err := dm.btcCacheDb.AutoMigrate(&BtcBlockData{}, &BtcTXOutput{}); err != nil {
+		log.Fatalf("Failed to migrate database 5: %v", err)
 	}
 }

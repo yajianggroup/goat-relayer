@@ -21,6 +21,8 @@ func NewBTCNotifier(client *rpcclient.Client, cache *BTCCache, poller *BTCPoller
 	return &BTCNotifier{
 		client:        client,
 		currentHeight: uint64(config.AppConfig.BTCStartHeight),
+		cache:         cache,
+		poller:        poller,
 	}
 }
 
