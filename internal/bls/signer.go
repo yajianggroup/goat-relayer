@@ -12,6 +12,7 @@ import (
 	"github.com/goatnetwork/goat-relayer/internal/layer2"
 	"github.com/goatnetwork/goat-relayer/internal/p2p"
 	"github.com/goatnetwork/goat-relayer/internal/state"
+	"github.com/goatnetwork/goat-relayer/internal/types"
 	goatcryp "github.com/goatnetwork/goat/pkg/crypto"
 )
 
@@ -39,7 +40,11 @@ func NewSigner(libp2p *p2p.LibP2PService, layer2Listener *layer2.Layer2Listener,
 	if err != nil {
 		log.Fatalf("Decode bls sk error: %v", err)
 	}
-	// TODO get address from RelayerPrivateKey
+	// get address from RelayerPrivateKey
+	address, err := types.PrivateKeyToGoatAddress(config.AppConfig.RelayerPriKey)
+	if err != nil {
+		log.Fatalf("Get goat address error: %v", err)
+	}
 
 	sk := new(goatcryp.PrivateKey).Deserialize(byt)
 	pk := new(goatcryp.PublicKey).From(sk).Compress()
@@ -48,9 +53,10 @@ func NewSigner(libp2p *p2p.LibP2PService, layer2Listener *layer2.Layer2Listener,
 	// epoch := state.GetEpochVoter()
 
 	return &Signer{
-		sk:    sk,
-		pk:    pk,
-		pkHex: pkHex,
+		sk:      sk,
+		pk:      pk,
+		pkHex:   pkHex,
+		address: address,
 
 		state:          state,
 		libp2p:         libp2p,

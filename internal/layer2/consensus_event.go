@@ -287,6 +287,8 @@ func (lis *Layer2Listener) processVoterEvent(block uint64, eventType string, att
 			// TODO should pass event, notify voter to mark boarded
 			// Call event bus, send block, voterAddr
 			// Update state queue status
+
+			// TODO query voter
 		}
 
 		if key == "voter_activated" {
