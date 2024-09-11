@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
-	"log"
 	"sync"
 
 	"github.com/goatnetwork/goat-relayer/internal/p2p"
@@ -17,8 +16,6 @@ type SignatureHelper struct {
 	pk         *blst.P2Affine
 	signatures map[string]*blst.P1Affine
 	threshold  int
-
-	signatureChan <-chan p2p.SignatureMessage
 }
 
 func NewSignatureHelper(threshold int) (*SignatureHelper, error) {
@@ -30,11 +27,10 @@ func NewSignatureHelper(threshold int) (*SignatureHelper, error) {
 	pk := new(blst.P2Affine).From(sk)
 
 	return &SignatureHelper{
-		sk:            sk,
-		pk:            pk,
-		signatures:    make(map[string]*blst.P1Affine),
-		threshold:     threshold,
-		signatureChan: make(chan p2p.SignatureMessage),
+		sk:         sk,
+		pk:         pk,
+		signatures: make(map[string]*blst.P1Affine),
+		threshold:  threshold,
 	}, nil
 }
 
@@ -42,18 +38,6 @@ func (sm *SignatureHelper) SignDoc(ctx context.Context, signBytes []byte) []byte
 	sm.broadcastSignature("", signBytes)
 	for {
 		select {
-		case sigMsg := <-sm.signatureChan:
-			signature := new(blst.P1Affine).Uncompress(sigMsg.Signature)
-			sm.addSignature(sigMsg.PeerID, signature)
-			if len(sm.signatures) >= sm.threshold {
-				aggregatedSig, err := sm.aggregateSignatures()
-				if err != nil {
-					log.Printf("failed to aggregate signatures: %v", err)
-					continue
-				}
-				return aggregatedSig
-			}
-
 		case <-ctx.Done():
 			return nil
 		}
@@ -73,8 +57,9 @@ func (sm *SignatureHelper) broadcastSignature(id string, message []byte) error {
 
 	// Create a message containing the signature information
 	msg := p2p.Message{
-		MessageType: p2p.MessageTypeSignature,
-		Content:     string(sigBytes),
+		MessageType: p2p.MessageTypeUnknown,
+		RequestId:   "2",
+		Data:        string(sigBytes),
 	}
 
 	// Use the p2p module to broadcast the message

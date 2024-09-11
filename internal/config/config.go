@@ -47,6 +47,7 @@ func InitConfig() {
 	viper.SetDefault("GOATCHAIN_ACCOUNT_PREFIX", "goat")
 	viper.SetDefault("GOATCHAIN_DENOM", "ugoat")
 	viper.SetDefault("RELAYER_PRIVATE_KEY", "")
+	viper.SetDefault("RELAYER_BLS_SK", "")
 
 	logLevel, err := logrus.ParseLevel(strings.ToLower(viper.GetString("LOG_LEVEL")))
 	if err != nil {
@@ -92,6 +93,7 @@ func InitConfig() {
 		GoatChainAccountPrefix: viper.GetString("GOATCHAIN_ACCOUNT_PREFIX"),
 		GoatChainDenom:         viper.GetString("GOATCHAIN_DENOM"),
 		RelayerPriKey:          viper.GetString("RELAYER_PRIVATE_KEY"),
+		RelayerBlsSk:           viper.GetString("RELAYER_BLS_SK"),
 	}
 
 	logrus.SetOutput(os.Stdout)
@@ -127,4 +129,5 @@ type Config struct {
 	GoatChainAccountPrefix string
 	GoatChainDenom         string
 	RelayerPriKey          string
+	RelayerBlsSk           string
 }

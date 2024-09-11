@@ -18,57 +18,15 @@ import (
 	authsigning "github.com/cosmos/cosmos-sdk/x/auth/signing"
 	txtypes "github.com/cosmos/cosmos-sdk/x/auth/tx"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
-	"github.com/goatnetwork/goat-relayer/internal/bls"
 	"github.com/goatnetwork/goat-relayer/internal/config"
 	"github.com/goatnetwork/goat-relayer/internal/db"
-	"github.com/goatnetwork/goat-relayer/internal/p2p"
-	"github.com/goatnetwork/goat-relayer/internal/state"
 	bitcointypes "github.com/goatnetwork/goat/x/bitcoin/types"
 	relayertypes "github.com/goatnetwork/goat/x/relayer/types"
 	"github.com/kelindar/bitmap"
 	log "github.com/sirupsen/logrus"
 )
 
-type Proposal struct {
-	blsHelper      *bls.SignatureHelper
-	state          *state.State
-	layer2Listener *Layer2Listener
-}
-
-func NewProposal(state *state.State, blsHelper *bls.SignatureHelper, layer2Listener *Layer2Listener, p2pService *p2p.LibP2PService) *Proposal {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	p := &Proposal{
-		blsHelper:      blsHelper,
-		state:          state,
-		layer2Listener: layer2Listener,
-	}
-
-	btcHeadChan := make(chan interface{}, 100)
-	state.EventBus.Subscribe("btcHeadStateUpdated", btcHeadChan)
-
-	go p.handleBtcBlocks(ctx, btcHeadChan)
-
-	return p
-}
-
-func (p *Proposal) handleBtcBlocks(ctx context.Context, btcHeadChan chan interface{}) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case data := <-btcHeadChan:
-			block, ok := data.(db.BtcBlock)
-			if !ok {
-				continue
-			}
-			p.sendTxMsgNewBlockHashes(ctx, &block)
-		}
-	}
-}
-
-func (p *Proposal) sendTxMsgNewBlockHashes(ctx context.Context, block *db.BtcBlock) {
+func (lis *Layer2Listener) SendTxMsgNewBlockHashes(ctx context.Context, block *db.BtcBlock) {
 	voters := make(bitmap.Bitmap, 256)
 
 	votes := &relayertypes.Votes{
@@ -85,15 +43,16 @@ func (p *Proposal) sendTxMsgNewBlockHashes(ctx context.Context, block *db.BtcBlo
 		BlockHash:        [][]byte{[]byte(block.Hash)},
 	}
 
-	signature := p.blsHelper.SignDoc(ctx, msgBlock.VoteSigDoc())
+	epochVoter := lis.state.GetEpochVoter()
+	signature := relayertypes.VoteSignDoc(msgBlock.MethodName(), config.AppConfig.GoatChainID, epochVoter.Proposer, epochVoter.Seqeuence, uint64(epochVoter.Epoch), msgBlock.VoteSigDoc())
 
 	votes.Signature = signature
 	msgBlock.Vote = votes
 
-	p.submitToConsensus(ctx, &msgBlock)
+	lis.SubmitToConsensus(ctx, &msgBlock)
 }
 
-func (p *Proposal) submitToConsensus(ctx context.Context, msg interface{}) {
+func (lis *Layer2Listener) SubmitToConsensus(ctx context.Context, msg interface{}) error {
 	var err error
 	accountPrefix := config.AppConfig.GoatChainAccountPrefix
 	chainID := config.AppConfig.GoatChainID
@@ -116,19 +75,22 @@ func (p *Proposal) submitToConsensus(ctx context.Context, msg interface{}) {
 	privKeyBytes, err := hex.DecodeString(privKeyStr)
 	if err != nil {
 		log.Errorf("decode private key failed: %v", err)
+		return err
 	}
 	privKey := &secp256k1.PrivKey{Key: privKeyBytes}
 	address := sdk.AccAddress(privKey.PubKey().Address().Bytes()).String()
 
 	accountReq := &authtypes.QueryAccountRequest{Address: address}
-	accountResp, err := p.layer2Listener.goatQueryClient.Account(ctx, accountReq)
+	accountResp, err := lis.goatQueryClient.Account(ctx, accountReq)
 	if err != nil {
 		log.Errorf("query account failed: %v", err)
+		return err
 	}
 
 	var account sdk.AccountI
 	if err = protoCodec.UnpackAny(accountResp.GetAccount(), &account); err != nil {
 		log.Errorf("unpack account failed: %v", err)
+		return err
 	}
 
 	sequence := account.GetSequence()
@@ -137,17 +99,20 @@ func (p *Proposal) submitToConsensus(ctx context.Context, msg interface{}) {
 	txConfig := txtypes.NewTxConfig(protoCodec, txtypes.DefaultSignModes)
 	txBuilder := txConfig.NewTxBuilder()
 
-	if msgNewDeposits, msgNewBlockHashes, err := convertToTypes(msg); err != nil {
+	if msgNewDeposits, msgNewBlockHashes, err := lis.convertToTypes(msg); err != nil {
 		log.Errorf("convert to types failed: %v", err)
+		return err
 	} else if msgNewDeposits != nil {
 		err = txBuilder.SetMsgs(msgNewDeposits)
 		if err != nil {
 			log.Errorf("set msgNewDeposits failed: %v", err)
+			return err
 		}
 	} else if msgNewBlockHashes != nil {
 		err = txBuilder.SetMsgs(msgNewBlockHashes)
 		if err != nil {
 			log.Errorf("set msgNewBlockHashes failed: %v", err)
+			return err
 		}
 	}
 
@@ -165,6 +130,7 @@ func (p *Proposal) submitToConsensus(ctx context.Context, msg interface{}) {
 		Sequence: sequence,
 	}); err != nil {
 		log.Errorf("set signature failed: %v", err)
+		return err
 	}
 
 	signerData := authsigning.SignerData{
@@ -175,18 +141,21 @@ func (p *Proposal) submitToConsensus(ctx context.Context, msg interface{}) {
 	sigV2, err := tx.SignWithPrivKey(ctx, signing.SignMode(txConfig.SignModeHandler().DefaultMode()), signerData, txBuilder, privKey, txConfig, sequence)
 	if err != nil {
 		log.Errorf("sign tx failed: %v", err)
+		return err
 	}
 	if err = txBuilder.SetSignatures(sigV2); err != nil {
 		log.Errorf("set signature failed: %v", err)
+		return err
 	}
 
 	tx := txBuilder.GetTx()
 	txBytes, err := txConfig.TxEncoder()(tx)
 	if err != nil {
 		log.Errorf("encode tx failed: %v", err)
+		return err
 	}
 
-	serviceClient := sdktx.NewServiceClient(p.layer2Listener.goatGrpcConn)
+	serviceClient := sdktx.NewServiceClient(lis.goatGrpcConn)
 
 	txResp, err := serviceClient.BroadcastTx(ctx, &sdktx.BroadcastTxRequest{
 		Mode:    sdktx.BroadcastMode_BROADCAST_MODE_SYNC,
@@ -194,6 +163,7 @@ func (p *Proposal) submitToConsensus(ctx context.Context, msg interface{}) {
 	)
 	if err != nil {
 		log.Errorf("broadcast tx failed: %v", err)
+		return err
 	}
 
 	// todo if need to wait for confirmation in the block
@@ -202,20 +172,24 @@ func (p *Proposal) submitToConsensus(ctx context.Context, msg interface{}) {
 	hashBytes, err := hex.DecodeString(txResp.TxResponse.TxHash)
 	if err != nil {
 		log.Errorf("decode tx hash failed: %v", err)
+		return err
 	}
 
-	resultTx, err := p.layer2Listener.goatRpcClient.Tx(ctx, hashBytes, false)
+	resultTx, err := lis.goatRpcClient.Tx(ctx, hashBytes, false)
 	if err != nil {
 		log.Errorf("query tx failed: %v", err)
+		return err
 	}
 
 	// if code = 0, tx success
 	if resultTx.TxResult.Code != 0 {
 		log.Errorf("submit tx error: %v", resultTx.TxResult)
+		return err
 	}
+	return nil
 }
 
-func convertToTypes(msg interface{}) (*bitcointypes.MsgNewDeposits, *bitcointypes.MsgNewBlockHashes, error) {
+func (lis *Layer2Listener) convertToTypes(msg interface{}) (*bitcointypes.MsgNewDeposits, *bitcointypes.MsgNewBlockHashes, error) {
 	if msgNewDeposits, ok := msg.(*bitcointypes.MsgNewDeposits); ok {
 		return msgNewDeposits, nil, nil
 	}

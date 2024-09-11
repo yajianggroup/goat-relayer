@@ -5,8 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/goatnetwork/goat-relayer/internal/db"
+	"github.com/goatnetwork/goat-relayer/internal/state"
+	"github.com/goatnetwork/goat-relayer/internal/types"
 	"gorm.io/gorm"
 
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
@@ -14,15 +17,23 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type BTCPoller struct {
-	db          *gorm.DB
-	confirmChan chan *wire.MsgBlock
+type BtcBlockExt struct {
+	wire.MsgBlock
+
+	blockNumber uint64
 }
 
-func NewBTCPoller(db *gorm.DB) *BTCPoller {
+type BTCPoller struct {
+	db          *gorm.DB
+	state       *state.State
+	confirmChan chan *BtcBlockExt
+}
+
+func NewBTCPoller(state *state.State, db *gorm.DB) *BTCPoller {
 	return &BTCPoller{
+		state:       state,
 		db:          db,
-		confirmChan: make(chan *wire.MsgBlock),
+		confirmChan: make(chan *BtcBlockExt),
 	}
 }
 
@@ -106,11 +117,29 @@ func (p *BTCPoller) GetBlock(height uint64) (*wire.MsgBlock, error) {
 	return &block, nil
 }
 
-func (p *BTCPoller) handleConfirmedBlock(block *wire.MsgBlock) {
+func (p *BTCPoller) handleConfirmedBlock(block *BtcBlockExt) {
 	// Logic for handling confirmed blocks
 	blockHash := block.BlockHash()
-	log.Infof("Handling confirmed block: %s", blockHash.String())
+	log.Infof("Handling confirmed block: %d, hash:%s", block.blockNumber, blockHash.String())
 
-	// TODO: Submit the confirmed block to the consensus layer
-
+	// TODO: it needs to use state to manange received block
+	// then start sig one by one,
+	// rules: state.GetL2Info().LatestBtcHeight+1, multiple block hash
+	// TODO below is test 1 block
+	if p.state.GetL2Info().LatestBtcHeight+1 == block.blockNumber {
+		epochVoter := p.state.GetEpochVoter()
+		p.state.EventBus.Publish(state.SigStart, types.MsgSignNewBlock{
+			MsgSign: types.MsgSign{
+				RequestId:    fmt.Sprintf("BTCHEAD:%d", block.blockNumber),
+				Sequence:     epochVoter.Seqeuence,
+				Epoch:        epochVoter.Epoch,
+				IsProposer:   true,
+				VoterAddress: epochVoter.Proposer,
+				SigData:      nil,
+				CreateTime:   time.Now().Unix(),
+			},
+			StartBlockNumber: block.blockNumber,
+			BlockHash:        [][]byte{blockHash.CloneBytes()},
+		})
+	}
 }

@@ -2,6 +2,7 @@ package layer2
 
 import (
 	"context"
+
 	relayertypes "github.com/goatnetwork/goat/x/relayer/types"
 	log "github.com/sirupsen/logrus"
 )

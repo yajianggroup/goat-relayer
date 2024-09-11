@@ -1,12 +1,21 @@
 package state
 
 import (
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/goatnetwork/goat-relayer/internal/db"
 	log "github.com/sirupsen/logrus"
 )
+
+func (s *State) GetEpochVoter() db.EpochVoter {
+	s.layer2Mu.RLock()
+	defer s.layer2Mu.RUnlock()
+
+	return *s.layer2State.EpochVoter
+}
 
 func (s *State) UpdateL2ChainStatus(latestBlock uint64, catchingUp bool) error {
 	s.layer2Mu.Lock()
@@ -42,18 +51,55 @@ func (s *State) UpdateL2InfoEndBlock(block uint64) error {
 	return nil
 }
 
-func (s *State) UpdateL2InfoFirstBlock(info *db.L2Info) error {
+func (s *State) UpdateL2InfoFirstBlock(block uint64, info *db.L2Info, voters []*db.Voter, epoch uint64, sequence uint64) error {
 	s.layer2Mu.Lock()
 	defer s.layer2Mu.Unlock()
 
-	err := s.saveL2Info(info)
+	if len(voters) == 0 {
+		log.Errorf("First block cannot give zero voters")
+		return errors.New("first block cannot give zero voters")
+	}
+
+	err := s.saveVoters(voters)
+	if err != nil {
+		log.Errorf("Save voters error: %v", err)
+		return err
+	}
+	s.layer2State.Voters = voters
+
+	err = s.saveL2Info(info)
 	if err != nil {
 		log.Errorf("Save L2 info error: %v", err)
 		return err
 	}
-
 	s.layer2State.L2Info = info
 
+	epochVoter := s.layer2State.EpochVoter
+	if epochVoter.Height <= block {
+		epochVoter.UpdatedAt = time.Now()
+		epochVoter.Height = block
+		epochVoter.Epoch = epoch
+		epochVoter.Seqeuence = sequence
+		// genesis proposer is voters[0]
+		epochVoter.Proposer = voters[0].VoteAddr
+
+		addrArray := make([]string, 0)
+		keyArray := make([]string, 0)
+		for _, voter := range voters {
+			addrArray = append(addrArray, voter.VoteAddr)
+			keyArray = append(keyArray, voter.VoteKey)
+		}
+		epochVoter.VoteAddrList = strings.Join(addrArray, ",")
+		epochVoter.VoteKeyList = strings.Join(keyArray, ",")
+
+		err := s.saveEpochVoter(epochVoter)
+		if err != nil {
+			return err
+		}
+
+		s.layer2State.EpochVoter = epochVoter
+		s.layer2State.CurrentEpoch = epoch
+	}
 	return nil
 }
 
@@ -101,7 +147,7 @@ func (s *State) UpdateL2InfoLatestBtc(block uint64, btcHeight uint64) error {
 
 // UpdateL2InfoEpoch update epoch, proposer.
 // Given proposer = "", it will only update epoch
-func (s *State) UpdateL2InfoEpoch(block uint64, epoch uint, proposer string) error {
+func (s *State) UpdateL2InfoEpoch(block uint64, epoch uint64, proposer string) error {
 	s.layer2Mu.Lock()
 	defer s.layer2Mu.Unlock()
 
@@ -113,6 +159,8 @@ func (s *State) UpdateL2InfoEpoch(block uint64, epoch uint, proposer string) err
 		epochVoter.Epoch = epoch
 		if proposer != "" {
 			epochVoter.Proposer = proposer
+
+			// TODO check the voters change or not?
 		}
 
 		err := s.saveEpochVoter(epochVoter)
@@ -121,6 +169,7 @@ func (s *State) UpdateL2InfoEpoch(block uint64, epoch uint, proposer string) err
 		}
 
 		s.layer2State.EpochVoter = epochVoter
+		s.layer2State.CurrentEpoch = epoch
 
 		if proposer != "" {
 			// TODO call event pulish
@@ -130,17 +179,24 @@ func (s *State) UpdateL2InfoEpoch(block uint64, epoch uint, proposer string) err
 	return nil
 }
 
-func (s *State) UpdateVotersFirstBlock(voters []*db.Voter) error {
+func (s *State) UpdateL2InfoSequence(block uint64, sequence uint64) error {
 	s.layer2Mu.Lock()
 	defer s.layer2Mu.Unlock()
 
-	err := s.saveVoters(voters)
-	if err != nil {
-		log.Errorf("Save voters error: %v", err)
-		return err
-	}
+	epochVoter := s.layer2State.EpochVoter
 
-	s.layer2State.Voters = voters
+	if epochVoter.Height <= block {
+		epochVoter.UpdatedAt = time.Now()
+		epochVoter.Height = block
+		epochVoter.Seqeuence = sequence
+
+		err := s.saveEpochVoter(epochVoter)
+		if err != nil {
+			return err
+		}
+
+		s.layer2State.EpochVoter = epochVoter
+	}
 
 	return nil
 }

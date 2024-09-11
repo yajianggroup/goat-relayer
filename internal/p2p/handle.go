@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/goatnetwork/goat-relayer/internal/state"
 	pubsub "github.com/libp2p/go-libp2p-pubsub"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -44,7 +45,7 @@ func PublishMessage(ctx context.Context, msg Message) {
 	}
 }
 
-func handlePubSubMessages(ctx context.Context, sub *pubsub.Subscription, node host.Host, signChan chan SignatureMessage) {
+func (libp2p *LibP2PService) handlePubSubMessages(ctx context.Context, sub *pubsub.Subscription, node host.Host) {
 	for {
 		msg, err := sub.Next(ctx)
 		if err != nil {
@@ -63,30 +64,20 @@ func handlePubSubMessages(ctx context.Context, sub *pubsub.Subscription, node ho
 			continue
 		}
 
-		log.Infof("Received message via pubsub: ID=%d, Content=%s", receivedMsg.MessageType, receivedMsg.Content)
+		log.Debugf("Received message via pubsub: ID=%d, RequestId=%s, Data=%v", receivedMsg.MessageType, receivedMsg.RequestId, receivedMsg.Data)
 
 		switch receivedMsg.MessageType {
-		case MessageTypeSignature:
-			sigBytes := []byte(receivedMsg.Content)
-			select {
-			case signChan <- SignatureMessage{
-				PeerID:    msg.ReceivedFrom.String(),
-				Signature: sigBytes,
-			}:
-			default:
-				log.Warnf("Unknown message type: %d", receivedMsg.MessageType)
-			}
-		// case MessageTypeKeygen:
-		// 	tssKeyCh <- tss.KeygenMessage{Content: receivedMsg.Content}
-		// case MessageTypeSigning:
-		// 	tssSignCh <- tss.SigningMessage{Content: receivedMsg.Content}
+		case MessageTypeSigReq:
+			libp2p.state.EventBus.Publish(state.SigReceive, receivedMsg.Data)
+		case MessageTypeSigResp:
+			libp2p.state.EventBus.Publish(state.SigReceive, receivedMsg.Data)
 		default:
 			log.Warnf("Unknown message type: %d", receivedMsg.MessageType)
 		}
 	}
 }
 
-func handleHeartbeatMessages(ctx context.Context, sub *pubsub.Subscription, node host.Host) {
+func (libp2p *LibP2PService) handleHeartbeatMessages(ctx context.Context, sub *pubsub.Subscription, node host.Host) {
 	for {
 		msg, err := sub.Next(ctx)
 		if err != nil {

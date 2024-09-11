@@ -2,8 +2,9 @@ package btc
 
 import (
 	"context"
-	"github.com/goatnetwork/goat-relayer/internal/db"
 	"time"
+
+	"github.com/goatnetwork/goat-relayer/internal/db"
 
 	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/goatnetwork/goat-relayer/internal/config"
@@ -110,7 +111,10 @@ func (bn *BTCNotifier) checkConfirmations(ctx context.Context) {
 					continue
 				}
 
-				bn.poller.confirmChan <- block
+				bn.poller.confirmChan <- &BtcBlockExt{
+					MsgBlock: *block,
+					blockNumber: height,
+				}
 				log.Infof("Starting to submit block at height %d to consensus", height)
 			}
 		}

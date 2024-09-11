@@ -1,8 +1,9 @@
 package layer2
 
 import (
-	"github.com/goatnetwork/goat-relayer/internal/db"
 	"strconv"
+
+	"github.com/goatnetwork/goat-relayer/internal/db"
 
 	"github.com/ethereum/go-ethereum/common"
 	log "github.com/sirupsen/logrus"
@@ -50,9 +51,8 @@ func (lis *Layer2Listener) processEndBlock(block uint64) {
 	lis.state.UpdateL2InfoEndBlock(block)
 }
 
-func (lis *Layer2Listener) processFirstBlock(info *db.L2Info, voters []*db.Voter) {
-	lis.state.UpdateL2InfoFirstBlock(info)
-	lis.state.UpdateVotersFirstBlock(voters)
+func (lis *Layer2Listener) processFirstBlock(info *db.L2Info, voters []*db.Voter, epoch, sequence uint64) error {
+	return lis.state.UpdateL2InfoFirstBlock(1, info, voters, epoch, sequence)
 }
 
 func (lis *Layer2Listener) processFinalizeWithdrawal(block uint64, attributes []abcitypes.EventAttribute) {
@@ -62,6 +62,7 @@ func (lis *Layer2Listener) processFinalizeWithdrawal(block uint64, attributes []
 		value := attr.Value
 
 		if key == "txid" {
+			// BE hash
 			txid = value
 		}
 	}
@@ -93,6 +94,7 @@ func (lis *Layer2Listener) processNewWithdrawal(block uint64, attributes []abcit
 		value := attr.Value
 
 		if key == "txid" {
+			// BE hash
 			txid = value
 		}
 	}
@@ -111,6 +113,7 @@ func (lis *Layer2Listener) processNewDeposit(block uint64, attributes []abcitype
 		value := attr.Value
 
 		if key == "txid" {
+			// BE hash
 			txid = value
 		}
 		if key == "txout" {
@@ -163,6 +166,7 @@ func (lis *Layer2Listener) processNewBtcBlockHash(block uint64, attributes []abc
 			height = value
 		}
 		if key == "hash" {
+			// BE hash
 			hash = value
 		}
 	}
@@ -187,7 +191,7 @@ func (lis *Layer2Listener) processNewEpochEvent(block uint64, attributes []abcit
 			log.Infof("Abci NewEpoch: %s, block: %d", value, block)
 
 			u64, _ := strconv.ParseUint(value, 10, 64)
-			lis.state.UpdateL2InfoEpoch(block, uint(u64), "")
+			lis.state.UpdateL2InfoEpoch(block, u64, "")
 		}
 	}
 }
@@ -201,7 +205,8 @@ func (lis *Layer2Listener) processFinalizedProposalEvent(block uint64, attribute
 		if key == "sequence" {
 			log.Infof("Abci FinalizedProposal Sequence: %s, block: %d", value, block)
 
-			// Not update
+			u64, _ := strconv.ParseUint(value, 10, 64)
+			lis.state.UpdateL2InfoEpoch(block, u64, "")
 		}
 	}
 }
@@ -225,7 +230,7 @@ func (lis *Layer2Listener) processElectedProposerEvent(block uint64, attributes 
 
 	log.Infof("Abci ElectedProposer: %s in Epoch: %s, block: %d", proposer, epoch, block)
 	u64, _ := strconv.ParseUint(epoch, 10, 64)
-	lis.state.UpdateL2InfoEpoch(block, uint(u64), proposer)
+	lis.state.UpdateL2InfoEpoch(block, u64, proposer)
 }
 
 // Process accepted_proposer event
@@ -269,6 +274,8 @@ func (lis *Layer2Listener) processVoterEvent(block uint64, eventType string, att
 			// TODO should pass event, notify voter to mark boarded
 			// Call event bus, send block, voterAddr
 			// Update state queue status
+
+			// TODO query voter
 		}
 
 		if key == "voter_activated" {

@@ -23,7 +23,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/goatnetwork/goat-relayer/internal/config"
-	"github.com/goatnetwork/goat-relayer/internal/db"
+	"github.com/goatnetwork/goat-relayer/internal/state"
 )
 
 const (
@@ -38,14 +38,12 @@ const (
 var messageTopic *pubsub.Topic
 
 type LibP2PService struct {
-	db       *db.DatabaseManager
-	signChan chan SignatureMessage
+	state *state.State
 }
 
-func NewLibP2PService(db *db.DatabaseManager) *LibP2PService {
+func NewLibP2PService(state *state.State) *LibP2PService {
 	return &LibP2PService{
-		db:       db,
-		signChan: make(chan SignatureMessage),
+		state: state,
 	}
 }
 
@@ -102,15 +100,16 @@ func (lp *LibP2PService) Start(ctx context.Context) {
 		log.Fatalf("Failed to subscribe to heartbeat topic: %v", err)
 	}
 
-	go handlePubSubMessages(ctx, sub, node, lp.signChan)
-	go handleHeartbeatMessages(ctx, hbSub, node)
+	go lp.handlePubSubMessages(ctx, sub, node)
+	go lp.handleHeartbeatMessages(ctx, hbSub, node)
 	go startHeartbeat(ctx, node, hbTopic)
 
 	go func() {
 		time.Sleep(5 * time.Second)
 		msg := Message{
-			MessageType: MessageTypeKeygen,
-			Content:     "Hello, goat voter libp2p PubSub network with handshake!",
+			RequestId:   "1",
+			MessageType: MessageTypeUnknown,
+			Data:        "Hello, goat voter libp2p PubSub network with handshake!",
 		}
 		PublishMessage(ctx, msg)
 	}()
