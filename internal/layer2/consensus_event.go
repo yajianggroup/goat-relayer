@@ -4,7 +4,6 @@ import (
 	"strconv"
 
 	"github.com/goatnetwork/goat-relayer/internal/db"
-	"github.com/goatnetwork/goat-relayer/internal/types"
 
 	"github.com/ethereum/go-ethereum/common"
 	log "github.com/sirupsen/logrus"
@@ -58,16 +57,13 @@ func (lis *Layer2Listener) processFirstBlock(info *db.L2Info, voters []*db.Voter
 
 func (lis *Layer2Listener) processFinalizeWithdrawal(block uint64, attributes []abcitypes.EventAttribute) {
 	var txid string
-	var err error
 	for _, attr := range attributes {
 		key := attr.Key
 		value := attr.Value
 
 		if key == "txid" {
-			txid, err = types.ReverseHash(value)
-			if err != nil {
-				log.Errorf("Reverse hash err: %v", err)
-			}
+			// BE hash
+			txid = value
 		}
 	}
 	log.Infof("Abci FinalizeWithdrawal, block: %d, txid: %s", block, txid)
@@ -93,16 +89,13 @@ func (lis *Layer2Listener) processCancelWithdrawal(block uint64, attributes []ab
 
 func (lis *Layer2Listener) processNewWithdrawal(block uint64, attributes []abcitypes.EventAttribute) {
 	var txid string
-	var err error
 	for _, attr := range attributes {
 		key := attr.Key
 		value := attr.Value
 
 		if key == "txid" {
-			txid, err = types.ReverseHash(value)
-			if err != nil {
-				log.Errorf("Reverse hash err: %v", err)
-			}
+			// BE hash
+			txid = value
 		}
 	}
 	log.Infof("Abci NewWithdrawal, block: %d, txid: %s", block, txid)
@@ -115,16 +108,13 @@ func (lis *Layer2Listener) processNewDeposit(block uint64, attributes []abcitype
 	var txout uint64
 	var address common.Address
 	var amount uint64 // NOTE, db use float64
-	var err error
 	for _, attr := range attributes {
 		key := attr.Key
 		value := attr.Value
 
 		if key == "txid" {
-			txid, err = types.ReverseHash(value)
-			if err != nil {
-				log.Errorf("Reverse hash err: %v", err)
-			}
+			// BE hash
+			txid = value
 		}
 		if key == "txout" {
 			txout, _ = strconv.ParseUint(value, 10, 64)
@@ -168,7 +158,6 @@ func (lis *Layer2Listener) processNewWalletKey(block uint64, attributes []abcity
 func (lis *Layer2Listener) processNewBtcBlockHash(block uint64, attributes []abcitypes.EventAttribute) {
 	var height string
 	var hash string
-	var err error
 	for _, attr := range attributes {
 		key := attr.Key
 		value := attr.Value
@@ -177,10 +166,8 @@ func (lis *Layer2Listener) processNewBtcBlockHash(block uint64, attributes []abc
 			height = value
 		}
 		if key == "hash" {
-			hash, err = types.ReverseHash(value)
-			if err != nil {
-				log.Errorf("Reverse hash err: %v", err)
-			}
+			// BE hash
+			hash = value
 		}
 	}
 	log.Infof("Abci NewBlockHash: %s, block: %d, btcHeight: %s", hash, block, height)
