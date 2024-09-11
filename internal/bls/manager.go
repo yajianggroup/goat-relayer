@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"log"
 	"sync"
 
 	"github.com/goatnetwork/goat-relayer/internal/p2p"
@@ -37,7 +38,7 @@ func NewSignatureHelper(threshold int) (*SignatureHelper, error) {
 	}, nil
 }
 
-func (sm *SignatureHelper) SignDoc(ctx context.Context, signBytes []byte) *blst.P1Affine {
+func (sm *SignatureHelper) SignDoc(ctx context.Context, signBytes []byte) []byte {
 	sm.broadcastSignature("", signBytes)
 	for {
 		select {
@@ -45,7 +46,11 @@ func (sm *SignatureHelper) SignDoc(ctx context.Context, signBytes []byte) *blst.
 			signature := new(blst.P1Affine).Uncompress(sigMsg.Signature)
 			sm.addSignature(sigMsg.PeerID, signature)
 			if len(sm.signatures) >= sm.threshold {
-				aggregatedSig := sm.aggregateSignatures()
+				aggregatedSig, err := sm.aggregateSignatures()
+				if err != nil {
+					log.Printf("failed to aggregate signatures: %v", err)
+					continue
+				}
 				return aggregatedSig
 			}
 
@@ -87,20 +92,22 @@ func (sm *SignatureHelper) addSignature(peerID string, sig *blst.P1Affine) error
 	return nil
 }
 
-func (sm *SignatureHelper) aggregateSignatures() *blst.P1Affine {
+func (sm *SignatureHelper) aggregateSignatures() ([]byte, error) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 
-	sigs := make([]*blst.P1Affine, 0, len(sm.signatures))
+	sigs := make([][]byte, 0, len(sm.signatures))
 	for _, sig := range sm.signatures {
-		sigs = append(sigs, sig)
+		sigs = append(sigs, sig.Compress())
 	}
 
 	if len(sigs) == 0 {
-		return nil
+		return nil, fmt.Errorf("no signatures to aggregate")
 	}
 
-	// TODO: affine aggregation
-	// aggSig := blst.P1sToAffine(sigs)
-	return sigs[0]
+	signature := new(blst.P1Aggregate)
+	if !signature.AggregateCompressed(sigs, true) {
+		return nil, fmt.Errorf("failed to aggregate signatures")
+	}
+	return signature.ToAffine().Compress(), nil
 }

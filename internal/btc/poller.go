@@ -6,18 +6,20 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/goatnetwork/goat-relayer/internal/db"
+	"gorm.io/gorm"
+
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/wire"
 	log "github.com/sirupsen/logrus"
-	"github.com/syndtr/goleveldb/leveldb"
 )
 
 type BTCPoller struct {
-	db          *leveldb.DB
+	db          *gorm.DB
 	confirmChan chan *wire.MsgBlock
 }
 
-func NewBTCPoller(db *leveldb.DB) *BTCPoller {
+func NewBTCPoller(db *gorm.DB) *BTCPoller {
 	return &BTCPoller{
 		db:          db,
 		confirmChan: make(chan *wire.MsgBlock),
@@ -29,8 +31,8 @@ func (p *BTCPoller) Start(ctx context.Context) {
 }
 
 func (p *BTCPoller) Stop() {
-	p.db.Close()
 }
+
 func (p *BTCPoller) pollLoop(ctx context.Context) {
 	for {
 		select {
@@ -44,56 +46,59 @@ func (p *BTCPoller) pollLoop(ctx context.Context) {
 }
 
 func (p *BTCPoller) GetBlockHashForTx(txHash chainhash.Hash) (*chainhash.Hash, error) {
-	iter := p.db.NewIterator(nil, nil)
-	defer iter.Release()
+	var btcTxOutput db.BtcTXOutput
 
-	for iter.Next() {
-		key := iter.Key()
-		if bytes.HasPrefix(key, []byte("utxo:")) {
-			value := iter.Value()
-			if bytes.Equal(value, txHash[:]) {
-				blockHashBytes := key[len("utxo:") : len("utxo:")+64]
-				return chainhash.NewHash(blockHashBytes)
-			}
-		}
+	if err := p.db.Where("tx_hash = ?", txHash.String()).First(&btcTxOutput).Error; err != nil {
+		return nil, fmt.Errorf("failed to find the block hash for the transaction: %v", err)
 	}
-	return nil, fmt.Errorf("failed to find the block hash for the transaction")
-}
 
-func (p *BTCPoller) GetBlockHeader(blockHash *chainhash.Hash) (*wire.BlockHeader, error) {
-	headerBytes, err := p.db.Get([]byte("header:"+blockHash.String()), nil)
+	blockHashBytes := btcTxOutput.PkScript[:32] // Assuming the block hash is the first 32 bytes of PkScript
+	blockHash, err := chainhash.NewHash(blockHashBytes)
 	if err != nil {
+		return nil, fmt.Errorf("failed to create hash from block hash bytes: %v", err)
+	}
+
+	return blockHash, nil
+}
+func (p *BTCPoller) GetBlockHeader(blockHash *chainhash.Hash) (*wire.BlockHeader, error) {
+	var blockData db.BtcBlockData
+	if err := p.db.Where("block_hash = ?", blockHash.String()).First(&blockData).Error; err != nil {
 		return nil, fmt.Errorf("failed to retrieve block header from database: %v", err)
 	}
-	var header wire.BlockHeader
-	err = header.Deserialize(bytes.NewReader(headerBytes))
+
+	header := wire.BlockHeader{}
+	err := header.Deserialize(bytes.NewReader([]byte(blockData.Header)))
 	if err != nil {
 		return nil, fmt.Errorf("failed to deserialize block header: %v", err)
 	}
+
 	return &header, nil
 }
 
 func (p *BTCPoller) GetTxHashes(blockHash *chainhash.Hash) ([]chainhash.Hash, error) {
-	txHashesBytes, err := p.db.Get([]byte("txhashes:"+blockHash.String()), nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to retrieve transaction hash list from database: %v", err)
-	}
 	var txHashes []chainhash.Hash
-	err = json.Unmarshal(txHashesBytes, &txHashes)
+
+	var blockData db.BtcBlockData
+	if err := p.db.Where("block_hash = ?", blockHash.String()).First(&blockData).Error; err != nil {
+		return nil, fmt.Errorf("failed to retrieve block data from database: %v", err)
+	}
+
+	err := json.Unmarshal([]byte(blockData.TxHashes), &txHashes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unmarshal transaction hash list: %v", err)
 	}
+
 	return txHashes, nil
 }
 
 func (p *BTCPoller) GetBlock(height uint64) (*wire.MsgBlock, error) {
-	blockBytes, err := p.db.Get([]byte(fmt.Sprintf("block:%d", height)), nil)
-	if err != nil {
+	var blockData db.BtcBlockData
+	if err := p.db.Where("height = ?", height).First(&blockData).Error; err != nil {
 		return nil, fmt.Errorf("error retrieving block from database: %v", err)
 	}
 
-	var block wire.MsgBlock
-	err = block.Deserialize(bytes.NewReader(blockBytes))
+	block := wire.MsgBlock{}
+	err := block.Deserialize(bytes.NewReader([]byte(blockData.Header)))
 	if err != nil {
 		return nil, fmt.Errorf("error deserializing block: %v", err)
 	}

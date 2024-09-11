@@ -2,6 +2,7 @@ package btc
 
 import (
 	"context"
+	"github.com/goatnetwork/goat-relayer/internal/db"
 	"time"
 
 	"github.com/btcsuite/btcd/rpcclient"
@@ -18,9 +19,18 @@ type BTCNotifier struct {
 }
 
 func NewBTCNotifier(client *rpcclient.Client, cache *BTCCache, poller *BTCPoller) *BTCNotifier {
+	var maxBlockHeight uint64 = 0
+	result := cache.db.Model(&db.BtcBlockData{}).Select("MAX(block_height)").Row()
+	result.Scan(&maxBlockHeight)
+	if maxBlockHeight < uint64(config.AppConfig.BTCStartHeight) {
+		maxBlockHeight = uint64(config.AppConfig.BTCStartHeight)
+	}
+
 	return &BTCNotifier{
 		client:        client,
-		currentHeight: uint64(config.AppConfig.BTCStartHeight),
+		currentHeight: maxBlockHeight,
+		cache:         cache,
+		poller:        poller,
 	}
 }
 
@@ -36,7 +46,7 @@ func (bn *BTCNotifier) listenForBTCBlocks(ctx context.Context) {
 			log.Info("Stopping BTC block listening...")
 			return
 		default:
-
+			time.Sleep(10 * time.Second)
 			bn.currentHeight++
 
 			bestHeight, err := bn.client.GetBlockCount()
@@ -63,7 +73,11 @@ func (bn *BTCNotifier) listenForBTCBlocks(ctx context.Context) {
 				continue
 			}
 
-			bn.cache.blockChan <- block
+			blockWithHeight := BlockWithHeight{
+				Block:  block,
+				Height: bn.currentHeight,
+			}
+			bn.cache.blockChan <- blockWithHeight
 			log.Printf("Starting to cache block at height %d", bn.currentHeight)
 		}
 	}

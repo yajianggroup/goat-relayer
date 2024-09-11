@@ -15,17 +15,20 @@ type BTCListener struct {
 	libp2p *p2p.LibP2PService
 	dbm    *db.DatabaseManager
 	state  *state.State
+	cache  *BTCCache
 
 	notifier *BTCNotifier
 }
 
 func NewBTCListener(libp2p *p2p.LibP2PService, state *state.State, dbm *db.DatabaseManager) *BTCListener {
-	db := dbm.GetCacheDB()
+	db := dbm.GetBtcCacheDB()
 	cache := NewBTCCache(db)
 	poller := NewBTCPoller(db)
 
 	connConfig := &rpcclient.ConnConfig{
 		Host:         config.AppConfig.BTCRPC,
+		User:         "test",
+		Pass:         "test",
 		HTTPPostMode: true,
 		DisableTLS:   true,
 	}
@@ -39,15 +42,16 @@ func NewBTCListener(libp2p *p2p.LibP2PService, state *state.State, dbm *db.Datab
 		libp2p:   libp2p,
 		dbm:      dbm,
 		state:    state,
+		cache:    cache,
 		notifier: notifier,
 	}
 }
 
 func (bl *BTCListener) Start(ctx context.Context) {
-	// go bl.notifier.Start(ctx)
+	go bl.notifier.Start(ctx)
+	go bl.cache.Start(ctx)
+	log.Info("BTCListener started all modules")
 
-	// log.Info("BTCListener started all modules")
-
-	// <-ctx.Done()
-	// log.Info("BTCListener is stopping...")
+	<-ctx.Done()
+	log.Info("BTCListener is stopping...")
 }
