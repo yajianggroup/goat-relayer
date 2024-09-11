@@ -96,6 +96,7 @@ func InitConfig() {
 		RelayerBlsSk:           viper.GetString("RELAYER_BLS_SK"),
 	}
 
+	// logrus.SetFormatter(&logrus.JSONFormatter{})
 	logrus.SetOutput(os.Stdout)
 	logrus.SetLevel(AppConfig.LogLevel)
 }

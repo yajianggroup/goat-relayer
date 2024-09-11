@@ -136,6 +136,14 @@ type Vout struct {
 	UpdatedAt  time.Time `gorm:"not null" json:"updated_at"`
 }
 
+// BtcSyncStatus model
+type BtcSyncStatus struct {
+	ID              uint      `gorm:"primaryKey" json:"id"`
+	UnconfirmHeight int64    `gorm:"not null" json:"unconfirm_height"`
+	ConfirmedHeight int64    `gorm:"not null" json:"confirmed_height"`
+	UpdatedAt       time.Time `gorm:"not null" json:"updated_at"`
+}
+
 type BtcBlockData struct {
 	ID           uint   `gorm:"primaryKey" json:"id"`
 	BlockHeight  uint64 `gorm:"unique;not null" json:"block_height"`
@@ -169,7 +177,7 @@ func (dm *DatabaseManager) autoMigrate() {
 	if err := dm.walletDb.AutoMigrate(&Utxo{}, &Withdraw{}, &SendOrder{}, &Vin{}, &Vout{}); err != nil {
 		log.Fatalf("Failed to migrate database 4: %v", err)
 	}
-	if err := dm.btcCacheDb.AutoMigrate(&BtcBlockData{}, &BtcTXOutput{}); err != nil {
+	if err := dm.btcCacheDb.AutoMigrate(&BtcSyncStatus{}, &BtcBlockData{}, &BtcTXOutput{}); err != nil {
 		log.Fatalf("Failed to migrate database 5: %v", err)
 	}
 }

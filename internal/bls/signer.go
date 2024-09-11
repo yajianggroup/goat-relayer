@@ -49,6 +49,7 @@ func NewSigner(libp2p *p2p.LibP2PService, layer2Listener *layer2.Layer2Listener,
 	sk := new(goatcryp.PrivateKey).Deserialize(byt)
 	pk := new(goatcryp.PublicKey).From(sk).Compress()
 	pkHex := hex.EncodeToString(pk)
+	log.Infof("Signer init, bls pk: %s, voter address: %s", pkHex, address)
 
 	// epoch := state.GetEpochVoter()
 
@@ -92,7 +93,7 @@ func (s *Signer) Start(ctx context.Context) {
 
 func (s *Signer) IsProposer() bool {
 	epoch := s.state.GetEpochVoter()
-	return strings.EqualFold(s.pkHex, epoch.Proposer)
+	return strings.EqualFold(s.address, epoch.Proposer)
 }
 
 func (s *Signer) CanSign() bool {

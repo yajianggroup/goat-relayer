@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/cosmos/cosmos-sdk/client/flags"
@@ -75,6 +76,10 @@ func (lis *Layer2Listener) SubmitToConsensus(ctx context.Context, msg interface{
 	privKeyBytes, err := hex.DecodeString(privKeyStr)
 	if err != nil {
 		log.Errorf("decode private key failed: %v", err)
+		return err
+	}
+	if err := lis.checkAndReconnect(); err != nil {
+		log.Errorf("check and reconnect goat client faild: %v", err)
 		return err
 	}
 	privKey := &secp256k1.PrivKey{Key: privKeyBytes}
@@ -184,7 +189,7 @@ func (lis *Layer2Listener) SubmitToConsensus(ctx context.Context, msg interface{
 	// if code = 0, tx success
 	if resultTx.TxResult.Code != 0 {
 		log.Errorf("submit tx error: %v", resultTx.TxResult)
-		return err
+		return fmt.Errorf("submit tx error: %v", resultTx.TxResult)
 	}
 	return nil
 }
