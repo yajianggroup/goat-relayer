@@ -3,7 +3,6 @@ package btc
 import (
 	"bytes"
 	"context"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -19,7 +18,8 @@ import (
 )
 
 type BtcBlockExt struct {
-	*chainhash.Hash
+	wire.MsgBlock
+
 	blockNumber uint64
 }
 
@@ -47,8 +47,8 @@ func (p *BTCPoller) Stop() {
 func (p *BTCPoller) pollLoop(ctx context.Context) {
 	for {
 		select {
-		case blockHash := <-p.confirmChan:
-			p.handleConfirmedBlock(blockHash)
+		case block := <-p.confirmChan:
+			p.handleConfirmedBlock(block)
 		case <-ctx.Done():
 			log.Info("Stopping the polling of confirmed blocks...")
 			return
@@ -104,12 +104,12 @@ func (p *BTCPoller) GetTxHashes(blockHash *chainhash.Hash) ([]chainhash.Hash, er
 
 func (p *BTCPoller) GetBlock(height uint64) (*wire.MsgBlock, error) {
 	var blockData db.BtcBlockData
-	if err := p.db.Where("block_height = ?", height).First(&blockData).Error; err != nil {
+	if err := p.db.Where("height = ?", height).First(&blockData).Error; err != nil {
 		return nil, fmt.Errorf("error retrieving block from database: %v", err)
 	}
 
 	block := wire.MsgBlock{}
-	err := block.Header.Deserialize(bytes.NewReader([]byte(blockData.Header)))
+	err := block.Deserialize(bytes.NewReader([]byte(blockData.Header)))
 	if err != nil {
 		return nil, fmt.Errorf("error deserializing block: %v", err)
 	}
@@ -117,28 +117,9 @@ func (p *BTCPoller) GetBlock(height uint64) (*wire.MsgBlock, error) {
 	return &block, nil
 }
 
-func (p *BTCPoller) GetBlockHash(height uint64) (*chainhash.Hash, error) {
-	var blockData db.BtcBlockData
-	if err := p.db.Where("block_height = ?", height).First(&blockData).Error; err != nil {
-		return nil, fmt.Errorf("error retrieving block from database: %v", err)
-	}
-
-	hashBytes, err := hex.DecodeString(blockData.BlockHash)
-	if err != nil {
-		return nil, fmt.Errorf("error decoding block hash: %v", err)
-	}
-
-	blockHash, err := chainhash.NewHash(hashBytes)
-	if err != nil {
-		return nil, fmt.Errorf("error creating block hash: %v", err)
-	}
-
-	return blockHash, nil
-}
-
 func (p *BTCPoller) handleConfirmedBlock(block *BtcBlockExt) {
 	// Logic for handling confirmed blocks
-	blockHash := block.Hash
+	blockHash := block.BlockHash()
 	log.Infof("Handling confirmed block: %d, hash:%s", block.blockNumber, blockHash.String())
 
 	// TODO: it needs to use state to manange received block
