@@ -1,12 +1,12 @@
 package state
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/goatnetwork/goat-relayer/internal/db"
-	"github.com/pingcap/errors"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -57,7 +57,7 @@ func (s *State) UpdateL2InfoFirstBlock(block uint64, info *db.L2Info, voters []*
 
 	if len(voters) == 0 {
 		log.Errorf("First block cannot give zero voters")
-		return errors.New("First block cannot give zero voters")
+		return errors.New("first block cannot give zero voters")
 	}
 
 	err := s.saveVoters(voters)
