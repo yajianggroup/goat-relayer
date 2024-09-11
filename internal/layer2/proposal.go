@@ -115,7 +115,7 @@ func (p *Proposal) submitToConsensus(ctx context.Context, msg interface{}) {
 
 	privKeyBytes, err := hex.DecodeString(privKeyStr)
 	if err != nil {
-		log.Error(err)
+		log.Errorf("decode private key failed: %v", err)
 	}
 	privKey := &secp256k1.PrivKey{Key: privKeyBytes}
 	address := sdk.AccAddress(privKey.PubKey().Address().Bytes()).String()
@@ -123,12 +123,12 @@ func (p *Proposal) submitToConsensus(ctx context.Context, msg interface{}) {
 	accountReq := &authtypes.QueryAccountRequest{Address: address}
 	accountResp, err := p.layer2Listener.goatQueryClient.Account(ctx, accountReq)
 	if err != nil {
-		log.Error(err)
+		log.Errorf("query account failed: %v", err)
 	}
 
 	var account sdk.AccountI
 	if err = protoCodec.UnpackAny(accountResp.GetAccount(), &account); err != nil {
-		log.Error(err)
+		log.Errorf("unpack account failed: %v", err)
 	}
 
 	sequence := account.GetSequence()
@@ -138,16 +138,16 @@ func (p *Proposal) submitToConsensus(ctx context.Context, msg interface{}) {
 	txBuilder := txConfig.NewTxBuilder()
 
 	if msgNewDeposits, msgNewBlockHashes, err := convertToTypes(msg); err != nil {
-		log.Error(err)
+		log.Errorf("convert to types failed: %v", err)
 	} else if msgNewDeposits != nil {
 		err = txBuilder.SetMsgs(msgNewDeposits)
 		if err != nil {
-			log.Error(err)
+			log.Errorf("set msgNewDeposits failed: %v", err)
 		}
 	} else if msgNewBlockHashes != nil {
 		err = txBuilder.SetMsgs(msgNewBlockHashes)
 		if err != nil {
-			log.Error(err)
+			log.Errorf("set msgNewBlockHashes failed: %v", err)
 		}
 	}
 
@@ -164,7 +164,7 @@ func (p *Proposal) submitToConsensus(ctx context.Context, msg interface{}) {
 		},
 		Sequence: sequence,
 	}); err != nil {
-		log.Error(err)
+		log.Errorf("set signature failed: %v", err)
 	}
 
 	signerData := authsigning.SignerData{
@@ -174,16 +174,16 @@ func (p *Proposal) submitToConsensus(ctx context.Context, msg interface{}) {
 	}
 	sigV2, err := tx.SignWithPrivKey(ctx, signing.SignMode(txConfig.SignModeHandler().DefaultMode()), signerData, txBuilder, privKey, txConfig, sequence)
 	if err != nil {
-		log.Error(err)
+		log.Errorf("sign tx failed: %v", err)
 	}
 	if err = txBuilder.SetSignatures(sigV2); err != nil {
-		log.Error(err)
+		log.Errorf("set signature failed: %v", err)
 	}
 
 	tx := txBuilder.GetTx()
 	txBytes, err := txConfig.TxEncoder()(tx)
 	if err != nil {
-		log.Error(err)
+		log.Errorf("encode tx failed: %v", err)
 	}
 
 	serviceClient := sdktx.NewServiceClient(p.layer2Listener.goatGrpcConn)
@@ -193,7 +193,7 @@ func (p *Proposal) submitToConsensus(ctx context.Context, msg interface{}) {
 		TxBytes: txBytes},
 	)
 	if err != nil {
-		log.Error(err)
+		log.Errorf("broadcast tx failed: %v", err)
 	}
 
 	// todo if need to wait for confirmation in the block
@@ -201,12 +201,12 @@ func (p *Proposal) submitToConsensus(ctx context.Context, msg interface{}) {
 
 	hashBytes, err := hex.DecodeString(txResp.TxResponse.TxHash)
 	if err != nil {
-		log.Error(err)
+		log.Errorf("decode tx hash failed: %v", err)
 	}
 
 	resultTx, err := p.layer2Listener.goatRpcClient.Tx(ctx, hashBytes, false)
 	if err != nil {
-		log.Error(err)
+		log.Errorf("query tx failed: %v", err)
 	}
 
 	// if code = 0, tx success

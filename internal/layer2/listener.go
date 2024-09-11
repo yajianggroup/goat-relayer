@@ -286,19 +286,19 @@ func (lis *Layer2Listener) getGoatChainGenesisState(ctx context.Context) (*db.L2
 
 	var appState map[string]json.RawMessage
 	if err := json.Unmarshal(genesis.Genesis.AppState, &appState); err != nil {
-		log.Errorf("Error unmarshalling genesis doc: %s", err)
+		log.Errorf("Error unmarshalling genesis doc: %v", err)
 		return nil, nil, err
 	}
 
 	var bitcoinState bitcointypes.GenesisState
 	if err := cdc.UnmarshalJSON(appState[bitcointypes.ModuleName], &bitcoinState); err != nil {
-		log.Errorf("Error unmarshalling bitcoin state: %s", err)
+		log.Errorf("Error unmarshalling bitcoin state: %v", err)
 		return nil, nil, err
 	}
 
 	var relayerState relayertypes.GenesisState
 	if err := cdc.UnmarshalJSON(appState[relayertypes.ModuleName], &relayerState); err != nil {
-		log.Errorf("Error unmarshalling relayer state: %s", err)
+		log.Errorf("Error unmarshalling relayer state: %v", err)
 		return nil, nil, err
 	}
 
