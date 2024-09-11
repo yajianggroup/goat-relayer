@@ -56,8 +56,6 @@ func (s *State) UpdateProcessedBtcBlock(block uint64, height uint64, hash string
 		}
 	}
 
-	// TODO
-	s.EventBus.Publish("btcHeadStateUpdated", block)
 	return nil
 }
 

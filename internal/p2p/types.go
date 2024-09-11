@@ -1,8 +1,9 @@
 package p2p
 
 type Message struct {
-	MessageType MessageType `json:"id"`
-	Content     string      `json:"content"`
+	MessageType MessageType `json:"msg_type"`
+	RequestId   string      `json:"request_id"`
+	Data        interface{} `json:"data"`
 }
 
 type HeartbeatMessage struct {
@@ -11,16 +12,10 @@ type HeartbeatMessage struct {
 	Timestamp int64  `json:"ts"`
 }
 
-type SignatureMessage struct {
-	PeerID    string
-	Signature []byte
-}
-
 type MessageType int
 
 const (
 	MessageTypeUnknown MessageType = iota
-	MessageTypeKeygen
-	MessageTypeSigning
-	MessageTypeSignature
+	MessageTypeSigReq
+	MessageTypeSigResp
 )

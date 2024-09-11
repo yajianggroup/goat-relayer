@@ -30,7 +30,7 @@ func InitializeState(dbm *db.DatabaseManager) *State {
 	var (
 		l2Info            db.L2Info
 		epochVoter        db.EpochVoter
-		currentEpoch      = -1
+		currentEpoch      uint64
 		voters            []*db.Voter
 		voterQueue        []*db.VoterQueue
 		latestBtcBlock    db.BtcBlock
@@ -81,11 +81,12 @@ func InitializeState(dbm *db.DatabaseManager) *State {
 				VoteKeyList:  "[]",
 				Epoch:        0,
 				Height:       0,
+				Seqeuence:    0,
 				Proposer:     "",
 				UpdatedAt:    time.Now(),
 			}
 		} else {
-			currentEpoch = int(epochVoter.Epoch)
+			currentEpoch = epochVoter.Epoch
 		}
 	}()
 

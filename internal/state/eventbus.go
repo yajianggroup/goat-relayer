@@ -4,6 +4,18 @@ import (
 	"sync"
 )
 
+type EventType int
+
+const (
+    SigStart EventType = iota
+    SigReceive
+    SigFinish
+)
+
+func (e EventType) String() string {
+    return [...]string{"SigStart", "SigReceive", "SigFinish"}[e]
+}
+
 type EventBus struct {
 	subscribers map[string][]chan interface{}
 	mu          sync.RWMutex
@@ -16,17 +28,17 @@ func NewEventBus() *EventBus {
 }
 
 // TODO enum for eventType
-func (eb *EventBus) Subscribe(eventType string, ch chan interface{}) {
+func (eb *EventBus) Subscribe(eventType EventType, ch chan interface{}) {
 	eb.mu.Lock()
 	defer eb.mu.Unlock()
-	eb.subscribers[eventType] = append(eb.subscribers[eventType], ch)
+	eb.subscribers[eventType.String()] = append(eb.subscribers[eventType.String()], ch)
 }
 
-func (eb *EventBus) Publish(eventType string, data interface{}) {
+func (eb *EventBus) Publish(eventType EventType, data interface{}) {
 	eb.mu.RLock()
 	defer eb.mu.RUnlock()
 
-	subscribers, ok := eb.subscribers[eventType]
+	subscribers, ok := eb.subscribers[eventType.String()]
 	if !ok {
 		return
 	}
@@ -39,10 +51,10 @@ func (eb *EventBus) Publish(eventType string, data interface{}) {
 		default:
 			// If cannot receive or closed, remove the subscriber
 			eb.mu.Lock()
-			if i < len(eb.subscribers[eventType])-1 {
-				eb.subscribers[eventType] = append(eb.subscribers[eventType][:i], eb.subscribers[eventType][i+1:]...)
+			if i < len(eb.subscribers[eventType.String()])-1 {
+				eb.subscribers[eventType.String()] = append(eb.subscribers[eventType.String()][:i], eb.subscribers[eventType.String()][i+1:]...)
 			} else {
-				eb.subscribers[eventType] = eb.subscribers[eventType][:i]
+				eb.subscribers[eventType.String()] = eb.subscribers[eventType.String()][:i]
 			}
 			eb.mu.Unlock()
 
@@ -53,11 +65,11 @@ func (eb *EventBus) Publish(eventType string, data interface{}) {
 	}
 }
 
-func (eb *EventBus) Unsubscribe(eventType string, ch chan interface{}) {
+func (eb *EventBus) Unsubscribe(eventType EventType, ch chan interface{}) {
 	eb.mu.Lock()
 	defer eb.mu.Unlock()
 
-	subscribers, ok := eb.subscribers[eventType]
+	subscribers, ok := eb.subscribers[eventType.String()]
 	if !ok {
 		return
 	}
@@ -65,14 +77,14 @@ func (eb *EventBus) Unsubscribe(eventType string, ch chan interface{}) {
 	for i, subscriber := range subscribers {
 		if subscriber == ch {
 			if i == len(subscribers)-1 {
-				eb.subscribers[eventType] = subscribers[:i]
+				eb.subscribers[eventType.String()] = subscribers[:i]
 			} else {
-				eb.subscribers[eventType] = append(subscribers[:i], subscribers[i+1:]...)
+				eb.subscribers[eventType.String()] = append(subscribers[:i], subscribers[i+1:]...)
 			}
 			break
 		}
 	}
-	if len(eb.subscribers[eventType]) == 0 {
-		delete(eb.subscribers, eventType)
+	if len(eb.subscribers[eventType.String()]) == 0 {
+		delete(eb.subscribers, eventType.String())
 	}
 }

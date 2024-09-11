@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"strings"
+	"time"
+
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	bitcointypes "github.com/goatnetwork/goat/x/bitcoin/types"
 	relayertypes "github.com/goatnetwork/goat/x/relayer/types"
-	"strings"
-	"time"
 
 	"github.com/go-errors/errors"
 	log "github.com/sirupsen/logrus"
@@ -45,6 +46,8 @@ type Layer2Listener struct {
 	goatRpcClient   *rpchttp.HTTP
 	goatGrpcConn    *grpc.ClientConn
 	goatQueryClient authtypes.QueryClient
+
+	sigFinishChan chan interface{}
 }
 
 func NewLayer2Listener(libp2p *p2p.LibP2PService, state *state.State, db *db.DatabaseManager) *Layer2Listener {
@@ -84,6 +87,8 @@ func NewLayer2Listener(libp2p *p2p.LibP2PService, state *state.State, db *db.Dat
 		goatRpcClient:   goatRpcClient,
 		goatGrpcConn:    goatGrpcConn,
 		goatQueryClient: goatQueryCLient,
+
+		sigFinishChan: make(chan interface{}, 256),
 	}
 }
 
@@ -210,11 +215,13 @@ func (lis *Layer2Listener) Start(ctx context.Context) {
 				// }
 
 				if fromBlock == 1 {
-					l2Info, voters, err := lis.getGoatChainGenesisState(ctx)
+					l2Info, voters, epoch, sequence, err := lis.getGoatChainGenesisState(ctx)
 					if err != nil {
-						log.Errorf("Failed to get genesis state: %v", err)
-					} else {
-						lis.processFirstBlock(l2Info, voters)
+						log.Fatalf("Failed to get genesis state: %v", err)
+					}
+					err = lis.processFirstBlock(l2Info, voters, epoch, sequence)
+					if err != nil {
+						log.Fatalf("Failed to process genesis state: %v", err)
 					}
 				}
 
@@ -272,7 +279,7 @@ func min(a, b uint64) uint64 {
 	return b
 }
 
-func (lis *Layer2Listener) getGoatChainGenesisState(ctx context.Context) (*db.L2Info, []*db.Voter, error) {
+func (lis *Layer2Listener) getGoatChainGenesisState(ctx context.Context) (*db.L2Info, []*db.Voter, uint64, uint64, error) {
 	defer lis.stop()
 
 	interfaceRegistry := codectypes.NewInterfaceRegistry()
@@ -281,25 +288,25 @@ func (lis *Layer2Listener) getGoatChainGenesisState(ctx context.Context) (*db.L2
 	genesis, err := lis.goatRpcClient.Genesis(ctx)
 	if err != nil {
 		log.Errorf("Error getting goat chain genesis: %v", err)
-		return nil, nil, err
+		return nil, nil, 0, 0, err
 	}
 
 	var appState map[string]json.RawMessage
 	if err := json.Unmarshal(genesis.Genesis.AppState, &appState); err != nil {
 		log.Errorf("Error unmarshalling genesis doc: %s", err)
-		return nil, nil, err
+		return nil, nil, 0, 0, err
 	}
 
 	var bitcoinState bitcointypes.GenesisState
 	if err := cdc.UnmarshalJSON(appState[bitcointypes.ModuleName], &bitcoinState); err != nil {
 		log.Errorf("Error unmarshalling bitcoin state: %s", err)
-		return nil, nil, err
+		return nil, nil, 0, 0, err
 	}
 
 	var relayerState relayertypes.GenesisState
 	if err := cdc.UnmarshalJSON(appState[relayertypes.ModuleName], &relayerState); err != nil {
 		log.Errorf("Error unmarshalling relayer state: %s", err)
-		return nil, nil, err
+		return nil, nil, 0, 0, err
 	}
 
 	l2Info := &db.L2Info{
@@ -308,7 +315,7 @@ func (lis *Layer2Listener) getGoatChainGenesisState(ctx context.Context) (*db.L2
 		Threshold:       "2/3",
 		DepositKey:      hex.EncodeToString(bitcoinState.Pubkey.GetSecp256K1()),
 		StartBtcHeight:  bitcoinState.StartBlockNumber,
-		LatestBtcHeight: 0,
+		LatestBtcHeight: bitcoinState.StartBlockNumber,
 		UpdatedAt:       time.Now(),
 	}
 
@@ -322,5 +329,5 @@ func (lis *Layer2Listener) getGoatChainGenesisState(ctx context.Context) (*db.L2
 		})
 	}
 
-	return l2Info, voters, nil
+	return l2Info, voters, relayerState.Epoch, relayerState.Sequence, nil
 }

@@ -4,7 +4,7 @@ import "github.com/goatnetwork/goat-relayer/internal/db"
 
 // VoterState to manage voter-related states
 type Layer2State struct {
-	CurrentEpoch int
+	CurrentEpoch uint64
 	EpochVoter   *db.EpochVoter
 	L2Info       *db.L2Info
 	Voters       []*db.Voter

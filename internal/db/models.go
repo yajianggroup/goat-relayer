@@ -30,6 +30,7 @@ type Voter struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	VoteAddr  string    `gorm:"not null" json:"vote_addr"`
 	VoteKey   string    `gorm:"not null" json:"vote_key"`
+	Seqeuence uint64    `gorm:"not null" json:"seqeuence"`
 	Height    uint64    `gorm:"not null" json:"height"` // join block height
 	UpdatedAt time.Time `gorm:"not null" json:"updated_at"`
 }
@@ -39,7 +40,8 @@ type EpochVoter struct {
 	ID           uint      `gorm:"primaryKey" json:"id"`
 	VoteAddrList string    `gorm:"not null" json:"vote_addr_list"`
 	VoteKeyList  string    `gorm:"not null" json:"vote_key_list"`
-	Epoch        uint      `gorm:"not null" json:"epoch"`
+	Epoch        uint64    `gorm:"not null" json:"epoch"`
+	Seqeuence    uint64    `gorm:"not null" json:"seqeuence"`
 	Height       uint64    `gorm:"not null" json:"height"`   // rotate block height
 	Proposer     string    `gorm:"not null" json:"proposer"` // proposer address
 	UpdatedAt    time.Time `gorm:"not null" json:"updated_at"`
@@ -50,7 +52,7 @@ type VoterQueue struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	VoteAddr  string    `gorm:"not null" json:"vote_addr"`
 	VoteKey   string    `gorm:"not null" json:"vote_key"`
-	Epoch     uint      `gorm:"not null" json:"epoch"`
+	Epoch     uint64    `gorm:"not null" json:"epoch"`
 	Action    string    `gorm:"not null" json:"action"` // "add" or "remove"
 	Status    string    `gorm:"not null" json:"status"` // "init", "pending", "processed"
 	UpdatedAt time.Time `gorm:"not null" json:"updated_at"`

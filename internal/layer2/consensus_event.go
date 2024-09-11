@@ -1,8 +1,10 @@
 package layer2
 
 import (
-	"github.com/goatnetwork/goat-relayer/internal/db"
 	"strconv"
+
+	"github.com/goatnetwork/goat-relayer/internal/db"
+	"github.com/goatnetwork/goat-relayer/internal/types"
 
 	"github.com/ethereum/go-ethereum/common"
 	log "github.com/sirupsen/logrus"
@@ -50,19 +52,22 @@ func (lis *Layer2Listener) processEndBlock(block uint64) {
 	lis.state.UpdateL2InfoEndBlock(block)
 }
 
-func (lis *Layer2Listener) processFirstBlock(info *db.L2Info, voters []*db.Voter) {
-	lis.state.UpdateL2InfoFirstBlock(info)
-	lis.state.UpdateVotersFirstBlock(voters)
+func (lis *Layer2Listener) processFirstBlock(info *db.L2Info, voters []*db.Voter, epoch, sequence uint64) error {
+	return lis.state.UpdateL2InfoFirstBlock(1, info, voters, epoch, sequence)
 }
 
 func (lis *Layer2Listener) processFinalizeWithdrawal(block uint64, attributes []abcitypes.EventAttribute) {
 	var txid string
+	var err error
 	for _, attr := range attributes {
 		key := attr.Key
 		value := attr.Value
 
 		if key == "txid" {
-			txid = value
+			txid, err = types.ReverseHash(value)
+			if err != nil {
+				log.Errorf("Reverse hash err: %v", err)
+			}
 		}
 	}
 	log.Infof("Abci FinalizeWithdrawal, block: %d, txid: %s", block, txid)
@@ -88,12 +93,16 @@ func (lis *Layer2Listener) processCancelWithdrawal(block uint64, attributes []ab
 
 func (lis *Layer2Listener) processNewWithdrawal(block uint64, attributes []abcitypes.EventAttribute) {
 	var txid string
+	var err error
 	for _, attr := range attributes {
 		key := attr.Key
 		value := attr.Value
 
 		if key == "txid" {
-			txid = value
+			txid, err = types.ReverseHash(value)
+			if err != nil {
+				log.Errorf("Reverse hash err: %v", err)
+			}
 		}
 	}
 	log.Infof("Abci NewWithdrawal, block: %d, txid: %s", block, txid)
@@ -106,12 +115,16 @@ func (lis *Layer2Listener) processNewDeposit(block uint64, attributes []abcitype
 	var txout uint64
 	var address common.Address
 	var amount uint64 // NOTE, db use float64
+	var err error
 	for _, attr := range attributes {
 		key := attr.Key
 		value := attr.Value
 
 		if key == "txid" {
-			txid = value
+			txid, err = types.ReverseHash(value)
+			if err != nil {
+				log.Errorf("Reverse hash err: %v", err)
+			}
 		}
 		if key == "txout" {
 			txout, _ = strconv.ParseUint(value, 10, 64)
@@ -155,6 +168,7 @@ func (lis *Layer2Listener) processNewWalletKey(block uint64, attributes []abcity
 func (lis *Layer2Listener) processNewBtcBlockHash(block uint64, attributes []abcitypes.EventAttribute) {
 	var height string
 	var hash string
+	var err error
 	for _, attr := range attributes {
 		key := attr.Key
 		value := attr.Value
@@ -163,7 +177,10 @@ func (lis *Layer2Listener) processNewBtcBlockHash(block uint64, attributes []abc
 			height = value
 		}
 		if key == "hash" {
-			hash = value
+			hash, err = types.ReverseHash(value)
+			if err != nil {
+				log.Errorf("Reverse hash err: %v", err)
+			}
 		}
 	}
 	log.Infof("Abci NewBlockHash: %s, block: %d, btcHeight: %s", hash, block, height)
@@ -187,7 +204,7 @@ func (lis *Layer2Listener) processNewEpochEvent(block uint64, attributes []abcit
 			log.Infof("Abci NewEpoch: %s, block: %d", value, block)
 
 			u64, _ := strconv.ParseUint(value, 10, 64)
-			lis.state.UpdateL2InfoEpoch(block, uint(u64), "")
+			lis.state.UpdateL2InfoEpoch(block, u64, "")
 		}
 	}
 }
@@ -201,7 +218,8 @@ func (lis *Layer2Listener) processFinalizedProposalEvent(block uint64, attribute
 		if key == "sequence" {
 			log.Infof("Abci FinalizedProposal Sequence: %s, block: %d", value, block)
 
-			// Not update
+			u64, _ := strconv.ParseUint(value, 10, 64)
+			lis.state.UpdateL2InfoEpoch(block, u64, "")
 		}
 	}
 }
@@ -225,7 +243,7 @@ func (lis *Layer2Listener) processElectedProposerEvent(block uint64, attributes 
 
 	log.Infof("Abci ElectedProposer: %s in Epoch: %s, block: %d", proposer, epoch, block)
 	u64, _ := strconv.ParseUint(epoch, 10, 64)
-	lis.state.UpdateL2InfoEpoch(block, uint(u64), proposer)
+	lis.state.UpdateL2InfoEpoch(block, u64, proposer)
 }
 
 // Process accepted_proposer event
