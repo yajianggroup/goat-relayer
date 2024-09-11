@@ -15,6 +15,7 @@ import (
 	"github.com/go-errors/errors"
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -130,6 +131,36 @@ func DialCosmosClient() (*rpchttp.HTTP, *grpc.ClientConn, authtypes.QueryClient,
 	return rpcClient, grpcConn, queryClient, nil
 }
 
+func (lis *Layer2Listener) checkAndReconnect() error {
+	// Check the gRPC connection state
+	if lis.goatGrpcConn.GetState() == connectivity.Shutdown || lis.goatGrpcConn.GetState() == connectivity.TransientFailure {
+		log.Debug("gRPC connection is not usable, reconnecting...")
+
+		// Close the old connection
+		if lis.goatGrpcConn.GetState() != connectivity.Shutdown {
+			err := lis.goatGrpcConn.Close()
+			if err != nil {
+				return err
+			}
+		}
+
+		// Recreate the gRPC connection and QueryClient
+		newRpcClient, newGrpcConn, newQueryClient, err := DialCosmosClient()
+		if err != nil {
+			return err
+		}
+
+		// Update the manager with new connections
+		lis.goatRpcClient = newRpcClient
+		lis.goatGrpcConn = newGrpcConn
+		lis.goatQueryClient = newQueryClient
+
+		log.Debug("gRPC reconnecting ok...")
+	}
+
+	return nil
+}
+
 func (lis *Layer2Listener) Start(ctx context.Context) {
 	// Get latest sync height
 	var syncStatus db.L2SyncStatus
@@ -172,18 +203,29 @@ func (lis *Layer2Listener) Start(ctx context.Context) {
 			}
 
 			latestBlock := uint64(status.SyncInfo.LatestBlockHeight)
+			targetBlock := latestBlock - l2Confirmations
+			fromBlock := syncStatus.LastSyncBlock + 1
+
+			if fromBlock == 1 {
+				l2Info, voters, epoch, sequence, err := lis.getGoatChainGenesisState(ctx)
+				if err != nil {
+					log.Fatalf("Failed to get genesis state: %v", err)
+				}
+				err = lis.processFirstBlock(l2Info, voters, epoch, sequence)
+				if err != nil {
+					log.Fatalf("Failed to process genesis state: %v", err)
+				}
+			}
 
 			// Update l2 info
 			lis.processChainStatus(latestBlock, status.SyncInfo.CatchingUp)
 			if status.SyncInfo.CatchingUp {
-				log.Debugf("Goat chain is catching up, current height %d", latestBlock)
+				log.Infof("Goat chain is catching up, current height %d", latestBlock)
 			} else {
 				log.Debugf("Goat chain is up to date, current height %d", latestBlock)
 			}
 
-			targetBlock := latestBlock - l2Confirmations
 			if syncStatus.LastSyncBlock < targetBlock {
-				fromBlock := syncStatus.LastSyncBlock + 1
 				toBlock := min(fromBlock+l2MaxBlockRange-1, targetBlock)
 
 				log.WithFields(log.Fields{
@@ -213,17 +255,6 @@ func (lis *Layer2Listener) Start(ctx context.Context) {
 				// 	// 	syncStatus.LastSyncBlock = vLog.BlockNumber
 				// 	// }
 				// }
-
-				if fromBlock == 1 {
-					l2Info, voters, epoch, sequence, err := lis.getGoatChainGenesisState(ctx)
-					if err != nil {
-						log.Fatalf("Failed to get genesis state: %v", err)
-					}
-					err = lis.processFirstBlock(l2Info, voters, epoch, sequence)
-					if err != nil {
-						log.Fatalf("Failed to process genesis state: %v", err)
-					}
-				}
 
 				// Query cosmos tx or event
 				goatRpcAbort := false
@@ -267,7 +298,7 @@ func (lis *Layer2Listener) Start(ctx context.Context) {
 
 // stop ctx
 func (lis *Layer2Listener) stop() {
-	if lis.goatGrpcConn != nil {
+	if lis.goatGrpcConn != nil && lis.goatGrpcConn.GetState() != connectivity.Shutdown {
 		lis.goatGrpcConn.Close()
 	}
 }

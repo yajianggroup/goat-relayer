@@ -126,6 +126,8 @@ func InitializeState(dbm *db.DatabaseManager) *State {
 
 	wg.Wait()
 
+	log.Infof("State init on startup, l2info: %v, votes: %v, epoch voter: %v, latest btc block: %v", l2Info, voters, epochVoter, latestBtcBlock)
+
 	return &State{
 		EventBus: NewEventBus(),
 
@@ -151,7 +153,7 @@ func InitializeState(dbm *db.DatabaseManager) *State {
 	}
 }
 
-// GetL2Info reads the L2Info from memory, using a read lock
+// GetL2Info reads the L2Info from memory
 func (s *State) GetL2Info() db.L2Info {
 	s.layer2Mu.RLock()
 	defer s.layer2Mu.RUnlock()

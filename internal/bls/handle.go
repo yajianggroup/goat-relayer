@@ -26,6 +26,7 @@ func (s *Signer) handleSigStart(ctx context.Context, event interface{}) {
 		isProposer := s.IsProposer()
 		if !canSign || !isProposer {
 			log.Debugf("Ignore SigStart request id %s, canSign: %v, isProposer: %v", e.RequestId, canSign, isProposer)
+			log.Debugf("Current l2 context, catching up: %v, self address: %s, proposer: %s", s.state.GetL2Info().Syncing, s.address, s.state.GetEpochVoter().Proposer)
 			return
 		}
 
@@ -74,7 +75,7 @@ func (s *Signer) handleSigStart(ctx context.Context, event interface{}) {
 		defer cancel()
 		p2p.PublishMessage(ctx1, p2pMsg)
 		s.sigMap[e.RequestId] = make(map[string]interface{})
-		s.sigMap[e.RequestId][s.address] = newSign
+		s.sigMap[e.RequestId][s.address] = *newSign
 		log.Infof("SigStart broadcast ok, request id: %s", e.RequestId)
 
 		// If voters count is 1, should submit soon

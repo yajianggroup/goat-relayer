@@ -72,7 +72,6 @@ func (s *State) UpdateL2InfoFirstBlock(block uint64, info *db.L2Info, voters []*
 		log.Errorf("Save L2 info error: %v", err)
 		return err
 	}
-	s.layer2State.L2Info = info
 
 	epochVoter := s.layer2State.EpochVoter
 	if epochVoter.Height <= block {
@@ -138,8 +137,6 @@ func (s *State) UpdateL2InfoLatestBtc(block uint64, btcHeight uint64) error {
 		if err != nil {
 			return err
 		}
-
-		s.layer2State.L2Info = l2Info
 	}
 
 	return nil
@@ -216,6 +213,7 @@ func (s *State) saveL2Info(l2Info *db.L2Info) error {
 		log.Errorf("State saveL2Info error: %v", result.Error)
 		return result.Error
 	}
+	s.layer2State.L2Info = l2Info
 	return nil
 }
 

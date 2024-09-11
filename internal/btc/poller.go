@@ -33,7 +33,7 @@ func NewBTCPoller(state *state.State, db *gorm.DB) *BTCPoller {
 	return &BTCPoller{
 		state:       state,
 		db:          db,
-		confirmChan: make(chan *BtcBlockExt),
+		confirmChan: make(chan *BtcBlockExt, 64),
 	}
 }
 
@@ -102,19 +102,12 @@ func (p *BTCPoller) GetTxHashes(blockHash *chainhash.Hash) ([]chainhash.Hash, er
 	return txHashes, nil
 }
 
-func (p *BTCPoller) GetBlock(height uint64) (*wire.MsgBlock, error) {
+func (p *BTCPoller) GetBlock(height uint64) (*db.BtcBlockData, error) {
 	var blockData db.BtcBlockData
-	if err := p.db.Where("height = ?", height).First(&blockData).Error; err != nil {
+	if err := p.db.Where("block_height = ?", height).First(&blockData).Error; err != nil {
 		return nil, fmt.Errorf("error retrieving block from database: %v", err)
 	}
-
-	block := wire.MsgBlock{}
-	err := block.Deserialize(bytes.NewReader([]byte(blockData.Header)))
-	if err != nil {
-		return nil, fmt.Errorf("error deserializing block: %v", err)
-	}
-
-	return &block, nil
+	return &blockData, nil
 }
 
 func (p *BTCPoller) handleConfirmedBlock(block *BtcBlockExt) {
@@ -127,6 +120,7 @@ func (p *BTCPoller) handleConfirmedBlock(block *BtcBlockExt) {
 	// rules: state.GetL2Info().LatestBtcHeight+1, multiple block hash
 	// TODO below is test 1 block
 	if p.state.GetL2Info().LatestBtcHeight+1 == block.blockNumber {
+		log.Infof("Publish to SigStart bus, block: %d, hash:%s", block.blockNumber, blockHash.String())
 		epochVoter := p.state.GetEpochVoter()
 		p.state.EventBus.Publish(state.SigStart, types.MsgSignNewBlock{
 			MsgSign: types.MsgSign{
