@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"strings"
 	"sync"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 
@@ -12,7 +13,6 @@ import (
 	"github.com/goatnetwork/goat-relayer/internal/layer2"
 	"github.com/goatnetwork/goat-relayer/internal/p2p"
 	"github.com/goatnetwork/goat-relayer/internal/state"
-	"github.com/goatnetwork/goat-relayer/internal/types"
 	goatcryp "github.com/goatnetwork/goat/pkg/crypto"
 )
 
@@ -30,9 +30,9 @@ type Signer struct {
 	sigReceiveCh chan interface{}
 
 	// [request_id][vote_address]MsgSign
-	sigMap map[string]map[string]interface{}
-
-	mu sync.Mutex
+	sigMap        map[string]map[string]interface{}
+	sigTimeoutMap map[string]time.Time
+	sigMu         sync.RWMutex
 }
 
 func NewSigner(libp2p *p2p.LibP2PService, layer2Listener *layer2.Layer2Listener, state *state.State) *Signer {
@@ -40,16 +40,11 @@ func NewSigner(libp2p *p2p.LibP2PService, layer2Listener *layer2.Layer2Listener,
 	if err != nil {
 		log.Fatalf("Decode bls sk error: %v", err)
 	}
-	// get address from RelayerPrivateKey
-	address, err := types.PrivateKeyToGoatAddress(config.AppConfig.RelayerPriKey)
-	if err != nil {
-		log.Fatalf("Get goat address error: %v", err)
-	}
 
 	sk := new(goatcryp.PrivateKey).Deserialize(byt)
 	pk := new(goatcryp.PublicKey).From(sk).Compress()
 	pkHex := hex.EncodeToString(pk)
-	log.Infof("Signer init, bls pk: %s, voter address: %s", pkHex, address)
+	log.Infof("Signer init, bls pk: %s, voter address: %s", pkHex, config.AppConfig.RelayerAddress)
 
 	// epoch := state.GetEpochVoter()
 
@@ -57,7 +52,7 @@ func NewSigner(libp2p *p2p.LibP2PService, layer2Listener *layer2.Layer2Listener,
 		sk:      sk,
 		pk:      pk,
 		pkHex:   pkHex,
-		address: address,
+		address: config.AppConfig.RelayerAddress,
 
 		state:          state,
 		libp2p:         libp2p,
@@ -66,7 +61,8 @@ func NewSigner(libp2p *p2p.LibP2PService, layer2Listener *layer2.Layer2Listener,
 		sigStartCh:   make(chan interface{}, 256),
 		sigReceiveCh: make(chan interface{}, 1024),
 
-		sigMap: make(map[string]map[string]interface{}),
+		sigMap:        make(map[string]map[string]interface{}),
+		sigTimeoutMap: make(map[string]time.Time),
 	}
 }
 
@@ -86,6 +82,21 @@ func (s *Signer) Start(ctx context.Context) {
 			case event := <-s.sigReceiveCh:
 				log.Debugf("Received sigReceive event: %v\n", event)
 				s.handleSigReceive(ctx, event)
+			}
+		}
+	}()
+
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				log.Info("Timeout checker stopping...")
+				return
+			case <-ticker.C:
+				s.checkTimeouts()
 			}
 		}
 	}()

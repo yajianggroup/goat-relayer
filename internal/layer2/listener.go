@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cosmos/cosmos-sdk/codec"
@@ -47,6 +49,7 @@ type Layer2Listener struct {
 	goatRpcClient   *rpchttp.HTTP
 	goatGrpcConn    *grpc.ClientConn
 	goatQueryClient authtypes.QueryClient
+	goatSdkOnce     sync.Once
 
 	sigFinishChan chan interface{}
 }
@@ -166,16 +169,19 @@ func (lis *Layer2Listener) Start(ctx context.Context) {
 	var syncStatus db.L2SyncStatus
 	l2SyncDB := lis.db.GetL2SyncDB()
 	result := l2SyncDB.First(&syncStatus)
-	if result.Error != nil && result.Error == gorm.ErrRecordNotFound {
+	if result.Error == gorm.ErrRecordNotFound {
 		syncStatus.LastSyncBlock = uint64(config.AppConfig.L2StartHeight)
 		syncStatus.UpdatedAt = time.Now()
 		l2SyncDB.Create(&syncStatus)
+	} else if result.Error != nil {
+		log.Fatalf("Error querying sync status: %v", result.Error)
 	}
 
 	l2RequestInterval := config.AppConfig.L2RequestInterval
 	l2Confirmations := uint64(config.AppConfig.L2Confirmations)
 	l2MaxBlockRange := uint64(config.AppConfig.L2MaxBlockRange)
-	clientTimeout := time.Second * 10
+	// clientTimeout := time.Second * 10
+	var l2LatestBlock uint64
 
 	for {
 		select {
@@ -193,9 +199,7 @@ func (lis *Layer2Listener) Start(ctx context.Context) {
 			// 	continue
 			// }
 
-			ctx1, cancel1 := context.WithTimeout(ctx, clientTimeout)
-			status, err := lis.goatRpcClient.Status(ctx1)
-			cancel1()
+			status, err := lis.goatRpcClient.Status(ctx)
 			if err != nil {
 				log.Errorf("Error getting goat chain status: %v", err)
 				time.Sleep(l2RequestInterval)
@@ -217,12 +221,21 @@ func (lis *Layer2Listener) Start(ctx context.Context) {
 				}
 			}
 
-			// Update l2 info
-			lis.processChainStatus(latestBlock, status.SyncInfo.CatchingUp)
 			if status.SyncInfo.CatchingUp {
 				log.Infof("Goat chain is catching up, current height %d", latestBlock)
 			} else {
 				log.Debugf("Goat chain is up to date, current height %d", latestBlock)
+			}
+
+			if latestBlock > l2LatestBlock {
+				l2LatestBlock = latestBlock
+				// Update l2 info
+				err = lis.processChainStatus(latestBlock, status.SyncInfo.CatchingUp)
+				if err != nil {
+					log.Errorf("Error processChainStatus: %v", err)
+					time.Sleep(l2RequestInterval)
+					continue
+				}
 			}
 
 			if syncStatus.LastSyncBlock < targetBlock {
@@ -240,9 +253,7 @@ func (lis *Layer2Listener) Start(ctx context.Context) {
 				// 	Addresses: []common.Address{abis.BridgeAddress, abis.BitcoinAddress, abis.RelayerAddress},
 				// }
 
-				// ctx2, cancel2 := context.WithTimeout(ctx, clientTimeout)
-				// logs, err := lis.ethClient.FilterLogs(ctx2, filterQuery)
-				// cancel2()
+				// logs, err := lis.ethClient.FilterLogs(ctx, filterQuery)
 				// if err != nil {
 				// 	log.Errorf("Failed to filter logs: %v", err)
 				// 	time.Sleep(l2RequestInterval)
@@ -259,24 +270,14 @@ func (lis *Layer2Listener) Start(ctx context.Context) {
 				// Query cosmos tx or event
 				goatRpcAbort := false
 				for height := fromBlock; height <= toBlock; height++ {
-					block := int64(height)
-					ctx3, cancel3 := context.WithTimeout(ctx, clientTimeout)
-					blockResults, err := lis.goatRpcClient.BlockResults(ctx3, &block)
-					cancel3()
+					err := lis.getGoatBlock(ctx, height)
 					if err != nil {
-						log.Errorf("Failed to get cosmos block results at height %d: %v", height, err)
+						log.Errorf("Failed to process block %d: %v", height, err)
 						goatRpcAbort = true
 						break
 					}
-
+					// update LastSyncBlock
 					syncStatus.LastSyncBlock = height
-
-					for _, txResult := range blockResults.TxsResults {
-						for _, event := range txResult.Events {
-							lis.processEvent(height, event)
-						}
-					}
-					lis.processEndBlock(height)
 				}
 
 				// Save sync status
@@ -308,6 +309,35 @@ func min(a, b uint64) uint64 {
 		return a
 	}
 	return b
+}
+
+func (lis *Layer2Listener) getGoatBlock(ctx context.Context, height uint64) error {
+	block := int64(height)
+	blockResults, err := lis.goatRpcClient.BlockResults(ctx, &block)
+	if err != nil {
+		return fmt.Errorf("failed to get block results: %w", err)
+	}
+
+	// Process events and handle logic
+	for _, txResult := range blockResults.TxsResults {
+		for _, event := range txResult.Events {
+			if err := lis.processEvent(height, event); err != nil {
+				return fmt.Errorf("failed to process tx event: %w", err)
+			}
+		}
+	}
+
+	for _, event := range blockResults.FinalizeBlockEvents {
+		if err := lis.processEvent(height, event); err != nil {
+			return fmt.Errorf("failed to process EndBlock event: %w", err)
+		}
+	}
+
+	// End block processing
+	if err := lis.processEndBlock(height); err != nil {
+		return fmt.Errorf("failed to process end block: %w", err)
+	}
+	return nil
 }
 
 func (lis *Layer2Listener) getGoatChainGenesisState(ctx context.Context) (*db.L2Info, []*db.Voter, uint64, uint64, error) {

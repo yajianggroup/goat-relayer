@@ -2,21 +2,22 @@ package types
 
 import (
 	"encoding/hex"
+	"slices"
 
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/goatnetwork/goat-relayer/internal/config"
-	bitcointype "github.com/goatnetwork/goat/x/bitcoin/types"
 	log "github.com/sirupsen/logrus"
 )
 
-func ReverseHash(hash string) (string, error) {
+func DecodeBtcHash(hash string) ([]byte, error) {
 	data, err := hex.DecodeString(hash)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return bitcointype.BtcTxid(data), nil
+	txid := slices.Clone(data)
+	slices.Reverse(txid)
+	return txid, nil
 }
 
 func PrivateKeyToGethAddress(privateKeyHex string) (string, error) {
@@ -36,9 +37,9 @@ func PrivateKeyToGethAddress(privateKeyHex string) (string, error) {
 	return address.Hex(), nil
 }
 
-func PrivateKeyToGoatAddress(privateKeyHex string) (string, error) {
+func PrivateKeyToGoatAddress(privateKeyHex string, accountPrefix string) (string, error) {
 	sdkConfig := sdk.GetConfig()
-	sdkConfig.SetBech32PrefixForAccount(config.AppConfig.GoatChainAccountPrefix, config.AppConfig.GoatChainAccountPrefix+sdk.PrefixPublic)
+	sdkConfig.SetBech32PrefixForAccount(accountPrefix, accountPrefix+sdk.PrefixPublic)
 
 	privateKeyBytes, err := hex.DecodeString(privateKeyHex)
 	if err != nil {

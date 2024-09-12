@@ -30,7 +30,7 @@ type Voter struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	VoteAddr  string    `gorm:"not null" json:"vote_addr"`
 	VoteKey   string    `gorm:"not null" json:"vote_key"`
-	Seqeuence uint64    `gorm:"not null" json:"seqeuence"`
+	Sequence  uint64    `gorm:"not null" json:"sequence"`
 	Height    uint64    `gorm:"not null" json:"height"` // join block height
 	UpdatedAt time.Time `gorm:"not null" json:"updated_at"`
 }
@@ -41,7 +41,7 @@ type EpochVoter struct {
 	VoteAddrList string    `gorm:"not null" json:"vote_addr_list"`
 	VoteKeyList  string    `gorm:"not null" json:"vote_key_list"`
 	Epoch        uint64    `gorm:"not null" json:"epoch"`
-	Seqeuence    uint64    `gorm:"not null" json:"seqeuence"`
+	Sequence     uint64    `gorm:"not null" json:"sequence"`
 	Height       uint64    `gorm:"not null" json:"height"`   // rotate block height
 	Proposer     string    `gorm:"not null" json:"proposer"` // proposer address
 	UpdatedAt    time.Time `gorm:"not null" json:"updated_at"`
@@ -139,8 +139,8 @@ type Vout struct {
 // BtcSyncStatus model
 type BtcSyncStatus struct {
 	ID              uint      `gorm:"primaryKey" json:"id"`
-	UnconfirmHeight int64    `gorm:"not null" json:"unconfirm_height"`
-	ConfirmedHeight int64    `gorm:"not null" json:"confirmed_height"`
+	UnconfirmHeight int64     `gorm:"not null" json:"unconfirm_height"`
+	ConfirmedHeight int64     `gorm:"not null" json:"confirmed_height"`
 	UpdatedAt       time.Time `gorm:"not null" json:"updated_at"`
 }
 

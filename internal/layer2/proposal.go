@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	coretypes "github.com/cometbft/cometbft/rpc/core/types"
 	"github.com/cosmos/cosmos-sdk/client/flags"
 	"github.com/cosmos/cosmos-sdk/client/tx"
 	"github.com/cosmos/cosmos-sdk/codec"
@@ -20,49 +21,22 @@ import (
 	txtypes "github.com/cosmos/cosmos-sdk/x/auth/tx"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	"github.com/goatnetwork/goat-relayer/internal/config"
-	"github.com/goatnetwork/goat-relayer/internal/db"
 	bitcointypes "github.com/goatnetwork/goat/x/bitcoin/types"
-	relayertypes "github.com/goatnetwork/goat/x/relayer/types"
-	"github.com/kelindar/bitmap"
 	log "github.com/sirupsen/logrus"
 )
 
-func (lis *Layer2Listener) SendTxMsgNewBlockHashes(ctx context.Context, block *db.BtcBlock) {
-	voters := make(bitmap.Bitmap, 256)
-
-	votes := &relayertypes.Votes{
-		Sequence:  0,
-		Epoch:     0,
-		Voters:    voters.ToBytes(),
-		Signature: nil,
-	}
-
-	msgBlock := bitcointypes.MsgNewBlockHashes{
-		Proposer:         "",
-		Vote:             votes,
-		StartBlockNumber: block.Height,
-		BlockHash:        [][]byte{[]byte(block.Hash)},
-	}
-
-	epochVoter := lis.state.GetEpochVoter()
-	signature := relayertypes.VoteSignDoc(msgBlock.MethodName(), config.AppConfig.GoatChainID, epochVoter.Proposer, epochVoter.Seqeuence, uint64(epochVoter.Epoch), msgBlock.VoteSigDoc())
-
-	votes.Signature = signature
-	msgBlock.Vote = votes
-
-	lis.SubmitToConsensus(ctx, &msgBlock)
-}
-
-func (lis *Layer2Listener) SubmitToConsensus(ctx context.Context, msg interface{}) error {
+func (lis *Layer2Listener) SubmitToConsensus(ctx context.Context, msg interface{}) (*coretypes.ResultTx, error) {
 	var err error
 	accountPrefix := config.AppConfig.GoatChainAccountPrefix
 	chainID := config.AppConfig.GoatChainID
 	privKeyStr := config.AppConfig.RelayerPriKey
 	denom := config.AppConfig.GoatChainDenom
 
-	sdkConfig := sdk.GetConfig()
-	sdkConfig.SetBech32PrefixForAccount(accountPrefix, accountPrefix+sdk.PrefixPublic)
-	sdkConfig.Seal()
+	lis.goatSdkOnce.Do(func() {
+		sdkConfig := sdk.GetConfig()
+		sdkConfig.SetBech32PrefixForAccount(accountPrefix, accountPrefix+sdk.PrefixPublic)
+		sdkConfig.Seal()
+	})
 
 	amino := codec.NewLegacyAmino()
 	std.RegisterLegacyAminoCodec(amino)
@@ -76,11 +50,11 @@ func (lis *Layer2Listener) SubmitToConsensus(ctx context.Context, msg interface{
 	privKeyBytes, err := hex.DecodeString(privKeyStr)
 	if err != nil {
 		log.Errorf("decode private key failed: %v", err)
-		return err
+		return nil, err
 	}
 	if err := lis.checkAndReconnect(); err != nil {
 		log.Errorf("check and reconnect goat client faild: %v", err)
-		return err
+		return nil, err
 	}
 	privKey := &secp256k1.PrivKey{Key: privKeyBytes}
 	address := sdk.AccAddress(privKey.PubKey().Address().Bytes()).String()
@@ -89,13 +63,13 @@ func (lis *Layer2Listener) SubmitToConsensus(ctx context.Context, msg interface{
 	accountResp, err := lis.goatQueryClient.Account(ctx, accountReq)
 	if err != nil {
 		log.Errorf("query account failed: %v", err)
-		return err
+		return nil, err
 	}
 
 	var account sdk.AccountI
 	if err = protoCodec.UnpackAny(accountResp.GetAccount(), &account); err != nil {
 		log.Errorf("unpack account failed: %v", err)
-		return err
+		return nil, err
 	}
 
 	sequence := account.GetSequence()
@@ -106,18 +80,18 @@ func (lis *Layer2Listener) SubmitToConsensus(ctx context.Context, msg interface{
 
 	if msgNewDeposits, msgNewBlockHashes, err := lis.convertToTypes(msg); err != nil {
 		log.Errorf("convert to types failed: %v", err)
-		return err
+		return nil, err
 	} else if msgNewDeposits != nil {
 		err = txBuilder.SetMsgs(msgNewDeposits)
 		if err != nil {
 			log.Errorf("set msgNewDeposits failed: %v", err)
-			return err
+			return nil, err
 		}
 	} else if msgNewBlockHashes != nil {
 		err = txBuilder.SetMsgs(msgNewBlockHashes)
 		if err != nil {
 			log.Errorf("set msgNewBlockHashes failed: %v", err)
-			return err
+			return nil, err
 		}
 	}
 
@@ -135,7 +109,7 @@ func (lis *Layer2Listener) SubmitToConsensus(ctx context.Context, msg interface{
 		Sequence: sequence,
 	}); err != nil {
 		log.Errorf("set signature failed: %v", err)
-		return err
+		return nil, err
 	}
 
 	signerData := authsigning.SignerData{
@@ -146,18 +120,18 @@ func (lis *Layer2Listener) SubmitToConsensus(ctx context.Context, msg interface{
 	sigV2, err := tx.SignWithPrivKey(ctx, signing.SignMode(txConfig.SignModeHandler().DefaultMode()), signerData, txBuilder, privKey, txConfig, sequence)
 	if err != nil {
 		log.Errorf("sign tx failed: %v", err)
-		return err
+		return nil, err
 	}
 	if err = txBuilder.SetSignatures(sigV2); err != nil {
 		log.Errorf("set signature failed: %v", err)
-		return err
+		return nil, err
 	}
 
 	tx := txBuilder.GetTx()
 	txBytes, err := txConfig.TxEncoder()(tx)
 	if err != nil {
 		log.Errorf("encode tx failed: %v", err)
-		return err
+		return nil, err
 	}
 
 	serviceClient := sdktx.NewServiceClient(lis.goatGrpcConn)
@@ -168,30 +142,42 @@ func (lis *Layer2Listener) SubmitToConsensus(ctx context.Context, msg interface{
 	)
 	if err != nil {
 		log.Errorf("broadcast tx failed: %v", err)
-		return err
+		return nil, err
 	}
 
-	// todo if need to wait for confirmation in the block
-	time.Sleep(5 * time.Second)
+	if txResp.TxResponse.Code != 0 {
+		log.Errorf("tx response failed: %s", txResp.TxResponse.RawLog)
+		return nil, fmt.Errorf("tx response failed, %s", txResp.TxResponse.RawLog)
+	}
 
 	hashBytes, err := hex.DecodeString(txResp.TxResponse.TxHash)
 	if err != nil {
 		log.Errorf("decode tx hash failed: %v", err)
-		return err
+		return nil, err
 	}
 
-	resultTx, err := lis.goatRpcClient.Tx(ctx, hashBytes, false)
+	// Retry logic: retry querying the transaction up to 5 times with 5 seconds delay between each retry
+	maxRetries := 5
+	var resultTx *coretypes.ResultTx
+	for i := 0; i < maxRetries; i++ {
+		resultTx, err = lis.goatRpcClient.Tx(ctx, hashBytes, false)
+		if err == nil {
+			break
+		}
+		log.Warnf("query tx failed (attempt %d/%d): %v", i+1, maxRetries, err)
+		time.Sleep(2 * time.Second) // Wait for 2 seconds before retrying
+	}
+
 	if err != nil {
-		log.Errorf("query tx failed: %v", err)
-		return err
+		log.Errorf("query tx failed after %d attempts: %v", maxRetries, err)
+		return nil, err
 	}
 
 	// if code = 0, tx success
 	if resultTx.TxResult.Code != 0 {
-		log.Errorf("submit tx error: %v", resultTx.TxResult)
-		return fmt.Errorf("submit tx error: %v", resultTx.TxResult)
+		log.Warnf("submit tx to consensus error: %v", resultTx.TxResult)
 	}
-	return nil
+	return resultTx, nil
 }
 
 func (lis *Layer2Listener) convertToTypes(msg interface{}) (*bitcointypes.MsgNewDeposits, *bitcointypes.MsgNewBlockHashes, error) {

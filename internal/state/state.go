@@ -81,7 +81,7 @@ func InitializeState(dbm *db.DatabaseManager) *State {
 				VoteKeyList:  "[]",
 				Epoch:        0,
 				Height:       0,
-				Seqeuence:    0,
+				Sequence:     0,
 				Proposer:     "",
 				UpdatedAt:    time.Now(),
 			}
@@ -141,7 +141,7 @@ func InitializeState(dbm *db.DatabaseManager) *State {
 			VoterQueue:   voterQueue,
 		},
 		btcHeadState: BtcHeadState{
-			Latest:         &latestBtcBlock,
+			Latest:         latestBtcBlock,
 			UnconfirmQueue: unconfirmBtcQueue,
 			SigQueue:       sigBtcQueue,
 		},

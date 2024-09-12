@@ -13,7 +13,7 @@ type Layer2State struct {
 
 // BtcHeadState to manage BTC head
 type BtcHeadState struct {
-	Latest         *db.BtcBlock
+	Latest         db.BtcBlock
 	UnconfirmQueue []*db.BtcBlock // status in 'unconfirm', 'confirmed'
 	SigQueue       []*db.BtcBlock // status in 'signing', 'pending'
 }
