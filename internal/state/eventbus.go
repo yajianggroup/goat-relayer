@@ -7,13 +7,15 @@ import (
 type EventType int
 
 const (
-    SigStart EventType = iota
-    SigReceive
-    SigFinish
+	SigStart EventType = iota
+	SigReceive
+	SigFinish
+	SigFailed
+	SigTimeout
 )
 
 func (e EventType) String() string {
-    return [...]string{"SigStart", "SigReceive", "SigFinish"}[e]
+	return [...]string{"SigStart", "SigReceive", "SigFinish", "SigFailed", "SigTimeout"}[e]
 }
 
 type EventBus struct {
@@ -27,7 +29,7 @@ func NewEventBus() *EventBus {
 	}
 }
 
-// TODO enum for eventType
+// enum for eventType
 func (eb *EventBus) Subscribe(eventType EventType, ch chan interface{}) {
 	eb.mu.Lock()
 	defer eb.mu.Unlock()

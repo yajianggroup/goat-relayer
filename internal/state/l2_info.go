@@ -22,6 +22,11 @@ func (s *State) UpdateL2ChainStatus(latestBlock uint64, catchingUp bool) error {
 	defer s.layer2Mu.Unlock()
 
 	l2Info := s.layer2State.L2Info
+	if !catchingUp && l2Info.Height+1 < latestBlock {
+		// if cache height + 1 < latest, mark it as catching up
+		log.Debugf("State UpdateL2ChainStatus mask catching up, cache height: %d, chain height: %d", l2Info.Height, latestBlock)
+		catchingUp = true
+	}
 	if l2Info.Syncing != catchingUp {
 		l2Info.UpdatedAt = time.Now()
 		l2Info.Syncing = catchingUp
@@ -78,7 +83,7 @@ func (s *State) UpdateL2InfoFirstBlock(block uint64, info *db.L2Info, voters []*
 		epochVoter.UpdatedAt = time.Now()
 		epochVoter.Height = block
 		epochVoter.Epoch = epoch
-		epochVoter.Seqeuence = sequence
+		epochVoter.Sequence = sequence
 		// genesis proposer is voters[0]
 		epochVoter.Proposer = voters[0].VoteAddr
 
@@ -185,7 +190,7 @@ func (s *State) UpdateL2InfoSequence(block uint64, sequence uint64) error {
 	if epochVoter.Height <= block {
 		epochVoter.UpdatedAt = time.Now()
 		epochVoter.Height = block
-		epochVoter.Seqeuence = sequence
+		epochVoter.Sequence = sequence
 
 		err := s.saveEpochVoter(epochVoter)
 		if err != nil {

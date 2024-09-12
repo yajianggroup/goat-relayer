@@ -3,6 +3,7 @@ package p2p
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/goatnetwork/goat-relayer/internal/state"
@@ -28,21 +29,23 @@ func handleHandshake(s network.Stream) {
 	}
 }
 
-func PublishMessage(ctx context.Context, msg Message) {
+func PublishMessage(ctx context.Context, msg Message) error {
 	msgBytes, err := json.Marshal(msg)
 	if err != nil {
 		log.Errorf("Failed to marshal message: %v", err)
-		return
+		return err
 	}
 
 	if messageTopic == nil {
 		log.Error("Message topic is nil, cannot publish message")
-		return
+		return fmt.Errorf("message topic is nil")
 	}
 
 	if err := messageTopic.Publish(ctx, msgBytes); err != nil {
 		log.Errorf("Failed to publish message: %v", err)
+		return err
 	}
+	return nil
 }
 
 func (libp2p *LibP2PService) handlePubSubMessages(ctx context.Context, sub *pubsub.Subscription, node host.Host) {

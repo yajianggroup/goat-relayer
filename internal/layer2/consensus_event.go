@@ -11,51 +11,60 @@ import (
 	abcitypes "github.com/cometbft/cometbft/abci/types"
 )
 
-func (lis *Layer2Listener) processEvent(block uint64, event abcitypes.Event) {
+func (lis *Layer2Listener) processEvent(block uint64, event abcitypes.Event) error {
 	switch event.Type {
 	case "new_epoch":
-		lis.processNewEpochEvent(block, event.Attributes)
+		return lis.processNewEpochEvent(block, event.Attributes)
 	case "finalized_proposal":
-		lis.processFinalizedProposalEvent(block, event.Attributes)
+		return lis.processFinalizedProposalEvent(block, event.Attributes)
 	case "elected_proposer":
-		lis.processElectedProposerEvent(block, event.Attributes)
+		return lis.processElectedProposerEvent(block, event.Attributes)
 	case "accepted_proposer":
-		lis.processAcceptedProposerEvent(block, event.Attributes)
+		return lis.processAcceptedProposerEvent(block, event.Attributes)
 	case "voter_pending", "voter_on_boarding", "voter_boarded", "voter_off_boarding", "voter_activated", "voter_discharged":
-		lis.processVoterEvent(block, event.Type, event.Attributes)
+		return lis.processVoterEvent(block, event.Type, event.Attributes)
 
 	case "new_block_hash":
-		lis.processNewBtcBlockHash(block, event.Attributes)
+		return lis.processNewBtcBlockHash(block, event.Attributes)
 	case "new_key":
-		lis.processNewWalletKey(block, event.Attributes)
+		return lis.processNewWalletKey(block, event.Attributes)
 	case "new_deposit":
-		lis.processNewDeposit(block, event.Attributes)
+		return lis.processNewDeposit(block, event.Attributes)
 	case "new_withdrawal":
-		lis.processNewWithdrawal(block, event.Attributes)
+		return lis.processNewWithdrawal(block, event.Attributes)
 	case "approve_cancellation_withdrawal":
-		lis.processCancelWithdrawal(block, event.Attributes)
+		return lis.processCancelWithdrawal(block, event.Attributes)
 	case "finalize_withdrawal":
-		lis.processFinalizeWithdrawal(block, event.Attributes)
+		return lis.processFinalizeWithdrawal(block, event.Attributes)
 
 	default:
 		// log.Debugf("Unrecognized event type: %s", event.Type)
+		return nil
 	}
 }
 
-func (lis *Layer2Listener) processChainStatus(latestHeight uint64, catchingUp bool) {
-	lis.state.UpdateL2ChainStatus(latestHeight, catchingUp)
+func (lis *Layer2Listener) processChainStatus(latestHeight uint64, catchingUp bool) error {
+	if err := lis.state.UpdateL2ChainStatus(latestHeight, catchingUp); err != nil {
+		log.Errorf("Abci process chain status error: %v", err)
+		return err
+	}
+	return nil
 }
 
-func (lis *Layer2Listener) processEndBlock(block uint64) {
+func (lis *Layer2Listener) processEndBlock(block uint64) error {
 	log.Debugf("Abci end block %d", block)
-	lis.state.UpdateL2InfoEndBlock(block)
+	if err := lis.state.UpdateL2InfoEndBlock(block); err != nil {
+		log.Errorf("Abci end block error: %v", err)
+		return err
+	}
+	return nil
 }
 
 func (lis *Layer2Listener) processFirstBlock(info *db.L2Info, voters []*db.Voter, epoch, sequence uint64) error {
 	return lis.state.UpdateL2InfoFirstBlock(1, info, voters, epoch, sequence)
 }
 
-func (lis *Layer2Listener) processFinalizeWithdrawal(block uint64, attributes []abcitypes.EventAttribute) {
+func (lis *Layer2Listener) processFinalizeWithdrawal(block uint64, attributes []abcitypes.EventAttribute) error {
 	var txid string
 	for _, attr := range attributes {
 		key := attr.Key
@@ -69,9 +78,10 @@ func (lis *Layer2Listener) processFinalizeWithdrawal(block uint64, attributes []
 	log.Infof("Abci FinalizeWithdrawal, block: %d, txid: %s", block, txid)
 
 	// TODO amount, address ?
+	return nil
 }
 
-func (lis *Layer2Listener) processCancelWithdrawal(block uint64, attributes []abcitypes.EventAttribute) {
+func (lis *Layer2Listener) processCancelWithdrawal(block uint64, attributes []abcitypes.EventAttribute) error {
 	// TODO check uint64
 	var id string
 	for _, attr := range attributes {
@@ -85,9 +95,10 @@ func (lis *Layer2Listener) processCancelWithdrawal(block uint64, attributes []ab
 	log.Infof("Abci ApproveCancelWithdrawal, block: %d, id: %s", block, id)
 
 	// TODO
+	return nil
 }
 
-func (lis *Layer2Listener) processNewWithdrawal(block uint64, attributes []abcitypes.EventAttribute) {
+func (lis *Layer2Listener) processNewWithdrawal(block uint64, attributes []abcitypes.EventAttribute) error {
 	var txid string
 	for _, attr := range attributes {
 		key := attr.Key
@@ -101,9 +112,10 @@ func (lis *Layer2Listener) processNewWithdrawal(block uint64, attributes []abcit
 	log.Infof("Abci NewWithdrawal, block: %d, txid: %s", block, txid)
 
 	// TODO amount, address ?
+	return nil
 }
 
-func (lis *Layer2Listener) processNewDeposit(block uint64, attributes []abcitypes.EventAttribute) {
+func (lis *Layer2Listener) processNewDeposit(block uint64, attributes []abcitypes.EventAttribute) error {
 	var txid string
 	var txout uint64
 	var address common.Address
@@ -129,9 +141,10 @@ func (lis *Layer2Listener) processNewDeposit(block uint64, attributes []abcitype
 	log.Infof("Abci NewDeposit, block: %d, txid: %s, txout: %d, address: %v, amount: %d", block, txid, txout, address, amount)
 
 	// TODO
+	return nil
 }
 
-func (lis *Layer2Listener) processNewWalletKey(block uint64, attributes []abcitypes.EventAttribute) {
+func (lis *Layer2Listener) processNewWalletKey(block uint64, attributes []abcitypes.EventAttribute) error {
 	var walletType string
 	var walletKey string
 	for _, attr := range attributes {
@@ -151,11 +164,13 @@ func (lis *Layer2Listener) processNewWalletKey(block uint64, attributes []abcity
 		err := lis.state.UpdateL2InfoWallet(block, walletType, walletKey)
 		if err != nil {
 			log.Errorf("Abci processNewWalletKey error: %v", err)
+			return err
 		}
 	}
+	return nil
 }
 
-func (lis *Layer2Listener) processNewBtcBlockHash(block uint64, attributes []abcitypes.EventAttribute) {
+func (lis *Layer2Listener) processNewBtcBlockHash(block uint64, attributes []abcitypes.EventAttribute) error {
 	var height string
 	var hash string
 	for _, attr := range attributes {
@@ -174,15 +189,19 @@ func (lis *Layer2Listener) processNewBtcBlockHash(block uint64, attributes []abc
 
 	if height != "" && hash != "" {
 		u64, _ := strconv.ParseUint(height, 10, 64)
-		lis.state.UpdateL2InfoLatestBtc(block, u64)
+		err := lis.state.UpdateL2InfoLatestBtc(block, u64)
+		if err != nil {
+			return err
+		}
 
 		// manage BtcHeadState queue
-		lis.state.UpdateProcessedBtcBlock(block, u64, hash)
+		return lis.state.UpdateProcessedBtcBlock(block, u64, hash)
 	}
+	return nil
 }
 
 // Process new_epoch event
-func (lis *Layer2Listener) processNewEpochEvent(block uint64, attributes []abcitypes.EventAttribute) {
+func (lis *Layer2Listener) processNewEpochEvent(block uint64, attributes []abcitypes.EventAttribute) error {
 	for _, attr := range attributes {
 		key := attr.Key
 		value := attr.Value
@@ -191,13 +210,14 @@ func (lis *Layer2Listener) processNewEpochEvent(block uint64, attributes []abcit
 			log.Infof("Abci NewEpoch: %s, block: %d", value, block)
 
 			u64, _ := strconv.ParseUint(value, 10, 64)
-			lis.state.UpdateL2InfoEpoch(block, u64, "")
+			return lis.state.UpdateL2InfoEpoch(block, u64, "")
 		}
 	}
+	return nil
 }
 
 // Process finalized_proposal event
-func (lis *Layer2Listener) processFinalizedProposalEvent(block uint64, attributes []abcitypes.EventAttribute) {
+func (lis *Layer2Listener) processFinalizedProposalEvent(block uint64, attributes []abcitypes.EventAttribute) error {
 	for _, attr := range attributes {
 		key := attr.Key
 		value := attr.Value
@@ -206,13 +226,14 @@ func (lis *Layer2Listener) processFinalizedProposalEvent(block uint64, attribute
 			log.Infof("Abci FinalizedProposal Sequence: %s, block: %d", value, block)
 
 			u64, _ := strconv.ParseUint(value, 10, 64)
-			lis.state.UpdateL2InfoEpoch(block, u64, "")
+			return lis.state.UpdateL2InfoSequence(block, u64)
 		}
 	}
+	return nil
 }
 
 // Process elected_proposer event
-func (lis *Layer2Listener) processElectedProposerEvent(block uint64, attributes []abcitypes.EventAttribute) {
+func (lis *Layer2Listener) processElectedProposerEvent(block uint64, attributes []abcitypes.EventAttribute) error {
 	var epoch string
 	var proposer string
 
@@ -230,11 +251,11 @@ func (lis *Layer2Listener) processElectedProposerEvent(block uint64, attributes 
 
 	log.Infof("Abci ElectedProposer: %s in Epoch: %s, block: %d", proposer, epoch, block)
 	u64, _ := strconv.ParseUint(epoch, 10, 64)
-	lis.state.UpdateL2InfoEpoch(block, u64, proposer)
+	return lis.state.UpdateL2InfoEpoch(block, u64, proposer)
 }
 
 // Process accepted_proposer event
-func (lis *Layer2Listener) processAcceptedProposerEvent(block uint64, attributes []abcitypes.EventAttribute) {
+func (lis *Layer2Listener) processAcceptedProposerEvent(block uint64, attributes []abcitypes.EventAttribute) error {
 	for _, attr := range attributes {
 		key := attr.Key
 		value := attr.Value
@@ -244,10 +265,11 @@ func (lis *Layer2Listener) processAcceptedProposerEvent(block uint64, attributes
 		}
 	}
 	// Not save this event yet
+	return nil
 }
 
 // Voter events
-func (lis *Layer2Listener) processVoterEvent(block uint64, eventType string, attributes []abcitypes.EventAttribute) {
+func (lis *Layer2Listener) processVoterEvent(block uint64, eventType string, attributes []abcitypes.EventAttribute) error {
 	for _, attr := range attributes {
 		key := attr.Key
 		value := attr.Value
@@ -290,4 +312,5 @@ func (lis *Layer2Listener) processVoterEvent(block uint64, eventType string, att
 			// Update state status (state -> db)
 		}
 	}
+	return nil
 }

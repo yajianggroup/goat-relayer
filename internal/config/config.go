@@ -2,6 +2,7 @@ package config
 
 import (
 	"crypto/ecdsa"
+	"log"
 	"math/big"
 	"os"
 	"strconv"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/goatnetwork/goat-relayer/internal/types"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 )
@@ -33,6 +35,7 @@ func InitConfig() {
 	viper.SetDefault("L2_CONFIRMATIONS", 3)
 	viper.SetDefault("L2_MAX_BLOCK_RANGE", 500)
 	viper.SetDefault("L2_REQUEST_INTERVAL", "10s")
+	viper.SetDefault("L2_SUBMIT_RETRY", 10)
 	viper.SetDefault("ENABLE_WEBHOOK", true)
 	viper.SetDefault("ENABLE_RELAYER", true)
 	viper.SetDefault("LOG_LEVEL", "info")
@@ -48,6 +51,7 @@ func InitConfig() {
 	viper.SetDefault("GOATCHAIN_DENOM", "ugoat")
 	viper.SetDefault("RELAYER_PRIVATE_KEY", "")
 	viper.SetDefault("RELAYER_BLS_SK", "")
+	viper.SetDefault("BLS_SIG_TIMEOUT", "600s")
 
 	logLevel, err := logrus.ParseLevel(strings.ToLower(viper.GetString("LOG_LEVEL")))
 	if err != nil {
@@ -62,6 +66,11 @@ func InitConfig() {
 	l2ChainId, err := strconv.ParseInt(viper.GetString("L2_CHAIN_ID"), 10, 64)
 	if err != nil {
 		logrus.Fatalf("Failed to parse l2 chain id: %v", err)
+	}
+
+	relayerAddress, err := types.PrivateKeyToGoatAddress(viper.GetString("RELAYER_PRIVATE_KEY"), viper.GetString("GOATCHAIN_ACCOUNT_PREFIX"))
+	if err != nil {
+		log.Fatalf("Failed to parse goat address: %v, given private key length %d", err, len(viper.GetString("RELAYER_PRIVATE_KEY")))
 	}
 
 	AppConfig = Config{
@@ -79,6 +88,7 @@ func InitConfig() {
 		L2Confirmations:        viper.GetInt("L2_CONFIRMATIONS"),
 		L2MaxBlockRange:        viper.GetInt("L2_MAX_BLOCK_RANGE"),
 		L2RequestInterval:      viper.GetDuration("L2_REQUEST_INTERVAL"),
+		L2SubmitRetry:          viper.GetInt("L2_SUBMIT_RETRY"),
 		FireblocksPubKey:       viper.GetString("FIREBLOCKS_PUBKEY"),
 		FireblocksPrivKey:      viper.GetString("FIREBLOCKS_PRIVKEY"),
 		EnableWebhook:          viper.GetBool("ENABLE_WEBHOOK"),
@@ -93,7 +103,9 @@ func InitConfig() {
 		GoatChainAccountPrefix: viper.GetString("GOATCHAIN_ACCOUNT_PREFIX"),
 		GoatChainDenom:         viper.GetString("GOATCHAIN_DENOM"),
 		RelayerPriKey:          viper.GetString("RELAYER_PRIVATE_KEY"),
+		RelayerAddress:         relayerAddress,
 		RelayerBlsSk:           viper.GetString("RELAYER_BLS_SK"),
+		BlsSigTimeout:          viper.GetDuration("BLS_SIG_TIMEOUT"),
 	}
 
 	// logrus.SetFormatter(&logrus.JSONFormatter{})
@@ -116,6 +128,7 @@ type Config struct {
 	L2Confirmations        int
 	L2MaxBlockRange        int
 	L2RequestInterval      time.Duration
+	L2SubmitRetry          int
 	FireblocksPubKey       string
 	FireblocksPrivKey      string
 	EnableWebhook          bool
@@ -130,5 +143,7 @@ type Config struct {
 	GoatChainAccountPrefix string
 	GoatChainDenom         string
 	RelayerPriKey          string
+	RelayerAddress         string
 	RelayerBlsSk           string
+	BlsSigTimeout          time.Duration
 }
