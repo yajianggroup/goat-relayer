@@ -65,12 +65,6 @@ func (s *UtxoServer) NewTransaction(ctx context.Context, req *pb.NewTransactionR
 		return nil, err
 	}
 
-	_, err := btc.GenerateSPVProof(&tx)
-	if err != nil {
-		log.Errorf("Failed to generate SPV proof: %v", err)
-		return nil, err
-	}
-
 	// TODO: Send the transaction to the consensus layer
 
 	return &pb.NewTransactionResponse{
