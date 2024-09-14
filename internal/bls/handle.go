@@ -66,7 +66,8 @@ func (s *Signer) handleSigReceive(ctx context.Context, event interface{}) {
 	case types.MsgSignDeposit:
 		log.Debugf("Event handleSigReceive is of type MsgSignDeposit, request id %s", e.RequestId)
 	default:
-		log.Debug("Unknown event handleSigReceive type")
+		// check e['msg_type'] from libp2p
+		log.Debugf("Unknown event handleSigReceive type, %v", e)
 	}
 }
 
@@ -110,6 +111,7 @@ func (s *Signer) handleSigStartNewBlock(ctx context.Context, e types.MsgSignNewB
 	p2pMsg := p2p.Message{
 		MessageType: p2p.MessageTypeSigReq,
 		RequestId:   e.RequestId,
+		DataType:    "MsgSignNewBlock",
 		Data:        *newSign,
 	}
 	if err := p2p.PublishMessage(ctx, p2pMsg); err != nil {
@@ -235,6 +237,7 @@ func (s *Signer) handleSigReceiveNewBlock(ctx context.Context, e types.MsgSignNe
 		p2pMsg := p2p.Message{
 			MessageType: p2p.MessageTypeSigResp,
 			RequestId:   newSign.RequestId,
+			DataType:    "MsgSignNewBlock",
 			Data:        *newSign,
 		}
 

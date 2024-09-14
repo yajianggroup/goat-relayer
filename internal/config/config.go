@@ -53,7 +53,7 @@ func InitConfig() {
 	viper.SetDefault("GOATCHAIN_DENOM", "ugoat")
 	viper.SetDefault("RELAYER_PRIVATE_KEY", "")
 	viper.SetDefault("RELAYER_BLS_SK", "")
-	viper.SetDefault("BLS_SIG_TIMEOUT", "600s")
+	viper.SetDefault("BLS_SIG_TIMEOUT", "300s")
 
 	logLevel, err := logrus.ParseLevel(strings.ToLower(viper.GetString("LOG_LEVEL")))
 	if err != nil {
