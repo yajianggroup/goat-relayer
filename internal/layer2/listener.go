@@ -388,8 +388,8 @@ func (lis *Layer2Listener) getGoatChainGenesisState(ctx context.Context) (*db.L2
 		Syncing:         true,
 		Threshold:       "2/3",
 		DepositKey:      hex.EncodeToString(bitcoinState.Pubkey.GetSecp256K1()),
-		StartBtcHeight:  bitcoinState.StartBlockNumber,
-		LatestBtcHeight: bitcoinState.StartBlockNumber,
+		StartBtcHeight:  bitcoinState.BlockTip,
+		LatestBtcHeight: bitcoinState.BlockTip,
 		UpdatedAt:       time.Now(),
 	}
 
@@ -403,5 +403,5 @@ func (lis *Layer2Listener) getGoatChainGenesisState(ctx context.Context) (*db.L2
 		})
 	}
 
-	return l2Info, voters, relayerState.Epoch, relayerState.Sequence, nil
+	return l2Info, voters, relayerState.Relayer.Epoch, relayerState.Sequence, nil
 }
