@@ -225,14 +225,16 @@ func (p *BTCPoller) initSig() {
 		log.Debug("BTCPoller initSig ignore, layer2 is catching up")
 		return
 	}
-	epochVoter := p.state.GetEpochVoter()
-	if epochVoter.Proposer != config.AppConfig.RelayerAddress {
-		log.Debugf("BTCPoller initSig ignore, self is not proposer, epoch: %d, proposer: %s", epochVoter.Epoch, epochVoter.Proposer)
-		return
-	}
 
 	p.sigHashMu.Lock()
 	defer p.sigHashMu.Unlock()
+
+	epochVoter := p.state.GetEpochVoter()
+	if epochVoter.Proposer != config.AppConfig.RelayerAddress {
+		p.sigHashQueue.Status = false
+		log.Debugf("BTCPoller initSig ignore, self is not proposer, epoch: %d, proposer: %s", epochVoter.Epoch, epochVoter.Proposer)
+		return
+	}
 
 	if p.sigHashQueue.Status {
 		log.Debug("BTCPoller initSig ignore, there is a sig hash queue")

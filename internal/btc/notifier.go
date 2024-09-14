@@ -30,21 +30,30 @@ type BTCNotifier struct {
 
 func NewBTCNotifier(client *rpcclient.Client, cache *BTCCache, poller *BTCPoller) *BTCNotifier {
 	var maxBlockHeight int64 = -1
-	result := cache.db.Model(&db.BtcBlockData{}).Select("MAX(block_height)").Row()
-	result.Scan(&maxBlockHeight)
+	var lastBlock db.BtcBlockData
+	result := cache.db.Order("block_height desc").First(&lastBlock)
+	if result.Error != nil && result.Error != gorm.ErrRecordNotFound {
+		log.Fatalf("Failed to get max block height from db, %v", result.Error)
+	}
+	if result.Error == nil {
+		maxBlockHeight = int64(lastBlock.BlockHeight) - 1
+	}
+
 	if maxBlockHeight < int64(config.AppConfig.BTCStartHeight) {
 		maxBlockHeight = int64(config.AppConfig.BTCStartHeight) - 1
 	}
+	log.Infof("New btc notify at max block height is %d", maxBlockHeight)
 
 	var syncStatus db.BtcSyncStatus
-	db := cache.db
-	resultQuery := db.First(&syncStatus)
+	resultQuery := cache.db.First(&syncStatus)
 	if resultQuery.Error != nil && resultQuery.Error == gorm.ErrRecordNotFound {
 		syncStatus.ConfirmedHeight = int64(config.AppConfig.BTCStartHeight - 1)
 		syncStatus.UnconfirmHeight = int64(config.AppConfig.BTCStartHeight - 1)
 		syncStatus.UpdatedAt = time.Now()
-		db.Create(&syncStatus)
+		cache.db.Create(&syncStatus)
+		log.Info("New btc notify sync status not found, create one")
 	}
+	log.Infof("New btc notify sync status confirmed height is %d", syncStatus.ConfirmedHeight)
 
 	return &BTCNotifier{
 		client:         client,
@@ -186,6 +195,16 @@ func (bn *BTCNotifier) checkConfirmations(ctx context.Context) {
 					blockNumber: uint64(height),
 				}
 				log.Debugf("Pushed block at height %d to confirmChan", height)
+
+				if bn.syncStatus.ConfirmedHeight+10 < newSyncHeight {
+					// save every 10 when catching up
+					bn.syncMu.Lock()
+					bn.syncStatus.ConfirmedHeight = newSyncHeight
+					bn.syncStatus.UpdatedAt = time.Now()
+					bn.cache.db.Save(bn.syncStatus)
+					bn.syncMu.Unlock()
+				}
+
 				time.Sleep(catchUpInterval)
 			}
 			if grows {
