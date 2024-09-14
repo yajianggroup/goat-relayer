@@ -66,7 +66,8 @@ func (s *Signer) handleSigReceive(ctx context.Context, event interface{}) {
 	case types.MsgSignDeposit:
 		log.Debugf("Event handleSigReceive is of type MsgSignDeposit, request id %s", e.RequestId)
 	default:
-		log.Debug("Unknown event handleSigReceive type")
+		// check e['msg_type'] from libp2p
+		log.Debugf("Unknown event handleSigReceive type, %v", e)
 	}
 }
 
@@ -98,7 +99,7 @@ func (s *Signer) handleSigStartNewBlock(ctx context.Context, e types.MsgSignNewB
 			Sequence:     e.Sequence,
 			Epoch:        e.Epoch,
 			IsProposer:   true,
-			VoterAddress: s.address,
+			VoterAddress: s.address, // proposer address
 			SigData:      s.makeSigNewBlock(e.StartBlockNumber, e.BlockHash),
 			CreateTime:   time.Now().Unix(),
 		},
@@ -110,6 +111,7 @@ func (s *Signer) handleSigStartNewBlock(ctx context.Context, e types.MsgSignNewB
 	p2pMsg := p2p.Message{
 		MessageType: p2p.MessageTypeSigReq,
 		RequestId:   e.RequestId,
+		DataType:    "MsgSignNewBlock",
 		Data:        *newSign,
 	}
 	if err := p2p.PublishMessage(ctx, p2pMsg); err != nil {
@@ -224,7 +226,7 @@ func (s *Signer) handleSigReceiveNewBlock(ctx context.Context, e types.MsgSignNe
 				Sequence:     e.Sequence,
 				Epoch:        e.Epoch,
 				IsProposer:   false,
-				VoterAddress: s.address,
+				VoterAddress: s.address, // voter address
 				SigData:      s.makeSigNewBlock(e.StartBlockNumber, e.BlockHash),
 				CreateTime:   time.Now().Unix(),
 			},
@@ -235,6 +237,7 @@ func (s *Signer) handleSigReceiveNewBlock(ctx context.Context, e types.MsgSignNe
 		p2pMsg := p2p.Message{
 			MessageType: p2p.MessageTypeSigResp,
 			RequestId:   newSign.RequestId,
+			DataType:    "MsgSignNewBlock",
 			Data:        *newSign,
 		}
 
@@ -308,14 +311,15 @@ func (s *Signer) aggSigNewBlock(requestId string) (*bitcointypes.MsgNewBlockHash
 	for address, msg := range voteMap {
 		msgNewBlock := msg.(types.MsgSignNewBlock)
 		if msgNewBlock.IsProposer {
-			proposer = address
+			proposer = address // proposer address
 			sequence = msgNewBlock.Sequence
 			epoch = msgNewBlock.Epoch
 			startBlockNumber = msgNewBlock.StartBlockNumber
 			hashs = msgNewBlock.BlockHash
 			proposerSig = msgNewBlock.SigData
 		} else {
-			pos := indexOfSlice(voterAll, address)
+			pos := indexOfSlice(voterAll, address) // voter address
+			log.Debugf("Bitmap check, pos: %d, address: %s, all: %s", pos, address, epochVoter.VoteAddrList)
 			if pos >= 0 {
 				bmp.Set(uint32(pos))
 				voteSig = append(voteSig, msgNewBlock.SigData)
@@ -361,6 +365,7 @@ func (s *Signer) aggSigNewBlock(requestId string) (*bitcointypes.MsgNewBlockHash
 		StartBlockNumber: startBlockNumber,
 		BlockHash:        hashs,
 	}
+
 	return &msgBlock, nil
 }
 
