@@ -112,6 +112,9 @@ func InitConfig() {
 		BlsSigTimeout:          viper.GetDuration("BLS_SIG_TIMEOUT"),
 	}
 
+	logrus.Infof("Init config, BlsSigTimeout %v, L2RequestInterval %v, RelayerAddress %s",
+		AppConfig.BlsSigTimeout, AppConfig.L2RequestInterval, AppConfig.RelayerAddress)
+
 	// logrus.SetFormatter(&logrus.JSONFormatter{})
 	logrus.SetOutput(os.Stdout)
 	logrus.SetLevel(AppConfig.LogLevel)
