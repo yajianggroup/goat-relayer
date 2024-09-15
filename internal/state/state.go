@@ -18,10 +18,12 @@ type State struct {
 	layer2Mu  sync.RWMutex
 	btcHeadMu sync.RWMutex
 	walletMu  sync.RWMutex
+	depositMu sync.RWMutex
 
 	layer2State  Layer2State
 	btcHeadState BtcHeadState
 	walletState  WalletState
+	depositState DepositState
 }
 
 // InitializeState initializes the state by reading from the DB
@@ -39,6 +41,7 @@ func InitializeState(dbm *db.DatabaseManager) *State {
 		sendOrderQueue    []*db.SendOrder
 		vinQueue          []*db.Vin
 		voutQueue         []*db.Vout
+		utxo              *db.Utxo
 	)
 
 	l2InfoDb := dbm.GetL2InfoDB()
@@ -149,6 +152,7 @@ func InitializeState(dbm *db.DatabaseManager) *State {
 			SendOrderQueue: sendOrderQueue,
 			SentVin:        vinQueue,
 			SentVout:       voutQueue,
+			Utxo:           utxo,
 		},
 	}
 }
@@ -159,4 +163,20 @@ func (s *State) GetL2Info() db.L2Info {
 	defer s.layer2Mu.RUnlock()
 
 	return *s.layer2State.L2Info
+}
+
+// GetUtxo reads the Utxo from memory
+func (s *State) GetUtxo() db.Utxo {
+	s.layer2Mu.RLock()
+	defer s.layer2Mu.RUnlock()
+
+	return *s.walletState.Utxo
+}
+
+// GetDepositState reads the DepositState from memory
+func (s *State) GetDepositState() DepositState {
+	s.depositMu.RLock()
+	defer s.depositMu.RUnlock()
+
+	return s.depositState
 }
