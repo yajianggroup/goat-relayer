@@ -22,9 +22,10 @@ func (s *State) UpdateL2ChainStatus(latestBlock, l2Confirmations uint64, catchin
 	defer s.layer2Mu.Unlock()
 
 	l2Info := s.layer2State.L2Info
-	if !catchingUp && l2Info.Height+l2Confirmations+1 < latestBlock {
-		// if cache height + 1 < latest, mark it as catching up
-		log.Debugf("State UpdateL2ChainStatus mask catching up, cache height: %d, chain height: %d", l2Info.Height, latestBlock)
+	if !catchingUp && l2Info.Height+l2Confirmations+5 < latestBlock {
+		// if cache height + 1 + 4 < latest, mark it as catching up
+		// plus 4 to compatible network delay when voter sign
+		log.Debugf("State UpdateL2ChainStatus marks catching up, cache height: %d, chain height: %d", l2Info.Height, latestBlock)
 		catchingUp = true
 	}
 	if l2Info.Syncing != catchingUp {
