@@ -197,6 +197,7 @@ func (s *Signer) handleSigReceiveNewBlock(ctx context.Context, e types.MsgSignNe
 		s.sigMu.Lock()
 		voteMap, ok := s.sigMap[e.RequestId]
 		if !ok {
+			s.sigMu.Unlock()
 			return fmt.Errorf("sig receive proposer process no sig found, request id: %s", e.RequestId)
 		}
 		_, ok = voteMap[e.VoterAddress]
@@ -414,6 +415,7 @@ func (s *Signer) removeSigMap(requestId string, reportTimeout bool) {
 	if reportTimeout {
 		if voteMap, ok := s.sigMap[requestId]; ok {
 			if voteMsg, ok := voteMap[s.address]; ok {
+				log.Debug("Report timeout when remove sig map, found msg, request id %s, proposer %s", requestId, s.address)
 				s.state.EventBus.Publish(state.SigTimeout, voteMsg)
 			}
 		}
