@@ -188,7 +188,7 @@ func (lis *Layer2Listener) Start(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info("Layer2Listener stoping...")
+			log.Info("Layer2Listener stopping...")
 			lis.stop()
 			return
 		default:

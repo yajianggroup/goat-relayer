@@ -165,3 +165,12 @@ func (s *State) queryDepositByTxHash(txHash string) (*db.Deposit, error) {
 	}
 	return &deposit, nil
 }
+
+func (s *State) QueryUnConfirmDeposit() ([]db.Deposit, error) {
+	var deposit []db.Deposit
+	result := s.dbm.GetBtcCacheDB().Where("status = ?", "unconfirm").Find(&deposit)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return deposit, nil
+}
