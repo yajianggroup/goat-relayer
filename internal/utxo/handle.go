@@ -165,7 +165,7 @@ func sixConfirmedDeposit(ctx context.Context, tx DepositTransaction, attempt int
 		p2pMsg := p2p.Message{
 			MessageType: p2p.MessageTypeDepositReceive,
 			RequestId:   "",
-			DataType:    "MsgSignNewBlock",
+			DataType:    "MsgSignDeposit",
 			Data:        *signDeposit,
 		}
 		if err := p2p.PublishMessage(ctx, p2pMsg); err != nil {
