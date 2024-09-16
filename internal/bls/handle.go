@@ -162,6 +162,11 @@ func (s *Signer) handleSigStartNewDeposit(ctx context.Context, e types.MsgSignDe
 	isProposer := s.IsProposer()
 	if isProposer {
 		log.Info("SigStart proposer submit NewDeposits to consensus")
+		// validate deposit
+		if err := e.Deposit.Validate(); err != nil {
+			log.Errorf("SigStart proposer validate NewDeposit error, request id: %s, err: %v", e.RequestId, err)
+			return err
+		}
 		// TODO test
 		err := s.retrySubmit(ctx, e.RequestId, e.Deposit, config.AppConfig.L2SubmitRetry)
 		if err != nil {
