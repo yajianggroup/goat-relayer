@@ -97,9 +97,12 @@ func (s *State) UpdateProcessedBtcBlock(block uint64, height uint64, hash string
 		return err
 	}
 
+	if btcBlock.Status == "processed" {
+		return nil
+	}
 	btcBlock.Status = "processed"
 
-	// TODO update height <= height
+	// update height
 	result := s.dbm.GetBtcLightDB().Save(btcBlock)
 	if result.Error != nil {
 		return result.Error
