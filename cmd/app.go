@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"github.com/goatnetwork/goat-relayer/utxo"
 	"os"
 	"os/signal"
 	"sync"
@@ -17,6 +16,7 @@ import (
 	"github.com/goatnetwork/goat-relayer/internal/p2p"
 	"github.com/goatnetwork/goat-relayer/internal/rpc"
 	"github.com/goatnetwork/goat-relayer/internal/state"
+	"github.com/goatnetwork/goat-relayer/internal/utxo"
 	log "github.com/sirupsen/logrus"
 )
 
