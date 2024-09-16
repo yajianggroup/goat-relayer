@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"time"
+
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/goatnetwork/goat-relayer/internal/btc"
 	dbmodule "github.com/goatnetwork/goat-relayer/internal/db"
@@ -11,7 +13,6 @@ import (
 	bitcointypes "github.com/goatnetwork/goat/x/bitcoin/types"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
-	"time"
 )
 
 var UnconfirmedChannel = make(chan DepositTransaction)
@@ -200,5 +201,5 @@ type DepositTransaction struct {
 	EvmAddress  string
 	BlockHash   string
 	BlockHeight uint64
-	BlockHeader string
+	BlockHeader []byte
 }

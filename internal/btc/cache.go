@@ -1,12 +1,13 @@
 package btc
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
+	"time"
+
 	"github.com/goatnetwork/goat-relayer/internal/db"
 	"gorm.io/gorm"
-	"time"
 
 	"github.com/btcsuite/btcd/wire"
 	log "github.com/sirupsen/logrus"
@@ -70,8 +71,13 @@ func (bc *BTCCache) cacheBlockData(blockWithHeight BlockWithHeight) {
 	merkleRoot := header.MerkleRoot.String()
 	blockTime := header.Timestamp.Unix()
 
-	headerStr := fmt.Sprintf("Version: %d, PrevBlock: %s, MerkleRoot: %s, Timestamp: %d, Bits: %d, Nonce: %d",
-		header.Version, header.PrevBlock, header.MerkleRoot, header.Timestamp.Unix(), header.Bits, header.Nonce)
+	headerBuffer := new(bytes.Buffer)
+	err := header.Serialize(headerBuffer)
+	if err != nil {
+		log.Errorf("Failed to serialize block header: %v", err)
+		return
+	}
+	headerBytes := headerBuffer.Bytes()
 
 	txHashes, _ := block.TxHashes()
 	txHashesJSON, _ := json.Marshal(txHashes)
@@ -79,7 +85,7 @@ func (bc *BTCCache) cacheBlockData(blockWithHeight BlockWithHeight) {
 	blockData := db.BtcBlockData{
 		BlockHeight:  blockWithHeight.Height,
 		BlockHash:    blockHash,
-		Header:       headerStr,
+		Header:       headerBytes,
 		Difficulty:   difficulty,
 		RandomNumber: randomNumber,
 		MerkleRoot:   merkleRoot,
@@ -99,8 +105,8 @@ func (bc *BTCCache) cacheBlockData(blockWithHeight BlockWithHeight) {
 		}
 	}
 
-	log.Printf("Caching block %s data: header %s, difficulty %d, random number %d, Merkle root %s, block time %d",
-		blockHash, headerStr, difficulty, randomNumber, merkleRoot, blockTime)
+	log.Debugf("Caching block %s data: header %x, difficulty %d, random number %d, Merkle root %s, block time %d",
+		blockHash, headerBytes, difficulty, randomNumber, merkleRoot, blockTime)
 }
 
 func (c *BTCCache) purgeOldData() {
