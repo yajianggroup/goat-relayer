@@ -148,27 +148,24 @@ func (bn *BTCNotifier) checkConfirmations(ctx context.Context) {
 			log.Info("Stopping confirmation checks...")
 			return
 		case <-ticker.C:
-			bn.catchingMu.Lock()
-			catchingStatus := bn.catchingStatus
-			bn.catchingMu.Unlock()
-
-			if catchingStatus {
-				continue
-			}
-
 			bestHeight, err := bn.client.GetBlockCount()
 			if err != nil {
 				log.Errorf("Error getting the latest block height: %v", err)
 				continue
 			}
+			confirmedHeight := bestHeight - bn.confirmations
 
 			bn.syncMu.Lock()
 			syncConfirmedHeight := bn.syncStatus.ConfirmedHeight
 			bn.syncMu.Unlock()
 
+			if syncConfirmedHeight >= confirmedHeight {
+				log.Debugf("Btc check block confirmation ignored by up to confirmed height, best height: %d, synced: %d, confirmed: %d", bestHeight, syncConfirmedHeight, confirmedHeight)
+				continue
+			}
+
 			newSyncHeight := syncConfirmedHeight
 			grows := false
-			confirmedHeight := bestHeight - bn.confirmations
 			log.Infof("Btc check block confirmation fired, best height: %d, from: %d, to: %d", bestHeight, syncConfirmedHeight+1, confirmedHeight)
 			for height := syncConfirmedHeight + 1; height <= confirmedHeight; height++ {
 				blockInDb, err := bn.poller.GetBlock(uint64(height))

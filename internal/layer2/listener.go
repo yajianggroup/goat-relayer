@@ -178,6 +178,7 @@ func (lis *Layer2Listener) Start(ctx context.Context) {
 	}
 
 	l2RequestInterval := config.AppConfig.L2RequestInterval
+	l2AbortInterval, _ := time.ParseDuration(fmt.Sprintf("%fs", l2RequestInterval.Seconds()+2))
 	l2Confirmations := uint64(config.AppConfig.L2Confirmations)
 	l2MaxBlockRange := uint64(config.AppConfig.L2MaxBlockRange)
 	// clientTimeout := time.Second * 10
@@ -203,7 +204,7 @@ func (lis *Layer2Listener) Start(ctx context.Context) {
 			status, err := lis.goatRpcClient.Status(ctx)
 			if err != nil {
 				log.Errorf("Error getting goat chain status: %v", err)
-				time.Sleep(l2RequestInterval)
+				time.Sleep(l2AbortInterval)
 				continue
 			}
 
@@ -234,7 +235,7 @@ func (lis *Layer2Listener) Start(ctx context.Context) {
 				err = lis.processChainStatus(latestBlock, l2Confirmations, status.SyncInfo.CatchingUp)
 				if err != nil {
 					log.Errorf("Error processChainStatus: %v", err)
-					time.Sleep(l2RequestInterval)
+					time.Sleep(l2AbortInterval)
 					continue
 				}
 			}
@@ -298,7 +299,7 @@ func (lis *Layer2Listener) Start(ctx context.Context) {
 				l2SyncDB.Save(&syncStatus)
 
 				if goatRpcAbort {
-					time.Sleep(l2RequestInterval)
+					time.Sleep(l2AbortInterval)
 					continue
 				}
 			} else {
