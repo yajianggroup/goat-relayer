@@ -3,8 +3,10 @@ package utxo
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
-	"time"
+	"github.com/goatnetwork/goat-relayer/internal/p2p"
+	"github.com/goatnetwork/goat-relayer/internal/types"
 
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/goatnetwork/goat-relayer/internal/btc"
@@ -13,7 +15,18 @@ import (
 	bitcointypes "github.com/goatnetwork/goat/x/bitcoin/types"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
+	"time"
 )
+
+type DepositTransaction struct {
+	TxHash      string
+	RawTx       string
+	EvmAddress  string
+	BlockHash   string
+	BlockHeight uint64
+	BlockHeader []byte
+	TxHashList  []string
+}
 
 var UnconfirmedChannel = make(chan DepositTransaction)
 var ConfirmedChannel = make(chan DepositTransaction)
@@ -53,7 +66,7 @@ func (d *Deposit) ProcessOnceConfirmedDeposit(ctx context.Context) {
 
 func (d *Deposit) ProcessSixConfirmedDeposit(ctx context.Context) {
 	for tx := range ConfirmedChannel {
-		go sixConfirmedDeposit(tx, 0, d.lightDb, d.state)
+		go sixConfirmedDeposit(ctx, tx, 0, d.lightDb, d.state)
 	}
 }
 
@@ -74,6 +87,21 @@ func onceConfirmedDeposit(tx DepositTransaction, attempt int, db *gorm.DB) {
 		tx.BlockHash = block.BlockHash
 		tx.BlockHeight = block.BlockHeight
 		tx.BlockHeader = block.Header
+
+		var txHashList []string
+		var parsedHashes []chainhash.Hash
+		err := json.Unmarshal([]byte(block.TxHashes), &parsedHashes)
+		if err != nil {
+			log.Errorf("Unmarshal TxHashes error: %v", err)
+			return
+		}
+
+		for _, hash := range parsedHashes {
+			txHashList = append(txHashList, hash.String())
+		}
+
+		tx.TxHashList = txHashList
+
 		// send to confirm channel
 		ConfirmedChannel <- tx
 	} else {
@@ -84,7 +112,7 @@ func onceConfirmedDeposit(tx DepositTransaction, attempt int, db *gorm.DB) {
 	}
 }
 
-func sixConfirmedDeposit(tx DepositTransaction, attempt int, db *gorm.DB, state *state.State) {
+func sixConfirmedDeposit(ctx context.Context, tx DepositTransaction, attempt int, db *gorm.DB, state *state.State) {
 	if attempt >= 7 {
 		log.Errorf("sixConfirmedDeposit discarded after 3 attempts, blockHeight: %v", tx.BlockHeight)
 		return
@@ -98,24 +126,58 @@ func sixConfirmedDeposit(tx DepositTransaction, attempt int, db *gorm.DB, state 
 	}
 
 	if found {
+		// update Deposit status to confirmed
 		err = state.SaveConfirmDeposit(tx.TxHash, tx.RawTx, tx.EvmAddress)
 		if err != nil {
 			log.Errorf("SaveConfirmDeposit err: %v", err)
 			return
 		}
 
+		// generate spv proof
+		merkleRoot, proof, txIndex, err := btc.GenerateSPVProof(tx.TxHash, tx.TxHashList)
+		if err != nil {
+			log.Errorf("GenerateSPVProof err: %v", err)
+			return
+		}
+
 		proposer := state.GetEpochVoter().Proposer
-		_, err := newDeposit(tx, proposer)
+		deposit, err := newDeposit(tx, proposer, txIndex)
 		if err != nil {
 			log.Errorf("newDeposit err: %v", err)
+			return
+		}
+
+		txHash, err := chainhash.NewHashFromStr(tx.TxHash)
+		if err != nil {
+			log.Errorf("NewHashFromStr err: %v", err)
+		}
+
+		signDeposit := &types.MsgSignDeposit{
+			MsgSign:    types.MsgSign{},
+			Deposit:    deposit,
+			TxHash:     txHash.CloneBytes(),
+			MerkleRoot: merkleRoot,
+			Proof:      proof,
+			TxIndex:    txIndex,
+		}
+
+		// p2p broadcast
+		p2pMsg := p2p.Message{
+			MessageType: p2p.MessageTypeDepositReceive,
+			RequestId:   "",
+			DataType:    "MsgSignNewBlock",
+			Data:        *signDeposit,
+		}
+		if err := p2p.PublishMessage(ctx, p2pMsg); err != nil {
+			log.Errorf("public MsgSignDeposit to p2p error: %v", err)
 			return
 		}
 
 	} else {
 		log.Info("sixConfirmedDeposit not found, retrying...")
 		// TODO sleep how long?
-		time.Sleep(10 * time.Minute)                  // wait 10 minutes
-		sixConfirmedDeposit(tx, attempt+1, db, state) // recursive retry
+		time.Sleep(10 * time.Minute)                       // wait 10 minutes
+		sixConfirmedDeposit(ctx, tx, attempt+1, db, state) // recursive retry
 	}
 }
 
@@ -155,7 +217,7 @@ func queryBtcLightDatabaseForBlock(blockHeight uint64, db *gorm.DB) (block *dbmo
 	return &btcBlock, nil
 }
 
-func newDeposit(tx DepositTransaction, proposer string) (*bitcointypes.MsgNewDeposits, error) {
+func newDeposit(tx DepositTransaction, proposer string, txIndex uint32) (*bitcointypes.MsgNewDeposits, error) {
 	address, err := hex.DecodeString(tx.EvmAddress)
 	if err != nil {
 		return nil, err
@@ -166,6 +228,7 @@ func newDeposit(tx DepositTransaction, proposer string) (*bitcointypes.MsgNewDep
 		return nil, err
 	}
 
+	// TODO use wire.MsgTx to NoWitnessTx
 	noWitnessTx, err := btc.SerializeNoWitnessTx(decodeString)
 	if err != nil {
 		return nil, err
@@ -173,13 +236,13 @@ func newDeposit(tx DepositTransaction, proposer string) (*bitcointypes.MsgNewDep
 
 	headers := make(map[uint64][]byte)
 	// TODO block headers type
-	headers[tx.BlockHeight] = []byte(tx.BlockHeader)
+	headers[tx.BlockHeight] = tx.BlockHeader
 
-	Deposits := make([]*bitcointypes.Deposit, 1)
-	Deposits[0] = &bitcointypes.Deposit{
+	deposits := make([]*bitcointypes.Deposit, 1)
+	deposits[0] = &bitcointypes.Deposit{
 		Version:           1,
 		BlockNumber:       tx.BlockHeight,
-		TxIndex:           0,
+		TxIndex:           txIndex,
 		NoWitnessTx:       noWitnessTx,
 		OutputIndex:       0,
 		IntermediateProof: nil,
@@ -190,16 +253,7 @@ func newDeposit(tx DepositTransaction, proposer string) (*bitcointypes.MsgNewDep
 	deposit := &bitcointypes.MsgNewDeposits{
 		Proposer:     proposer,
 		BlockHeaders: headers,
-		Deposits:     Deposits,
+		Deposits:     deposits,
 	}
 	return deposit, nil
-}
-
-type DepositTransaction struct {
-	TxHash      string
-	RawTx       string
-	EvmAddress  string
-	BlockHash   string
-	BlockHeight uint64
-	BlockHeader []byte
 }

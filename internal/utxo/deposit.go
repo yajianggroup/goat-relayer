@@ -27,5 +27,5 @@ func NewDeposit(state *state.State, dbm *db.DatabaseManager) *Deposit {
 func (d *Deposit) Start(ctx context.Context) {
 	go d.QueryUnconfirmedDeposit(ctx)
 	go d.ProcessOnceConfirmedDeposit(ctx)
-	go d.ProcessOnceConfirmedDeposit(ctx)
+	go d.ProcessSixConfirmedDeposit(ctx)
 }

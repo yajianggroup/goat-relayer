@@ -24,5 +24,9 @@ type MsgSignNewBlock struct {
 type MsgSignDeposit struct {
 	MsgSign
 
-	Deposit *bitcointypes.MsgNewDeposits
+	Deposit    *bitcointypes.MsgNewDeposits
+	TxHash     []byte
+	MerkleRoot []byte
+	Proof      []byte
+	TxIndex    uint32
 }
