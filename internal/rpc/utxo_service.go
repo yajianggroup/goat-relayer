@@ -6,16 +6,13 @@ import (
 	"encoding/hex"
 	"net"
 
-	"github.com/btcsuite/btcd/chaincfg"
-	"github.com/goatnetwork/goat-relayer/internal/layer2"
-	"github.com/goatnetwork/goat-relayer/internal/state"
-	bitcointypes "github.com/goatnetwork/goat/x/bitcoin/types"
-	"google.golang.org/grpc/credentials/insecure"
-
 	"github.com/btcsuite/btcd/btcutil"
+	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/goatnetwork/goat-relayer/internal/btc"
 	"github.com/goatnetwork/goat-relayer/internal/config"
+	"github.com/goatnetwork/goat-relayer/internal/layer2"
+	"github.com/goatnetwork/goat-relayer/internal/state"
 	pb "github.com/goatnetwork/goat-relayer/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -82,27 +79,27 @@ func (s *UtxoServer) NewTransaction(ctx context.Context, req *pb.NewTransactionR
 }
 
 func (s *UtxoServer) QueryDepositAddress(ctx context.Context, req *pb.QueryDepositAddressRequest) (*pb.QueryDepositAddressResponse, error) {
-	//l2Info := s.state.GetL2Info()
-	//
-	//publicKey, err := hex.DecodeString(l2Info.DepositKey)
-	//if err != nil {
-	//	return nil, err
-	//}
+	l2Info := s.state.GetL2Info()
 
-	//pubkeyResponse := s.layer2Listener.QueryPubKey(ctx)
-
-	grpcConn, err := grpc.NewClient(config.AppConfig.GoatChainGRPCURI, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	pubKey, err := hex.DecodeString(l2Info.DepositKey)
 	if err != nil {
 		return nil, err
 	}
 
-	client := bitcointypes.NewQueryClient(grpcConn)
-	pubkeyResponse, err := client.Pubkey(ctx, &bitcointypes.QueryPubkeyRequest{})
-	if err != nil {
-		log.Errorf("Error while querying relayer status: %v", err)
-	}
+	//pubkeyResponse := s.layer2Listener.QueryPubKey(ctx)
 
-	pubKey := pubkeyResponse.PublicKey.GetSecp256K1()
+	//grpcConn, err := grpc.NewClient(config.AppConfig.GoatChainGRPCURI, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	//if err != nil {
+	//	return nil, err
+	//}
+	//
+	//client := bitcointypes.NewQueryClient(grpcConn)
+	//pubkeyResponse, err := client.Pubkey(ctx, &bitcointypes.QueryPubkeyRequest{})
+	//if err != nil {
+	//	log.Errorf("Error while querying relayer status: %v", err)
+	//}
+	//
+	//pubKey := pubkeyResponse.PublicKey.GetSecp256K1()
 
 	network := &chaincfg.MainNetParams
 	p2wpkh, err := btcutil.NewAddressWitnessPubKeyHash(btcutil.Hash160(pubKey), network)

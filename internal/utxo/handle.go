@@ -7,6 +7,7 @@ import (
 	"errors"
 	"github.com/goatnetwork/goat-relayer/internal/p2p"
 	"github.com/goatnetwork/goat-relayer/internal/types"
+	relayertypes "github.com/goatnetwork/goat/x/relayer/types"
 
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/goatnetwork/goat-relayer/internal/btc"
@@ -140,8 +141,23 @@ func sixConfirmedDeposit(ctx context.Context, tx DepositTransaction, attempt int
 			return
 		}
 
+		l2Info := state.GetL2Info()
+
+		depositKey, err := hex.DecodeString(l2Info.DepositKey)
+		if err != nil {
+			log.Errorf("DecodeString DepositKey err: %v", err)
+			return
+		}
+
+		var pubKey *relayertypes.PublicKey
+		err = pubKey.Unmarshal(depositKey)
+		if err != nil {
+			log.Errorf("Unmarshal PublicKey err: %v", err)
+			return
+		}
+
 		proposer := state.GetEpochVoter().Proposer
-		deposit, err := newDeposit(tx, proposer, txIndex)
+		deposit, err := newDeposit(tx, proposer, txIndex, proof, pubKey)
 		if err != nil {
 			log.Errorf("newDeposit err: %v", err)
 			return
@@ -217,7 +233,7 @@ func queryBtcLightDatabaseForBlock(blockHeight uint64, db *gorm.DB) (block *dbmo
 	return &btcBlock, nil
 }
 
-func newDeposit(tx DepositTransaction, proposer string, txIndex uint32) (*bitcointypes.MsgNewDeposits, error) {
+func newDeposit(tx DepositTransaction, proposer string, txIndex uint32, proof []byte, pubKey *relayertypes.PublicKey) (*bitcointypes.MsgNewDeposits, error) {
 	address, err := hex.DecodeString(tx.EvmAddress)
 	if err != nil {
 		return nil, err
@@ -235,7 +251,6 @@ func newDeposit(tx DepositTransaction, proposer string, txIndex uint32) (*bitcoi
 	}
 
 	headers := make(map[uint64][]byte)
-	// TODO block headers type
 	headers[tx.BlockHeight] = tx.BlockHeader
 
 	deposits := make([]*bitcointypes.Deposit, 1)
@@ -245,9 +260,9 @@ func newDeposit(tx DepositTransaction, proposer string, txIndex uint32) (*bitcoi
 		TxIndex:           txIndex,
 		NoWitnessTx:       noWitnessTx,
 		OutputIndex:       0,
-		IntermediateProof: nil,
+		IntermediateProof: proof,
 		EvmAddress:        address,
-		RelayerPubkey:     nil,
+		RelayerPubkey:     pubKey,
 	}
 
 	deposit := &bitcointypes.MsgNewDeposits{
