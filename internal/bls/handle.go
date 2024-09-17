@@ -44,11 +44,6 @@ func (s *Signer) handleSigStart(ctx context.Context, event interface{}) {
 			// feedback SigFailed
 			s.state.EventBus.Publish(state.SigFailed, e)
 		}
-	case types.MsgSignDeposit:
-		log.Debugf("Event handleSigStart is of type MsgSignDeposit, request id %s", e.RequestId)
-		if err := s.handleSigStartNewDeposit(ctx, e); err != nil {
-			log.Errorf("Error handleSigStart MsgSignDeposit, %v", err)
-		}
 	default:
 		log.Debug("Unknown event handleSigStart type")
 	}
@@ -66,14 +61,21 @@ func (s *Signer) handleSigReceive(ctx context.Context, event interface{}) {
 			// feedback SigFailed
 			s.state.EventBus.Publish(state.SigFailed, e)
 		}
-	case types.MsgSignDeposit:
-		log.Debugf("Event handleSigReceive is of type MsgSignDeposit, request id %s", e.RequestId)
-		if err := s.handleSigReceiveNewDeposit(ctx, e); err != nil {
-			log.Errorf("Error handleSigReceive MsgSignDeposit, %v", err)
-		}
 	default:
 		// check e['msg_type'] from libp2p
 		log.Debugf("Unknown event handleSigReceive type, %v", e)
+	}
+}
+
+func (s *Signer) handleDepositReceive(ctx context.Context, event interface{}) {
+	switch e := event.(type) {
+	case types.MsgSignDeposit:
+		log.Debugf("Event handleSigStart is of type MsgSignDeposit, request id %s", e.RequestId)
+		if err := s.handleDepositReceiveNewDeposit(ctx, e); err != nil {
+			log.Errorf("Error handleSigStart MsgSignDeposit, %v", err)
+		}
+	default:
+		log.Debug("Unknown event handleDepositReceive type")
 	}
 }
 
@@ -154,32 +156,6 @@ func (s *Signer) handleSigStartNewBlock(ctx context.Context, e types.MsgSignNewB
 	s.state.EventBus.Publish(state.SigFinish, e)
 
 	log.Infof("SigStart proposer submit NewBlock to RPC ok, request id: %s", e.RequestId)
-	return nil
-}
-
-func (s *Signer) handleSigStartNewDeposit(ctx context.Context, e types.MsgSignDeposit) error {
-	// do not send p2p here, it doesn't need to aggregate sign here
-	isProposer := s.IsProposer()
-	if isProposer {
-		log.Info("SigStart proposer submit NewDeposits to consensus")
-		// validate deposit
-		if err := e.Deposit.Validate(); err != nil {
-			log.Errorf("SigStart proposer validate NewDeposit error, request id: %s, err: %v", e.RequestId, err)
-			return err
-		}
-		// TODO test
-		err := s.retrySubmit(ctx, e.RequestId, e.Deposit, config.AppConfig.L2SubmitRetry)
-		if err != nil {
-			log.Errorf("SigStart proposer submit NewDeposit to RPC error, request id: %s, err: %v", e.RequestId, err)
-			// feedback SigFailed, deposit should module subscribe it to save UTXO or mark confirm
-			s.state.EventBus.Publish(state.SigFailed, e)
-			return err
-		}
-
-		// feedback SigFinish, deposit should module subscribe it to save UTXO or mark confirm
-		s.state.EventBus.Publish(state.SigFinish, e)
-	}
-
 	return nil
 }
 
@@ -283,8 +259,24 @@ func (s *Signer) handleSigReceiveNewBlock(ctx context.Context, e types.MsgSignNe
 	}
 }
 
-func (s *Signer) handleSigReceiveNewDeposit(ctx context.Context, e types.MsgSignDeposit) error {
-	// not occur
+func (s *Signer) handleDepositReceiveNewDeposit(ctx context.Context, e types.MsgSignDeposit) error {
+	// do not send p2p here, it doesn't need to aggregate sign here
+	isProposer := s.IsProposer()
+	if isProposer {
+		log.Info("SigStart proposer submit NewDeposits to consensus")
+		// TODO test
+		err := s.retrySubmit(ctx, e.RequestId, e.Deposit, config.AppConfig.L2SubmitRetry)
+		if err != nil {
+			log.Errorf("SigStart proposer submit NewDeposit to RPC error, request id: %s, err: %v", e.RequestId, err)
+			// feedback SigFailed, deposit should module subscribe it to save UTXO or mark confirm
+			s.state.EventBus.Publish(state.SigFailed, e)
+			return err
+		}
+
+		// feedback SigFinish, deposit should module subscribe it to save UTXO or mark confirm
+		s.state.EventBus.Publish(state.SigFinish, e)
+	}
+
 	return nil
 }
 

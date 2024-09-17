@@ -2,6 +2,7 @@ package utxo
 
 import (
 	"context"
+
 	"github.com/goatnetwork/goat-relayer/internal/db"
 	"github.com/goatnetwork/goat-relayer/internal/state"
 	"gorm.io/gorm"
