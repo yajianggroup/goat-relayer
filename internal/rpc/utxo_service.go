@@ -37,7 +37,7 @@ func (s *UtxoServer) Start(ctx context.Context) {
 	}
 
 	server := grpc.NewServer()
-	pb.RegisterBitcoinLightWalletServer(server, &UtxoServer{})
+	pb.RegisterBitcoinLightWalletServer(server, s)
 	reflection.Register(server)
 
 	log.Infof("gRPC server is running on port %s", config.AppConfig.RPCPort)
