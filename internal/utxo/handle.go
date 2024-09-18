@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/goatnetwork/goat-relayer/internal/p2p"
 	"github.com/goatnetwork/goat-relayer/internal/types"
 	relayertypes "github.com/goatnetwork/goat/x/relayer/types"
@@ -248,10 +249,7 @@ func queryBtcLightDatabaseForBlock(blockHeight uint64, db *gorm.DB) (block *dbmo
 }
 
 func newDeposit(tx DepositTransaction, proposer string, txIndex uint32, proof []byte, pubKey *relayertypes.PublicKey) (*bitcointypes.MsgNewDeposits, error) {
-	address, err := hex.DecodeString(tx.EvmAddress)
-	if err != nil {
-		return nil, err
-	}
+	address := common.HexToAddress(tx.EvmAddress).Bytes()
 
 	decodeString, err := hex.DecodeString(tx.RawTx)
 	if err != nil {
