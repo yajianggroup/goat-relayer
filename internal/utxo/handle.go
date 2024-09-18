@@ -98,7 +98,13 @@ func onceConfirmedDeposit(tx DepositTransaction, attempt int, db *gorm.DB) {
 
 	found := true
 	block, err := queryBtcCacheDatabaseForBlock(tx.TxHash, db)
-	if err != nil {
+	if err != nil && errors.Is(err, gorm.ErrRecordNotFound) {
+		log.Info("onceConfirmedDeposit not found, retrying...")
+		// TODO sleep how long?
+		time.Sleep(5 * time.Second) // wait 5 minutes
+
+		onceConfirmedDeposit(tx, 0, db)
+	} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		log.Errorf("onceConfirmedDeposit failed: %v", err)
 		found = false
 	}
@@ -125,10 +131,9 @@ func onceConfirmedDeposit(tx DepositTransaction, attempt int, db *gorm.DB) {
 		// send to confirm channel
 		ConfirmedChannel <- tx
 	} else {
-		log.Info("onceConfirmedDeposit not found, retrying...")
+		log.Info("onceConfirmedDeposit err, retrying...")
 		// TODO sleep how long?
-		time.Sleep(5 * time.Second) // wait 5 minutes
-		log.Info("-------------------------------")
+		time.Sleep(5 * time.Second)             // wait 5 minutes
 		onceConfirmedDeposit(tx, attempt+1, db) // recursive retry
 	}
 }
@@ -141,7 +146,13 @@ func sixConfirmedDeposit(ctx context.Context, tx DepositTransaction, attempt int
 
 	found := true
 	_, err := queryBtcLightDatabaseForBlock(tx.BlockHeight, db)
-	if err != nil {
+	if err != nil && errors.Is(err, gorm.ErrRecordNotFound) {
+		log.Info("sixConfirmedDeposit not found, retrying...")
+		// TODO sleep how long?
+		time.Sleep(5 * time.Second) // wait 5 minutes
+
+		sixConfirmedDeposit(ctx, tx, attempt+1, db, state)
+	} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		log.Errorf("sixConfirmedDeposit failed: %v", err)
 		found = false
 	}
@@ -203,7 +214,6 @@ func sixConfirmedDeposit(ctx context.Context, tx DepositTransaction, attempt int
 			log.Errorf("SaveConfirmDeposit err: %v", err)
 			return
 		}
-
 	} else {
 		log.Info("sixConfirmedDeposit not found, retrying...")
 		// TODO sleep how long?
