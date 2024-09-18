@@ -59,8 +59,9 @@ func NewSigner(libp2p *p2p.LibP2PService, layer2Listener *layer2.Layer2Listener,
 		libp2p:         libp2p,
 		layer2Listener: layer2Listener,
 
-		sigStartCh:   make(chan interface{}, 256),
-		sigReceiveCh: make(chan interface{}, 1024),
+		sigStartCh:       make(chan interface{}, 256),
+		sigReceiveCh:     make(chan interface{}, 1024),
+		depositReceiveCh: make(chan interface{}, 1024),
 
 		sigMap:        make(map[string]map[string]interface{}),
 		sigTimeoutMap: make(map[string]time.Time),

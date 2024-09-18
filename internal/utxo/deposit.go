@@ -26,6 +26,7 @@ func NewDeposit(state *state.State, dbm *db.DatabaseManager) *Deposit {
 }
 
 func (d *Deposit) Start(ctx context.Context) {
+	// TODO wait for btc & goat chain complete blocks sync
 	go d.QueryUnconfirmedDeposit(ctx)
 	go d.ProcessOnceConfirmedDeposit(ctx)
 	go d.ProcessSixConfirmedDeposit(ctx)

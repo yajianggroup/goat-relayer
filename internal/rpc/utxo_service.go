@@ -9,7 +9,6 @@ import (
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/wire"
-	"github.com/goatnetwork/goat-relayer/internal/btc"
 	"github.com/goatnetwork/goat-relayer/internal/config"
 	"github.com/goatnetwork/goat-relayer/internal/layer2"
 	"github.com/goatnetwork/goat-relayer/internal/state"
@@ -62,10 +61,11 @@ func (s *UtxoServer) NewTransaction(ctx context.Context, req *pb.NewTransactionR
 		return nil, err
 	}
 
-	if err := btc.VerifyTransaction(tx, req.TransactionId, req.EvmAddress); err != nil {
-		log.Errorf("Failed to verify transaction: %v", err)
-		return nil, err
-	}
+	// TODO verify transaction
+	// if err := btc.VerifyTransaction(tx, req.TransactionId, req.EvmAddress); err != nil {
+	// 	log.Errorf("Failed to verify transaction: %v", err)
+	// 	return nil, err
+	// }
 
 	err = s.state.AddUnconfirmDeposit(req.TransactionId, req.RawTransaction, req.EvmAddress)
 	if err != nil {

@@ -70,9 +70,9 @@ func (s *Signer) handleSigReceive(ctx context.Context, event interface{}) {
 func (s *Signer) handleDepositReceive(ctx context.Context, event interface{}) {
 	switch e := event.(type) {
 	case types.MsgSignDeposit:
-		log.Debugf("Event handleSigStart is of type MsgSignDeposit, request id %s", e.RequestId)
+		log.Debugf("Event handleDepositReceive is of type MsgSignDeposit, request id %s", e.RequestId)
 		if err := s.handleDepositReceiveNewDeposit(ctx, e); err != nil {
-			log.Errorf("Error handleSigStart MsgSignDeposit, %v", err)
+			log.Errorf("Error handleDepositReceive MsgSignDeposit, %v", err)
 		}
 	default:
 		log.Debug("Unknown event handleDepositReceive type")
@@ -265,7 +265,32 @@ func (s *Signer) handleDepositReceiveNewDeposit(ctx context.Context, e types.Msg
 	if isProposer {
 		log.Info("SigStart proposer submit NewDeposits to consensus")
 		// TODO test
-		err := s.retrySubmit(ctx, e.RequestId, e.Deposit, config.AppConfig.L2SubmitRetry)
+		headers := make(map[uint64][]byte)
+		headers[e.BlockNumber] = e.BlockHeader
+		log.Debugf("headers: %v", headers)
+		log.Debugf("block number: %d", e.BlockNumber)
+		log.Debugf("block header: %x", e.BlockHeader)
+
+		pubKey := relayertypes.DecodePublicKey(e.RelayerPubkey)
+		deposits := make([]*bitcointypes.Deposit, 1)
+		deposits[0] = &bitcointypes.Deposit{
+			Version:           e.Version,
+			BlockNumber:       e.BlockNumber,
+			TxIndex:           e.TxIndex,
+			NoWitnessTx:       e.NoWitnessTx,
+			OutputIndex:       e.OutputIndex,
+			IntermediateProof: e.IntermediateProof,
+			EvmAddress:        e.EvmAddress,
+			RelayerPubkey:     pubKey,
+		}
+
+		msgDeposits := &bitcointypes.MsgNewDeposits{
+			Proposer:     e.Proposer,
+			BlockHeaders: headers,
+			Deposits:     deposits,
+		}
+
+		err := s.retrySubmit(ctx, e.RequestId, msgDeposits, config.AppConfig.L2SubmitRetry)
 		if err != nil {
 			log.Errorf("SigStart proposer submit NewDeposit to RPC error, request id: %s, err: %v", e.RequestId, err)
 			// feedback SigFailed, deposit should module subscribe it to save UTXO or mark confirm
@@ -275,8 +300,8 @@ func (s *Signer) handleDepositReceiveNewDeposit(ctx context.Context, e types.Msg
 
 		// feedback SigFinish, deposit should module subscribe it to save UTXO or mark confirm
 		s.state.EventBus.Publish(state.SigFinish, e)
+		log.Infof("proposer submit MsgNewDeposit to consensus ok, request id: %s", e.RequestId)
 	}
-
 	return nil
 }
 

@@ -135,6 +135,8 @@ func (libp2p *LibP2PService) handleHeartbeatMessages(ctx context.Context, sub *p
 	}
 }
 
+// convertMsgData converts the message data to the corresponding struct
+// TODO: use reflector to optimize this function
 func convertMsgData(msg Message) interface{} {
 	if msg.DataType == "MsgSignNewBlock" {
 		jsonBytes, _ := json.Marshal(msg.Data)
@@ -145,12 +147,6 @@ func convertMsgData(msg Message) interface{} {
 	if msg.DataType == "MsgSignDeposit" {
 		jsonBytes, _ := json.Marshal(msg.Data)
 		var rawData types.MsgSignDeposit
-		_ = json.Unmarshal(jsonBytes, &rawData)
-		return rawData
-	}
-	if msg.MessageType == MessageTypeDepositReceive {
-		jsonBytes, _ := json.Marshal(msg.Data)
-		var rawData types.MsgUtxoDeposit
 		_ = json.Unmarshal(jsonBytes, &rawData)
 		return rawData
 	}
