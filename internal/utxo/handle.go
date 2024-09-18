@@ -161,12 +161,7 @@ func sixConfirmedDeposit(ctx context.Context, tx DepositTransaction, attempt int
 			return
 		}
 
-		var pubKey *relayertypes.PublicKey
-		err = pubKey.Unmarshal(depositKey)
-		if err != nil {
-			log.Errorf("Unmarshal PublicKey err: %v", err)
-			return
-		}
+		pubKey := relayertypes.DecodePublicKey(depositKey)
 
 		proposer := state.GetEpochVoter().Proposer
 		deposit, err := newDeposit(tx, proposer, txIndex, proof, pubKey)
