@@ -29,6 +29,7 @@ type DepositTransaction struct {
 	TxHashList  []string
 }
 
+var TempUnconfirmedChannel = make(chan DepositTransaction)
 var UnconfirmedChannel = make(chan DepositTransaction)
 var ConfirmedChannel = make(chan DepositTransaction)
 
@@ -39,18 +40,21 @@ func (d *Deposit) QueryUnconfirmedDeposit(ctx context.Context) {
 			log.Info("UnConfirm deposit query stopping...")
 			return
 		default:
+			// TODO sleep how long?
+			time.Sleep(5 * time.Second)
+
 			deposits, err := d.state.QueryUnConfirmDeposit()
 			if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 				log.Errorf("QueryUnConfirmDeposit failed: %v", err)
 				continue
 			} else if err != nil && errors.Is(err, gorm.ErrRecordNotFound) {
-				// TODO sleep how long?
-				time.Sleep(5 * time.Second)
 				continue
 			}
 
+			// TODO if need send to unConfirm stata queue
+
 			for _, deposit := range deposits {
-				UnconfirmedChannel <- DepositTransaction{
+				TempUnconfirmedChannel <- DepositTransaction{
 					TxHash:     deposit.TxHash,
 					RawTx:      deposit.RawTx,
 					EvmAddress: deposit.EvmAddr,
@@ -59,7 +63,21 @@ func (d *Deposit) QueryUnconfirmedDeposit(ctx context.Context) {
 		}
 	}
 }
+
+func deduplicate(TempUnconfirmedChannel <-chan DepositTransaction, UnconfirmedChannel chan<- DepositTransaction) {
+	seen := make(map[string]struct{})
+
+	for input := range TempUnconfirmedChannel {
+		if _, exists := seen[input.TxHash]; !exists {
+			seen[input.TxHash] = struct{}{}
+			UnconfirmedChannel <- input
+		}
+	}
+}
+
 func (d *Deposit) ProcessOnceConfirmedDeposit(ctx context.Context) {
+	go deduplicate(TempUnconfirmedChannel, UnconfirmedChannel)
+
 	for tx := range UnconfirmedChannel {
 		go onceConfirmedDeposit(tx, 0, d.cacheDb)
 	}
@@ -72,7 +90,7 @@ func (d *Deposit) ProcessSixConfirmedDeposit(ctx context.Context) {
 }
 
 func onceConfirmedDeposit(tx DepositTransaction, attempt int, db *gorm.DB) {
-	if attempt >= 3 {
+	if attempt > 3 {
 		log.Errorf("onceConfirmedDeposit discarded after 3 attempts, txHahs: %s", tx.TxHash)
 		return
 	}
@@ -108,14 +126,15 @@ func onceConfirmedDeposit(tx DepositTransaction, attempt int, db *gorm.DB) {
 	} else {
 		log.Info("onceConfirmedDeposit not found, retrying...")
 		// TODO sleep how long?
-		time.Sleep(5 * time.Minute)             // wait 5 minutes
+		time.Sleep(5 * time.Second) // wait 5 minutes
+		log.Info("-------------------------------")
 		onceConfirmedDeposit(tx, attempt+1, db) // recursive retry
 	}
 }
 
 func sixConfirmedDeposit(ctx context.Context, tx DepositTransaction, attempt int, db *gorm.DB, state *state.State) {
-	if attempt >= 7 {
-		log.Errorf("sixConfirmedDeposit discarded after 3 attempts, blockHeight: %v", tx.BlockHeight)
+	if attempt > 7 {
+		log.Errorf("sixConfirmedDeposit discarded after 7 attempts, blockHeight: %v", tx.BlockHeight)
 		return
 	}
 
@@ -127,13 +146,6 @@ func sixConfirmedDeposit(ctx context.Context, tx DepositTransaction, attempt int
 	}
 
 	if found {
-		// update Deposit status to confirmed
-		err = state.SaveConfirmDeposit(tx.TxHash, tx.RawTx, tx.EvmAddress)
-		if err != nil {
-			log.Errorf("SaveConfirmDeposit err: %v", err)
-			return
-		}
-
 		// generate spv proof
 		merkleRoot, proof, txIndex, err := btc.GenerateSPVProof(tx.TxHash, tx.TxHashList)
 		if err != nil {
@@ -189,10 +201,17 @@ func sixConfirmedDeposit(ctx context.Context, tx DepositTransaction, attempt int
 			return
 		}
 
+		// update Deposit status to confirmed
+		err = state.SaveConfirmDeposit(tx.TxHash, tx.RawTx, tx.EvmAddress)
+		if err != nil {
+			log.Errorf("SaveConfirmDeposit err: %v", err)
+			return
+		}
+
 	} else {
 		log.Info("sixConfirmedDeposit not found, retrying...")
 		// TODO sleep how long?
-		time.Sleep(10 * time.Minute)                       // wait 10 minutes
+		time.Sleep(5 * time.Second)                        // wait 10 minutes
 		sixConfirmedDeposit(ctx, tx, attempt+1, db, state) // recursive retry
 	}
 }
