@@ -117,3 +117,8 @@ func (app *Application) Run() {
 	wg.Wait()
 	log.Info("Server stopped")
 }
+
+func main() {
+	app := NewApplication()
+	app.Run()
+}
