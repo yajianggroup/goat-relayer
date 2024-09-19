@@ -62,8 +62,8 @@ func (lis *Layer2Listener) processEndBlock(block uint64) error {
 	return nil
 }
 
-func (lis *Layer2Listener) processFirstBlock(info *db.L2Info, voters []*db.Voter, epoch, sequence uint64) error {
-	return lis.state.UpdateL2InfoFirstBlock(1, info, voters, epoch, sequence)
+func (lis *Layer2Listener) processFirstBlock(info *db.L2Info, voters []*db.Voter, epoch, sequence uint64, proposer string) error {
+	return lis.state.UpdateL2InfoFirstBlock(1, info, voters, epoch, sequence, proposer)
 }
 
 func (lis *Layer2Listener) processBlockVoters(block uint64) error {
@@ -87,7 +87,7 @@ func (lis *Layer2Listener) processBlockVoters(block uint64) error {
 		})
 	}
 
-	err = lis.state.UpdateL2InfoVoters(block, respRelayer.Relayer.Epoch, respRelayer.Sequence, respRelayer.Relayer.Proposer,  voters)
+	err = lis.state.UpdateL2InfoVoters(block, respRelayer.Relayer.Epoch, respRelayer.Sequence, respRelayer.Relayer.Proposer, voters)
 	if err != nil {
 		log.Errorf("Abci voters update error, %v", err)
 	} else {

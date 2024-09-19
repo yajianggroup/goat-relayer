@@ -1,7 +1,6 @@
 package state
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -57,14 +56,9 @@ func (s *State) UpdateL2InfoEndBlock(block uint64) error {
 	return nil
 }
 
-func (s *State) UpdateL2InfoFirstBlock(block uint64, info *db.L2Info, voters []*db.Voter, epoch uint64, sequence uint64) error {
+func (s *State) UpdateL2InfoFirstBlock(block uint64, info *db.L2Info, voters []*db.Voter, epoch, sequence uint64, proposer string) error {
 	s.layer2Mu.Lock()
 	defer s.layer2Mu.Unlock()
-
-	if len(voters) == 0 {
-		log.Errorf("First block cannot give zero voters")
-		return errors.New("first block cannot give zero voters")
-	}
 
 	err := s.saveVoters(voters)
 	if err != nil {
@@ -85,8 +79,7 @@ func (s *State) UpdateL2InfoFirstBlock(block uint64, info *db.L2Info, voters []*
 		epochVoter.Height = block
 		epochVoter.Epoch = epoch
 		epochVoter.Sequence = sequence
-		// genesis proposer is voters[0]
-		epochVoter.Proposer = voters[0].VoteAddr
+		epochVoter.Proposer = proposer
 
 		addrArray := make([]string, 0)
 		keyArray := make([]string, 0)
@@ -111,11 +104,6 @@ func (s *State) UpdateL2InfoFirstBlock(block uint64, info *db.L2Info, voters []*
 func (s *State) UpdateL2InfoVoters(block, epoch, sequence uint64, proposer string, voters []*db.Voter) error {
 	s.layer2Mu.Lock()
 	defer s.layer2Mu.Unlock()
-
-	if len(voters) == 0 {
-		log.Errorf("Give zero voters")
-		return errors.New("zero voters")
-	}
 
 	err := s.saveVoters(voters)
 	if err != nil {
@@ -268,6 +256,10 @@ func (s *State) saveL2Info(l2Info *db.L2Info) error {
 
 func (s *State) saveVoters(voters []*db.Voter) error {
 	s.dbm.GetL2InfoDB().Where("1 = 1").Delete(&db.Voter{})
+	// voters is empty when single proposer node
+	if len(voters) == 0 {
+		return nil
+	}
 	result := s.dbm.GetL2InfoDB().Save(voters)
 	if result.Error != nil {
 		log.Errorf("State saveVoters error: %v", result.Error)

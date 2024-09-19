@@ -213,11 +213,11 @@ func (lis *Layer2Listener) Start(ctx context.Context) {
 			fromBlock := syncStatus.LastSyncBlock + 1
 
 			if fromBlock == 1 {
-				l2Info, voters, epoch, sequence, err := lis.getGoatChainGenesisState(ctx)
+				l2Info, voters, epoch, sequence, proposer, err := lis.getGoatChainGenesisState(ctx)
 				if err != nil {
 					log.Fatalf("Failed to get genesis state: %v", err)
 				}
-				err = lis.processFirstBlock(l2Info, voters, epoch, sequence)
+				err = lis.processFirstBlock(l2Info, voters, epoch, sequence, proposer)
 				if err != nil {
 					log.Fatalf("Failed to process genesis state: %v", err)
 				}
@@ -354,7 +354,7 @@ func (lis *Layer2Listener) getGoatBlock(ctx context.Context, height uint64) erro
 	return nil
 }
 
-func (lis *Layer2Listener) getGoatChainGenesisState(ctx context.Context) (*db.L2Info, []*db.Voter, uint64, uint64, error) {
+func (lis *Layer2Listener) getGoatChainGenesisState(ctx context.Context) (*db.L2Info, []*db.Voter, uint64, uint64, string, error) {
 	defer lis.stop()
 
 	interfaceRegistry := codectypes.NewInterfaceRegistry()
@@ -363,25 +363,25 @@ func (lis *Layer2Listener) getGoatChainGenesisState(ctx context.Context) (*db.L2
 	genesis, err := lis.goatRpcClient.Genesis(ctx)
 	if err != nil {
 		log.Errorf("Error getting goat chain genesis: %v", err)
-		return nil, nil, 0, 0, err
+		return nil, nil, 0, 0, "", err
 	}
 
 	var appState map[string]json.RawMessage
 	if err := json.Unmarshal(genesis.Genesis.AppState, &appState); err != nil {
 		log.Errorf("Error unmarshalling genesis doc: %v", err)
-		return nil, nil, 0, 0, err
+		return nil, nil, 0, 0, "", err
 	}
 
 	var bitcoinState bitcointypes.GenesisState
 	if err := cdc.UnmarshalJSON(appState[bitcointypes.ModuleName], &bitcoinState); err != nil {
 		log.Errorf("Error unmarshalling bitcoin state: %v", err)
-		return nil, nil, 0, 0, err
+		return nil, nil, 0, 0, "", err
 	}
 
 	var relayerState relayertypes.GenesisState
 	if err := cdc.UnmarshalJSON(appState[relayertypes.ModuleName], &relayerState); err != nil {
 		log.Errorf("Error unmarshalling relayer state: %v", err)
-		return nil, nil, 0, 0, err
+		return nil, nil, 0, 0, "", err
 	}
 
 	l2Info := &db.L2Info{
@@ -395,14 +395,14 @@ func (lis *Layer2Listener) getGoatChainGenesisState(ctx context.Context) (*db.L2
 	}
 
 	voters := []*db.Voter{}
-	for address, voter := range relayerState.Voters {
+	for _, voterAddress := range relayerState.Relayer.Voters {
 		voters = append(voters, &db.Voter{
-			VoteAddr:  address,
-			VoteKey:   hex.EncodeToString(voter.VoteKey),
+			VoteAddr:  voterAddress,
+			VoteKey:   "",
 			Height:    1,
 			UpdatedAt: time.Now(),
 		})
 	}
 
-	return l2Info, voters, relayerState.Relayer.Epoch, relayerState.Sequence, nil
+	return l2Info, voters, relayerState.Relayer.Epoch, relayerState.Sequence, relayerState.Relayer.Proposer, nil
 }
