@@ -11,32 +11,34 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	abcitypes "github.com/cometbft/cometbft/abci/types"
+	bitcointypes "github.com/goatnetwork/goat/x/bitcoin/types"
+	relayertypes "github.com/goatnetwork/goat/x/relayer/types"
 )
 
 func (lis *Layer2Listener) processEvent(block uint64, event abcitypes.Event) error {
 	switch event.Type {
-	case "new_epoch":
+	case relayertypes.EventTypeNewEpoch:
 		return lis.processNewEpochEvent(block, event.Attributes)
-	case "finalized_proposal":
+	case relayertypes.EventFinalizedProposal:
 		return lis.processFinalizedProposalEvent(block, event.Attributes)
-	case "elected_proposer":
+	case relayertypes.EventElectedProposer:
 		return lis.processElectedProposerEvent(block, event.Attributes)
-	case "accepted_proposer":
+	case relayertypes.EventAcceptedProposer:
 		return lis.processAcceptedProposerEvent(block, event.Attributes)
-	case "voter_pending", "voter_on_boarding", "voter_boarded", "voter_off_boarding", "voter_activated", "voter_discharged":
+	case relayertypes.EventVoterPending, relayertypes.EventVoterOnBoarding, relayertypes.EventVoterBoarded, relayertypes.EventVoterOffBoarding, relayertypes.EventVoterActivated, relayertypes.EventVoterDischarged:
 		return lis.processVoterEvent(block, event.Type, event.Attributes)
 
-	case "new_block_hash":
+	case bitcointypes.EventTypeNewBlockHash:
 		return lis.processNewBtcBlockHash(block, event.Attributes)
-	case "new_key":
+	case bitcointypes.EventTypeNewKey:
 		return lis.processNewWalletKey(block, event.Attributes)
-	case "new_deposit":
+	case bitcointypes.EventTypeNewDeposit:
 		return lis.processNewDeposit(block, event.Attributes)
-	case "new_withdrawal":
+	case bitcointypes.EventTypeInitializeWithdrawal:
 		return lis.processNewWithdrawal(block, event.Attributes)
-	case "approve_cancellation_withdrawal":
+	case bitcointypes.EventTypeWithdrawalCancellation:
 		return lis.processCancelWithdrawal(block, event.Attributes)
-	case "finalize_withdrawal":
+	case bitcointypes.EventTypeFinalizeWithdrawal:
 		return lis.processFinalizeWithdrawal(block, event.Attributes)
 
 	default:
@@ -62,8 +64,8 @@ func (lis *Layer2Listener) processEndBlock(block uint64) error {
 	return nil
 }
 
-func (lis *Layer2Listener) processFirstBlock(info *db.L2Info, voters []*db.Voter, epoch, sequence uint64) error {
-	return lis.state.UpdateL2InfoFirstBlock(1, info, voters, epoch, sequence)
+func (lis *Layer2Listener) processFirstBlock(info *db.L2Info, voters []*db.Voter, epoch, sequence uint64, proposer string) error {
+	return lis.state.UpdateL2InfoFirstBlock(1, info, voters, epoch, sequence, proposer)
 }
 
 func (lis *Layer2Listener) processBlockVoters(block uint64) error {
@@ -87,7 +89,7 @@ func (lis *Layer2Listener) processBlockVoters(block uint64) error {
 		})
 	}
 
-	err = lis.state.UpdateL2InfoVoters(block, respRelayer.Relayer.Epoch, respRelayer.Sequence, respRelayer.Relayer.Proposer,  voters)
+	err = lis.state.UpdateL2InfoVoters(block, respRelayer.Relayer.Epoch, respRelayer.Sequence, respRelayer.Relayer.Proposer, voters)
 	if err != nil {
 		log.Errorf("Abci voters update error, %v", err)
 	} else {
