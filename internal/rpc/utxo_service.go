@@ -4,6 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"errors"
+	"github.com/btcsuite/btcd/btcec/v2"
+	"github.com/btcsuite/btcd/btcec/v2/schnorr"
+	relayertypes "github.com/goatnetwork/goat/x/relayer/types"
+
 	"net"
 
 	"github.com/btcsuite/btcd/btcutil"
@@ -81,28 +86,41 @@ func (s *UtxoServer) NewTransaction(ctx context.Context, req *pb.NewTransactionR
 func (s *UtxoServer) QueryDepositAddress(ctx context.Context, req *pb.QueryDepositAddressRequest) (*pb.QueryDepositAddressResponse, error) {
 	l2Info := s.state.GetL2Info()
 
-	pubKey, err := hex.DecodeString(l2Info.DepositKey)
-	if err != nil {
-		return nil, err
+	var err error
+	var pubKey []byte
+	if l2Info.DepositKey == "" {
+		// query from layer2 goat chain
+		pubkeyResponse := s.layer2Listener.QueryPubKey(ctx)
+		pubKey = relayertypes.EncodePublicKey(&pubkeyResponse.PublicKey)
+	} else {
+		pubKey, err = hex.DecodeString(l2Info.DepositKey)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	//pubkeyResponse := s.layer2Listener.QueryPubKey(ctx)
+	var newPubKey []byte
+	if len(pubKey)-1 == btcec.PubKeyBytesLenCompressed {
+		newPubKey = relayertypes.DecodePublicKey(pubKey).GetSecp256K1()
+	} else if len(pubKey)-1 == schnorr.PubKeyBytesLen {
+		newPubKey = relayertypes.DecodePublicKey(pubKey).GetSchnorr()
+	} else {
+		return nil, errors.New("invalid public key")
+	}
 
-	//grpcConn, err := grpc.NewClient(config.AppConfig.GoatChainGRPCURI, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	//if err != nil {
-	//	return nil, err
-	//}
-	//
-	//client := bitcointypes.NewQueryClient(grpcConn)
-	//pubkeyResponse, err := client.Pubkey(ctx, &bitcointypes.QueryPubkeyRequest{})
-	//if err != nil {
-	//	log.Errorf("Error while querying relayer status: %v", err)
-	//}
-	//
-	//pubKey := pubkeyResponse.PublicKey.GetSecp256K1()
+	var network *chaincfg.Params
+	switch config.AppConfig.BTCNetworkType {
+	case "":
+		network = &chaincfg.MainNetParams
+	case "mainnet":
+		network = &chaincfg.MainNetParams
+	case "regtest":
+		network = &chaincfg.RegressionNetParams
+	case "testnet3":
+		network = &chaincfg.TestNet3Params
+	}
 
-	network := &chaincfg.MainNetParams
-	p2wpkh, err := btcutil.NewAddressWitnessPubKeyHash(btcutil.Hash160(pubKey), network)
+	p2wpkh, err := btcutil.NewAddressWitnessPubKeyHash(btcutil.Hash160(newPubKey), network)
 	if err != nil {
 		return nil, err
 	}
