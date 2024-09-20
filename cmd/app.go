@@ -43,7 +43,7 @@ func NewApplication() *Application {
 	httpServer := http.NewHTTPServer(libP2PService, state, dbm)
 	btcListener := btc.NewBTCListener(libP2PService, state, dbm)
 	utxoService := rpc.NewUtxoServer(state, layer2Listener)
-	deposit := utxo.NewDeposit(state, dbm)
+	deposit := utxo.NewDeposit(state, signer, dbm)
 
 	return &Application{
 		DatabaseManager: dbm,

@@ -2,6 +2,7 @@ package utxo
 
 import (
 	"context"
+	"github.com/goatnetwork/goat-relayer/internal/bls"
 
 	"github.com/goatnetwork/goat-relayer/internal/db"
 	"github.com/goatnetwork/goat-relayer/internal/state"
@@ -11,15 +12,17 @@ import (
 // Deposit struct
 type Deposit struct {
 	state   *state.State
+	signer  *bls.Signer
 	cacheDb *gorm.DB
 	lightDb *gorm.DB
 }
 
-func NewDeposit(state *state.State, dbm *db.DatabaseManager) *Deposit {
+func NewDeposit(state *state.State, signer *bls.Signer, dbm *db.DatabaseManager) *Deposit {
 	cacheDb := dbm.GetBtcCacheDB()
 	lightDb := dbm.GetBtcLightDB()
 	return &Deposit{
 		state:   state,
+		signer:  signer,
 		cacheDb: cacheDb,
 		lightDb: lightDb,
 	}

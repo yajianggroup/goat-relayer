@@ -144,7 +144,7 @@ func (s *Signer) handleSigStartNewBlock(ctx context.Context, e types.MsgSignNewB
 		return nil
 	}
 
-	err = s.retrySubmit(ctx, e.RequestId, rpcMsg, config.AppConfig.L2SubmitRetry)
+	err = s.RetrySubmit(ctx, e.RequestId, rpcMsg, config.AppConfig.L2SubmitRetry)
 	if err != nil {
 		log.Errorf("SigStart proposer submit NewBlock to RPC error, request id: %s, err: %v", e.RequestId, err)
 		s.removeSigMap(e.RequestId, false)
@@ -198,7 +198,7 @@ func (s *Signer) handleSigReceiveNewBlock(ctx context.Context, e types.MsgSignNe
 			return nil
 		}
 
-		err = s.retrySubmit(ctx, e.RequestId, rpcMsg, config.AppConfig.L2SubmitRetry)
+		err = s.RetrySubmit(ctx, e.RequestId, rpcMsg, config.AppConfig.L2SubmitRetry)
 		if err != nil {
 			log.Errorf("SigReceive proposer submit NewBlock to RPC error, request id: %s, err: %v", e.RequestId, err)
 			s.removeSigMap(e.RequestId, false)
@@ -294,7 +294,7 @@ func (s *Signer) handleDepositReceiveNewDeposit(ctx context.Context, e types.Msg
 			Deposits:     deposits,
 		}
 
-		err = s.retrySubmit(ctx, e.RequestId, msgDeposits, config.AppConfig.L2SubmitRetry)
+		err = s.RetrySubmit(ctx, e.RequestId, msgDeposits, config.AppConfig.L2SubmitRetry)
 		if err != nil {
 			log.Errorf("DepositReceive proposer submit NewDeposit to RPC error, request id: %s, err: %v", e.RequestId, err)
 			// feedback SigFailed, deposit should module subscribe it to save UTXO or mark confirm
@@ -309,7 +309,7 @@ func (s *Signer) handleDepositReceiveNewDeposit(ctx context.Context, e types.Msg
 	return nil
 }
 
-func (s *Signer) retrySubmit(ctx context.Context, requestId string, msg interface{}, retries int) error {
+func (s *Signer) RetrySubmit(ctx context.Context, requestId string, msg interface{}, retries int) error {
 	var err error
 	for i := 0; i <= retries; i++ {
 		resultTx, err := s.layer2Listener.SubmitToConsensus(ctx, msg)
