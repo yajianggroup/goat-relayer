@@ -273,6 +273,7 @@ func newMsgSignDeposit(tx DepositTransaction, proposer string, pubKey []byte) (*
 		Proposer:          proposer,
 		Version:           1,
 		BlockNumber:       tx.BlockHeight,
+		BlockHeader:       tx.BlockHeader,
 		TxHash:            txHash.CloneBytes(),
 		TxIndex:           txIndex,
 		NoWitnessTx:       noWitnessTx,
