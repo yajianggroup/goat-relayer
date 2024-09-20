@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+
 	"github.com/goatnetwork/goat-relayer/internal/bls"
 	bitcointypes "github.com/goatnetwork/goat/x/bitcoin/types"
 	relayertypes "github.com/goatnetwork/goat/x/relayer/types"
@@ -256,7 +257,7 @@ func queryBtcCacheDatabaseForBlock(txHash string, db *gorm.DB) (block *dbmodule.
 
 func queryBtcLightDatabaseForBlock(blockHeight uint64, db *gorm.DB) (block *dbmodule.BtcBlock, err error) {
 	var btcBlock dbmodule.BtcBlock
-	if err := db.Where("height = ? and status != ?", blockHeight, "unconfirm").First(&btcBlock).Error; err != nil {
+	if err := db.Where("height = ? and status = ?", blockHeight, "processed").First(&btcBlock).Error; err != nil {
 		return nil, err
 	}
 
