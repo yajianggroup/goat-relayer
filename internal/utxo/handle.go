@@ -102,46 +102,42 @@ func onceConfirmedDeposit(tx DepositTransaction, attempt int, db *gorm.DB) {
 		return
 	}
 
-	found := true
 	block, err := queryBtcCacheDatabaseForBlock(tx.TxHash, db)
-	if err != nil && errors.Is(err, gorm.ErrRecordNotFound) {
-		log.Info("onceConfirmedDeposit not found, retrying...")
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// if tx not found, retry
+			log.Info("onceConfirmedDeposit not found, retrying...")
+		} else {
+			// if tx validate or other error found, add attempt
+			log.Infof("onceConfirmedDeposit error, attempt %d retrying...", attempt)
+			attempt++
+		}
 		// TODO sleep how long?
-		time.Sleep(5 * time.Second) // wait 5 minutes
-
-		onceConfirmedDeposit(tx, 0, db)
-	} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		log.Errorf("onceConfirmedDeposit failed: %v", err)
-		found = false
+		time.Sleep(5 * time.Second)
+		onceConfirmedDeposit(tx, attempt, db)
+		return
 	}
 
-	if found {
-		tx.BlockHash = block.BlockHash
-		tx.BlockHeight = block.BlockHeight
-		tx.BlockHeader = block.Header
+	tx.BlockHash = block.BlockHash
+	tx.BlockHeight = block.BlockHeight
+	tx.BlockHeader = block.Header
 
-		var txHashList []string
-		var parsedHashes []chainhash.Hash
-		err := json.Unmarshal([]byte(block.TxHashes), &parsedHashes)
-		if err != nil {
-			log.Errorf("Unmarshal TxHashes error: %v", err)
-			return
-		}
-
-		for _, hash := range parsedHashes {
-			txHashList = append(txHashList, hash.String())
-		}
-
-		tx.TxHashList = txHashList
-
-		// send to confirm channel
-		ConfirmedChannel <- tx
-	} else {
-		log.Info("onceConfirmedDeposit err, retrying...")
-		// TODO sleep how long?
-		time.Sleep(5 * time.Second)             // wait 5 minutes
-		onceConfirmedDeposit(tx, attempt+1, db) // recursive retry
+	var txHashList []string
+	var parsedHashes []chainhash.Hash
+	err = json.Unmarshal([]byte(block.TxHashes), &parsedHashes)
+	if err != nil {
+		log.Errorf("Unmarshal TxHashes error: %v", err)
+		return
 	}
+
+	for _, hash := range parsedHashes {
+		txHashList = append(txHashList, hash.String())
+	}
+
+	tx.TxHashList = txHashList
+
+	// send to confirm channel
+	ConfirmedChannel <- tx
 }
 
 func sixConfirmedDeposit(ctx context.Context, tx DepositTransaction, attempt int, db *gorm.DB, state *internalstate.State, signer *bls.Signer) {
@@ -150,83 +146,78 @@ func sixConfirmedDeposit(ctx context.Context, tx DepositTransaction, attempt int
 		return
 	}
 
-	found := true
 	_, err := queryBtcLightDatabaseForBlock(tx.BlockHeight, db)
-	if err != nil && errors.Is(err, gorm.ErrRecordNotFound) {
-		log.Info("sixConfirmedDeposit not found, retrying...")
-		// TODO sleep how long?
-		time.Sleep(5 * time.Second) // wait 5 minutes
-
-		sixConfirmedDeposit(ctx, tx, 0, db, state, signer)
-	} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-		log.Errorf("sixConfirmedDeposit failed: %v", err)
-		found = false
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// if tx not found, retry
+			log.Info("sixConfirmedDeposit not found, retrying...")
+		} else {
+			// if tx validate or other error found, add attempt
+			log.Infof("sixConfirmedDeposit error, attempt %d retrying...", attempt)
+			attempt++
+		}
+		time.Sleep(5 * time.Second)                              // wait 5 minutes
+		sixConfirmedDeposit(ctx, tx, attempt, db, state, signer) // recursive retry
+		return
 	}
 
-	if found {
-		l2Info := state.GetL2Info()
-		depositKey, err := hex.DecodeString(l2Info.DepositKey)
-		if err != nil {
-			log.Errorf("DecodeString DepositKey err: %v", err)
-			return
-		}
-
-		proposer := state.GetEpochVoter().Proposer
-		signDeposit, err := newMsgSignDeposit(tx, proposer, depositKey)
-		if err != nil {
-			log.Errorf("newMsgSignDeposit err: %v", err)
-			return
-		}
-
-		requestId := fmt.Sprintf("DEPOSIT:%s:%s", config.AppConfig.RelayerAddress, tx.TxHash)
-
-		isProposer := signer.IsProposer()
-		if isProposer {
-			deposits, err := newDeposit(tx, proposer, depositKey)
-			if err != nil {
-				log.Errorf("newDeposit err: %v", err)
-				return
-			}
-
-			err = signer.RetrySubmit(ctx, requestId, deposits, config.AppConfig.L2SubmitRetry)
-			if err != nil {
-				log.Errorf("proposer submit MsgNewDeposits to consensus error, request id: %s, err: %v", requestId, err)
-				// feedback SigFailed, deposit should module subscribe it to save UTXO or mark confirm
-				state.EventBus.Publish(internalstate.SigFailed, *signDeposit)
-				return
-			}
-
-			// feedback SigFinish, deposit should module subscribe it to save UTXO or mark confirm
-			state.EventBus.Publish(internalstate.SigFinish, *signDeposit)
-			log.Infof("proposer submit MsgNewDeposits to consensus success, request id: %s", requestId)
-		}
-
-		// p2p broadcast
-		p2pMsg := p2p.Message{
-			MessageType: p2p.MessageTypeDepositReceive,
-			RequestId:   requestId,
-			DataType:    "MsgSignDeposit",
-			Data:        *signDeposit,
-		}
-		if err := p2p.PublishMessage(ctx, p2pMsg); err != nil {
-			log.Errorf("public MsgSignDeposit to p2p error: %v", err)
-			return
-		}
-
-		// update Deposit status to confirmed
-		err = state.SaveConfirmDeposit(tx.TxHash, tx.RawTx, tx.EvmAddress)
-		if err != nil {
-			log.Errorf("SaveConfirmDeposit err: %v", err)
-			return
-		}
-
-		log.Infof("sixConfirmedDeposit success, blockHeight: %v", tx.BlockHeight)
-	} else {
-		log.Infof("sixConfirmedDeposit not found, retrying... blockHeight: %v", tx.BlockHeight)
-		// TODO sleep how long?
-		time.Sleep(5 * time.Second)                                // wait 10 minutes
-		sixConfirmedDeposit(ctx, tx, attempt+1, db, state, signer) // recursive retry
+	l2Info := state.GetL2Info()
+	depositKey, err := hex.DecodeString(l2Info.DepositKey)
+	if err != nil {
+		log.Errorf("DecodeString DepositKey err: %v", err)
+		return
 	}
+
+	proposer := state.GetEpochVoter().Proposer
+	signDeposit, err := newMsgSignDeposit(tx, proposer, depositKey)
+	if err != nil {
+		log.Errorf("newMsgSignDeposit err: %v", err)
+		return
+	}
+
+	requestId := fmt.Sprintf("DEPOSIT:%s:%s", config.AppConfig.RelayerAddress, tx.TxHash)
+
+	isProposer := signer.IsProposer()
+	if isProposer {
+		deposits, err := newDeposit(tx, proposer, depositKey)
+		if err != nil {
+			log.Errorf("newDeposit err: %v", err)
+			return
+		}
+
+		err = signer.RetrySubmit(ctx, requestId, deposits, config.AppConfig.L2SubmitRetry)
+		if err != nil {
+			log.Errorf("proposer submit MsgNewDeposits to consensus error, request id: %s, err: %v", requestId, err)
+			// feedback SigFailed, deposit should module subscribe it to save UTXO or mark confirm
+			state.EventBus.Publish(internalstate.SigFailed, *signDeposit)
+			return
+		}
+
+		// feedback SigFinish, deposit should module subscribe it to save UTXO or mark confirm
+		state.EventBus.Publish(internalstate.SigFinish, *signDeposit)
+		log.Infof("proposer submit MsgNewDeposits to consensus success, request id: %s", requestId)
+	}
+
+	// p2p broadcast
+	p2pMsg := p2p.Message{
+		MessageType: p2p.MessageTypeDepositReceive,
+		RequestId:   requestId,
+		DataType:    "MsgSignDeposit",
+		Data:        *signDeposit,
+	}
+	if err := p2p.PublishMessage(ctx, p2pMsg); err != nil {
+		log.Errorf("public MsgSignDeposit to p2p error: %v", err)
+		return
+	}
+
+	// update Deposit status to confirmed
+	err = state.SaveConfirmDeposit(tx.TxHash, tx.RawTx, tx.EvmAddress)
+	if err != nil {
+		log.Errorf("SaveConfirmDeposit err: %v", err)
+		return
+	}
+
+	log.Infof("sixConfirmedDeposit success, blockHeight: %v", tx.BlockHeight)
 }
 
 func queryBtcCacheDatabaseForBlock(txHash string, db *gorm.DB) (block *dbmodule.BtcBlockData, err error) {
