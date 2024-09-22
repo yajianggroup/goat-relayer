@@ -187,7 +187,7 @@ func (s *State) QueryBlockByTxHash(txHash string) (block *db.BtcBlockData, err e
 	}
 
 	var btcBlock db.BtcBlock
-	if err := s.dbm.GetBtcCacheDB().Where("height = ? and status = ?", btcBlockData.BlockHeight, "processed").First(&btcBlock).Error; err != nil {
+	if err := s.dbm.GetBtcLightDB().Where("height = ? and status = ?", btcBlockData.BlockHeight, "processed").First(&btcBlock).Error; err != nil {
 		return nil, err
 	}
 	// TODO check block hash by pkscript

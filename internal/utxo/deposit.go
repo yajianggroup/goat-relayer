@@ -24,10 +24,11 @@ func NewDeposit(state *state.State, signer *bls.Signer, dbm *db.DatabaseManager)
 	cacheDb := dbm.GetBtcCacheDB()
 	lightDb := dbm.GetBtcLightDB()
 	return &Deposit{
-		state:   state,
-		signer:  signer,
-		cacheDb: cacheDb,
-		lightDb: lightDb,
+		state:            state,
+		signer:           signer,
+		cacheDb:          cacheDb,
+		lightDb:          lightDb,
+		confirmDepositCh: make(chan interface{}, 100),
 	}
 }
 

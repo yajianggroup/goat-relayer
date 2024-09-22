@@ -12,7 +12,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/goatnetwork/goat-relayer/internal/config"
 	"github.com/goatnetwork/goat-relayer/internal/types"
-	pb "github.com/goatnetwork/goat-relayer/proto"
 
 	"time"
 
@@ -43,20 +42,20 @@ func (d *Deposit) AddUnconfirmedDeposit(ctx context.Context) {
 			log.Info("UnConfirm deposit query stopping...")
 			return
 		case deposit := <-d.confirmDepositCh:
-			depositData, ok := deposit.(*pb.NewTransactionRequest)
+			depositData, ok := deposit.(types.MsgUtxoDeposit)
 			if !ok {
 				log.Errorf("Invalid deposit data type")
 				continue
 			}
-			err := d.state.AddUnconfirmDeposit(depositData.TransactionId, depositData.RawTransaction, depositData.EvmAddress)
+			err := d.state.AddUnconfirmDeposit(depositData.TxId, depositData.RawTx, depositData.EvmAddr)
 			if err != nil {
 				log.Errorf("Failed to add unconfirmed deposit: %v", err)
 				continue
 			}
 			deduplicateChannel <- DepositTransaction{
-				TxHash:     depositData.TransactionId,
-				RawTx:      depositData.RawTransaction,
-				EvmAddress: depositData.EvmAddress,
+				TxHash:     depositData.TxId,
+				RawTx:      depositData.RawTx,
+				EvmAddress: depositData.EvmAddr,
 			}
 		}
 	}
@@ -146,7 +145,7 @@ func confirmingDeposit(ctx context.Context, tx DepositTransaction, attempt int, 
 			log.Errorf("newMsgSignDeposit err: %v", err)
 			return
 		}
-		state.EventBus.Publish(internalstate.SigStart, msgSignDeposit)
+		state.EventBus.Publish(internalstate.SigStart, *msgSignDeposit)
 
 		log.Infof("proposer submit MsgNewDeposits to consensus success, request id: %s", requestId)
 	}

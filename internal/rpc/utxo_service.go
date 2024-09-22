@@ -5,10 +5,13 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+	"fmt"
+	"time"
 
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/goatnetwork/goat-relayer/internal/btc"
+	"github.com/goatnetwork/goat-relayer/internal/types"
 	relayertypes "github.com/goatnetwork/goat/x/relayer/types"
 
 	"net"
@@ -80,9 +83,18 @@ func (s *UtxoServer) NewTransaction(ctx context.Context, req *pb.NewTransactionR
 		return nil, err
 	}
 
-	p2p.PublishMessage(ctx, p2p.Message{
+	deposit := types.MsgUtxoDeposit{
+		RawTx:     req.RawTransaction,
+		TxId:      req.TransactionId,
+		EvmAddr:   req.EvmAddress,
+		Timestamp: time.Now().Unix(),
+	}
+
+	p2p.PublishMessage(context.Background(), p2p.Message{
 		MessageType: p2p.MessageTypeDepositReceive,
-		Data:        req,
+		RequestId:   fmt.Sprintf("DEPOSIT:%s:%s", config.AppConfig.RelayerAddress, deposit.TxId),
+		DataType:    "MsgUtxoDeposit",
+		Data:        deposit,
 	})
 
 	return &pb.NewTransactionResponse{

@@ -144,9 +144,9 @@ func convertMsgData(msg Message) interface{} {
 		_ = json.Unmarshal(jsonBytes, &rawData)
 		return rawData
 	}
-	if msg.DataType == "MsgSignDeposit" {
+	if msg.DataType == "MsgUtxoDeposit" {
 		jsonBytes, _ := json.Marshal(msg.Data)
-		var rawData types.MsgSignDeposit
+		var rawData types.MsgUtxoDeposit
 		_ = json.Unmarshal(jsonBytes, &rawData)
 		return rawData
 	}
