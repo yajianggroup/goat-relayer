@@ -174,3 +174,33 @@ func (s *State) QueryUnConfirmDeposit() ([]db.Deposit, error) {
 	}
 	return deposit, nil
 }
+
+func (s *State) QueryBlockByTxHash(txHash string) (block *db.BtcBlockData, err error) {
+	var btcTxOutput db.BtcTXOutput
+	if err := s.dbm.GetBtcCacheDB().Where("tx_hash = ?", txHash).First(&btcTxOutput).Error; err != nil {
+		return nil, err
+	}
+
+	var btcBlockData db.BtcBlockData
+	if err := s.dbm.GetBtcCacheDB().Where("id = ?", btcTxOutput.BlockID).First(&btcBlockData).Error; err != nil {
+		return nil, err
+	}
+
+	var btcBlock db.BtcBlock
+	if err := s.dbm.GetBtcCacheDB().Where("height = ? and status = ?", btcBlockData.BlockHeight, "processed").First(&btcBlock).Error; err != nil {
+		return nil, err
+	}
+	// TODO check block hash by pkscript
+	// blockHashBytes := btcTxOutput.PkScript[:32] // Assuming the block hash is the first 32 bytes of PkScript
+	// blockHash, err := chainhash.NewHash(blockHashBytes)
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	// // checkout block
+	// if btcBlockData.BlockHash != blockHash.String() {
+	// 	return nil, errors.New("block hash mismatch")
+	// }
+
+	return &btcBlockData, nil
+}

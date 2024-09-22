@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/hex"
 	"errors"
+
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcec/v2/schnorr"
+	"github.com/goatnetwork/goat-relayer/internal/btc"
 	relayertypes "github.com/goatnetwork/goat/x/relayer/types"
 
 	"net"
@@ -16,6 +18,7 @@ import (
 	"github.com/btcsuite/btcd/wire"
 	"github.com/goatnetwork/goat-relayer/internal/config"
 	"github.com/goatnetwork/goat-relayer/internal/layer2"
+	"github.com/goatnetwork/goat-relayer/internal/p2p"
 	"github.com/goatnetwork/goat-relayer/internal/state"
 	pb "github.com/goatnetwork/goat-relayer/proto"
 	"google.golang.org/grpc"
@@ -66,17 +69,21 @@ func (s *UtxoServer) NewTransaction(ctx context.Context, req *pb.NewTransactionR
 		return nil, err
 	}
 
-	// TODO verify transaction
-	// if err := btc.VerifyTransaction(tx, req.TransactionId, req.EvmAddress); err != nil {
-	// 	log.Errorf("Failed to verify transaction: %v", err)
-	// 	return nil, err
-	// }
+	if err := btc.VerifyTransaction(tx, req.TransactionId, req.EvmAddress); err != nil {
+		log.Errorf("Failed to verify transaction: %v", err)
+		return nil, err
+	}
 
 	err = s.state.AddUnconfirmDeposit(req.TransactionId, req.RawTransaction, req.EvmAddress)
 	if err != nil {
 		log.Errorf("Failed to add unconfirmed deposit: %v", err)
 		return nil, err
 	}
+
+	p2p.PublishMessage(ctx, p2p.Message{
+		MessageType: p2p.MessageTypeDepositReceive,
+		Data:        req,
+	})
 
 	return &pb.NewTransactionResponse{
 		ErrorMessage: "Confirming transaction",

@@ -26,9 +26,8 @@ type Signer struct {
 	libp2p         *p2p.LibP2PService
 	layer2Listener *layer2.Layer2Listener
 
-	sigStartCh       chan interface{}
-	sigReceiveCh     chan interface{}
-	depositReceiveCh chan interface{}
+	sigStartCh   chan interface{}
+	sigReceiveCh chan interface{}
 
 	// [request_id][vote_address]MsgSign
 	sigMap        map[string]map[string]interface{}
@@ -59,9 +58,8 @@ func NewSigner(libp2p *p2p.LibP2PService, layer2Listener *layer2.Layer2Listener,
 		libp2p:         libp2p,
 		layer2Listener: layer2Listener,
 
-		sigStartCh:       make(chan interface{}, 256),
-		sigReceiveCh:     make(chan interface{}, 1024),
-		depositReceiveCh: make(chan interface{}, 1024),
+		sigStartCh:   make(chan interface{}, 256),
+		sigReceiveCh: make(chan interface{}, 1024),
 
 		sigMap:        make(map[string]map[string]interface{}),
 		sigTimeoutMap: make(map[string]time.Time),
@@ -71,7 +69,6 @@ func NewSigner(libp2p *p2p.LibP2PService, layer2Listener *layer2.Layer2Listener,
 func (s *Signer) Start(ctx context.Context) {
 	s.state.EventBus.Subscribe(state.SigStart, s.sigStartCh)
 	s.state.EventBus.Subscribe(state.SigReceive, s.sigReceiveCh)
-	s.state.EventBus.Subscribe(state.DepositReceive, s.depositReceiveCh)
 
 	go func() {
 		for {
@@ -85,9 +82,6 @@ func (s *Signer) Start(ctx context.Context) {
 			case event := <-s.sigReceiveCh:
 				log.Debugf("Received sigReceive event: %v", event)
 				s.handleSigReceive(ctx, event)
-			case event := <-s.depositReceiveCh:
-				log.Debugf("Received depositReceive event: %v", event)
-				s.handleDepositReceive(ctx, event)
 			}
 		}
 	}()

@@ -2,6 +2,7 @@ package utxo
 
 import (
 	"context"
+
 	"github.com/goatnetwork/goat-relayer/internal/bls"
 
 	"github.com/goatnetwork/goat-relayer/internal/db"
@@ -15,6 +16,8 @@ type Deposit struct {
 	signer  *bls.Signer
 	cacheDb *gorm.DB
 	lightDb *gorm.DB
+
+	confirmDepositCh chan interface{}
 }
 
 func NewDeposit(state *state.State, signer *bls.Signer, dbm *db.DatabaseManager) *Deposit {
@@ -29,8 +32,8 @@ func NewDeposit(state *state.State, signer *bls.Signer, dbm *db.DatabaseManager)
 }
 
 func (d *Deposit) Start(ctx context.Context) {
+	d.state.EventBus.Subscribe(state.DepositReceive, d.confirmDepositCh)
 	// TODO wait for btc & goat chain complete blocks sync
-	go d.QueryUnconfirmedDeposit(ctx)
-	go d.ProcessOnceConfirmedDeposit(ctx)
-	go d.ProcessSixConfirmedDeposit(ctx)
+	go d.AddUnconfirmedDeposit(ctx)
+	go d.ProcessConfirmedDeposit(ctx)
 }

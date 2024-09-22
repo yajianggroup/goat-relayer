@@ -45,6 +45,11 @@ func (s *Signer) handleSigStart(ctx context.Context, event interface{}) {
 			// feedback SigFailed
 			s.state.EventBus.Publish(state.SigFailed, e)
 		}
+	case types.MsgSignDeposit:
+		log.Debugf("Event handleDepositReceive is of type MsgSignDeposit, request id %s", e.RequestId)
+		if err := s.handleSigStartNewDeposit(ctx, e); err != nil {
+			log.Errorf("Error handleDepositReceive MsgSignDeposit, %v", err)
+		}
 	default:
 		log.Debug("Unknown event handleSigStart type")
 	}
@@ -65,18 +70,6 @@ func (s *Signer) handleSigReceive(ctx context.Context, event interface{}) {
 	default:
 		// check e['msg_type'] from libp2p
 		log.Debugf("Unknown event handleSigReceive type, %v", e)
-	}
-}
-
-func (s *Signer) handleDepositReceive(ctx context.Context, event interface{}) {
-	switch e := event.(type) {
-	case types.MsgSignDeposit:
-		log.Debugf("Event handleDepositReceive is of type MsgSignDeposit, request id %s", e.RequestId)
-		if err := s.handleDepositReceiveNewDeposit(ctx, e); err != nil {
-			log.Errorf("Error handleDepositReceive MsgSignDeposit, %v", err)
-		}
-	default:
-		log.Debug("Unknown event handleDepositReceive type")
 	}
 }
 
@@ -260,7 +253,7 @@ func (s *Signer) handleSigReceiveNewBlock(ctx context.Context, e types.MsgSignNe
 	}
 }
 
-func (s *Signer) handleDepositReceiveNewDeposit(ctx context.Context, e types.MsgSignDeposit) error {
+func (s *Signer) handleSigStartNewDeposit(ctx context.Context, e types.MsgSignDeposit) error {
 	// do not send p2p here, it doesn't need to aggregate sign here
 	isProposer := s.IsProposer()
 	if isProposer {
