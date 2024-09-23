@@ -7,6 +7,10 @@ import (
 type EventType int
 
 const (
+	BTC_BLOCK_CHAN_LENGTH = 10
+)
+
+const (
 	EventUnkown EventType = iota
 	SigStart
 	SigReceive
@@ -14,10 +18,11 @@ const (
 	SigFailed
 	SigTimeout
 	DepositReceive
+	BlockScanned
 )
 
 func (e EventType) String() string {
-	return [...]string{"EventUnkown", "SigStart", "SigReceive", "SigFinish", "SigFailed", "SigTimeout", "DepositReceive"}[e]
+	return [...]string{"EventUnkown", "SigStart", "SigReceive", "SigFinish", "SigFailed", "SigTimeout", "DepositReceive", "BlockScanned"}[e]
 }
 
 type EventBus struct {

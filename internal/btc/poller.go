@@ -19,12 +19,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type BtcBlockExt struct {
-	wire.MsgBlock
-
-	blockNumber uint64
-}
-
 type SigHashQueue struct {
 	Start  uint64
 	Count  int
@@ -44,7 +38,7 @@ func NewSigHashQueue() *SigHashQueue {
 type BTCPoller struct {
 	db          *gorm.DB
 	state       *state.State
-	confirmChan chan *BtcBlockExt
+	confirmChan chan *types.BtcBlockExt
 
 	sigFailChan    chan interface{}
 	sigFinishChan  chan interface{}
@@ -58,7 +52,7 @@ func NewBTCPoller(state *state.State, db *gorm.DB) *BTCPoller {
 	return &BTCPoller{
 		state:       state,
 		db:          db,
-		confirmChan: make(chan *BtcBlockExt, 64),
+		confirmChan: make(chan *types.BtcBlockExt, 64),
 
 		sigFailChan:    make(chan interface{}, 10),
 		sigFinishChan:  make(chan interface{}, 10),
@@ -166,14 +160,17 @@ func (p *BTCPoller) GetBlock(height uint64) (*db.BtcBlockData, error) {
 	return &blockData, nil
 }
 
-func (p *BTCPoller) handleConfirmedBlock(block *BtcBlockExt) {
+func (p *BTCPoller) handleConfirmedBlock(block *types.BtcBlockExt) {
 	// Logic for handling confirmed blocks
 	blockHash := block.BlockHash()
-	log.Infof("Handling confirmed block: %d, hash:%s", block.blockNumber, blockHash.String())
+	log.Infof("Handling confirmed block: %d, hash:%s", block.BlockNumber, blockHash.String())
 
-	if err := p.state.SaveConfirmBtcBlock(block.blockNumber, blockHash.String()); err != nil {
-		log.Fatalf("Save confirm btc block: %d, hash:%s, error: %v", block.blockNumber, blockHash.String(), err)
+	if err := p.state.SaveConfirmBtcBlock(block.BlockNumber, blockHash.String()); err != nil {
+		log.Fatalf("Save confirm btc block: %d, hash:%s, error: %v", block.BlockNumber, blockHash.String(), err)
 	}
+
+	// push to event bus
+	p.state.EventBus.Publish(state.BlockScanned, *block)
 }
 
 func (p *BTCPoller) handleSigFailed(event interface{}, reason string) {

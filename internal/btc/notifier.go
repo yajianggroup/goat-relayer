@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/goatnetwork/goat-relayer/internal/db"
+	"github.com/goatnetwork/goat-relayer/internal/types"
 	"gorm.io/gorm"
 
 	"github.com/btcsuite/btcd/rpcclient"
@@ -118,9 +119,9 @@ func (bn *BTCNotifier) listenForBTCBlocks(ctx context.Context) {
 			if int64(bn.currentHeight)+bn.confirmations < bestHeight {
 				// confirmed block
 				log.Debugf("Pushing block at height %d to confirmChan", bn.currentHeight)
-				bn.poller.confirmChan <- &BtcBlockExt{
+				bn.poller.confirmChan <- &types.BtcBlockExt{
 					MsgBlock:    *block,
-					blockNumber: uint64(bn.currentHeight),
+					BlockNumber: uint64(bn.currentHeight),
 				}
 				log.Debugf("Pushed block at height %d to confirmChan", bn.currentHeight)
 			} else {
@@ -153,6 +154,12 @@ func (bn *BTCNotifier) checkConfirmations(ctx context.Context) {
 				log.Errorf("Error getting the latest block height: %v", err)
 				continue
 			}
+
+			catchingStatus := int64(bn.currentHeight)+bn.confirmations < bestHeight
+			bn.catchingMu.Lock()
+			bn.catchingStatus = catchingStatus
+			bn.catchingMu.Unlock()
+
 			confirmedHeight := bestHeight - bn.confirmations
 
 			bn.syncMu.Lock()
@@ -168,30 +175,35 @@ func (bn *BTCNotifier) checkConfirmations(ctx context.Context) {
 			grows := false
 			log.Infof("Btc check block confirmation fired, best height: %d, from: %d, to: %d", bestHeight, syncConfirmedHeight+1, confirmedHeight)
 			for height := syncConfirmedHeight + 1; height <= confirmedHeight; height++ {
-				blockInDb, err := bn.poller.GetBlock(uint64(height))
-				if err != nil {
-					log.Errorf("Error getting block at height %d from cache: %v", height, err)
-					break
-				}
+				// blockInDb, err := bn.poller.GetBlock(uint64(height))
+				// if err != nil {
+				// 	log.Errorf("Error getting block at height %d from cache: %v", height, err)
+				// 	break
+				// }
 				block, err := bn.getBlockAtHeight(height)
 				if err != nil {
 					log.Errorf("Btc getting block at %d error: %v", height, err)
 					break
 				}
-				if blockInDb.BlockHash != block.BlockHash().String() {
-					// block change detect
-					log.Warnf("Btc block hash changed, height: %d, old hash: %s, new hash: %s,", height, blockInDb.BlockHash, block.BlockHash().String())
-					// TODO save to cache again
+				blockWithHeight := BlockWithHeight{
+					Block:  block,
+					Height: bn.currentHeight,
 				}
-				// TODO insert utxo db
+				bn.cache.blockChan <- blockWithHeight
+				// if blockInDb.BlockHash != block.BlockHash().String() {
+				// 	// block change detect
+				// 	log.Warnf("Btc block hash changed, height: %d, old hash: %s, new hash: %s,", height, blockInDb.BlockHash, block.BlockHash().String())
+				// 	// TODO save to cache again
+				// }
 				grows = true
 				newSyncHeight = height
 				log.Debugf("Pushing block at height %d to confirmChan", height)
-				bn.poller.confirmChan <- &BtcBlockExt{
+				bn.poller.confirmChan <- &types.BtcBlockExt{
 					MsgBlock:    *block,
-					blockNumber: uint64(height),
+					BlockNumber: uint64(height),
 				}
 				log.Debugf("Pushed block at height %d to confirmChan", height)
+				bn.currentHeight++
 
 				if bn.syncStatus.ConfirmedHeight+10 < newSyncHeight {
 					// save every 10 when catching up

@@ -25,6 +25,15 @@ type L2Info struct {
 	UpdatedAt       time.Time `gorm:"not null" json:"updated_at"`
 }
 
+// L2 Deposit public key
+type DepositPubKey struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	BtcHeight uint64    `gorm:"not null" json:"btc_height"`
+	PubType   string    `gorm:"not null" json:"pub_type"`
+	PubKey    string    `gorm:"not null" json:"pub_key"`
+	UpdatedAt time.Time `gorm:"not null" json:"updated_at"`
+}
+
 // Voter model
 type Voter struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
@@ -85,6 +94,12 @@ type Utxo struct {
 	ReceiveBlock  uint64    `gorm:"not null" json:"receive_block"` // recieve at BTC block height
 	SpentBlock    uint64    `gorm:"not null" json:"spent_block"`   // spent at BTC block height
 	UpdatedAt     time.Time `gorm:"not null" json:"updated_at"`
+}
+
+// DepositResult model, it save deposit data from layer2 events
+type DepositResult struct {
+	ID uint `gorm:"primaryKey" json:"id"`
+	// TODO
 }
 
 // Withdraw model (for managing withdrawals)
@@ -186,13 +201,13 @@ func (dm *DatabaseManager) autoMigrate() {
 	if err := dm.l2SyncDb.AutoMigrate(&L2SyncStatus{}); err != nil {
 		log.Fatalf("Failed to migrate database 1: %v", err)
 	}
-	if err := dm.l2InfoDb.AutoMigrate(&L2Info{}, &Voter{}, &EpochVoter{}, &VoterQueue{}); err != nil {
+	if err := dm.l2InfoDb.AutoMigrate(&L2Info{}, &Voter{}, &EpochVoter{}, &VoterQueue{}, &DepositPubKey{}); err != nil {
 		log.Fatalf("Failed to migrate database 2: %v", err)
 	}
 	if err := dm.btcLightDb.AutoMigrate(&BtcBlock{}); err != nil {
 		log.Fatalf("Failed to migrate database 3: %v", err)
 	}
-	if err := dm.walletDb.AutoMigrate(&Utxo{}, &Withdraw{}, &SendOrder{}, &Vin{}, &Vout{}); err != nil {
+	if err := dm.walletDb.AutoMigrate(&Utxo{}, &Withdraw{}, &SendOrder{}, &Vin{}, &Vout{}, &DepositResult{}); err != nil {
 		log.Fatalf("Failed to migrate database 4: %v", err)
 	}
 	if err := dm.btcCacheDb.AutoMigrate(&BtcSyncStatus{}, &BtcBlockData{}, &BtcTXOutput{}, &Deposit{}); err != nil {

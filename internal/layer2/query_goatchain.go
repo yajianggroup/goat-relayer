@@ -38,12 +38,13 @@ func (lis *Layer2Listener) QueryVotersOfRelayer(ctx context.Context) (*relayerty
 	return response, nil
 }
 
-func (lis *Layer2Listener) QueryPubKey(ctx context.Context) *bitcointypes.QueryPubkeyResponse {
+func (lis *Layer2Listener) QueryPubKey(ctx context.Context) (*bitcointypes.QueryPubkeyResponse, error) {
 	client := bitcointypes.NewQueryClient(lis.goatGrpcConn)
 	response, err := client.Pubkey(ctx, &bitcointypes.QueryPubkeyRequest{})
 	if err != nil {
 		log.Errorf("Error while querying relayer status: %v", err)
+		return nil, err
 	}
 
-	return response
+	return response, nil
 }
