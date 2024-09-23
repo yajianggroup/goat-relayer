@@ -82,10 +82,10 @@ type Utxo struct {
 	Uid           string    `gorm:"not null" json:"uid"`
 	Txid          string    `gorm:"not null;index:unique_txid_out_index,unique" json:"txid"`
 	PkScript      []byte    `json:"pk_script"`
-	OutIndex      uint      `gorm:"not null;index:unique_txid_out_index,unique" json:"out_index"`
-	Amount        float64   `gorm:"type:decimal(20,8)" json:"amount"` // BTC precision up to 8 decimal places
-	Receiver      string    `gorm:"not null" json:"receiver"`         // it is MPC address here, or p2wsh (need collect)
-	WalletVersion string    `gorm:"not null" json:"wallet_vesion"`    // MPC wallet version, it always sets to tss version, "fireblocks:1:2" = fireblocks workspace 1 account 2
+	OutIndex      int       `gorm:"not null;index:unique_txid_out_index,unique" json:"out_index"`
+	Amount        int64     `gorm:"not null" json:"amount"`        // BTC precision up to 8 decimal places
+	Receiver      string    `gorm:"not null" json:"receiver"`      // it is MPC address here, or p2wsh (need collect)
+	WalletVersion string    `gorm:"not null" json:"wallet_vesion"` // MPC wallet version, it always sets to tss version, "fireblocks:1:2" = fireblocks workspace 1 account 2
 	Sender        string    `gorm:"not null" json:"sender"`
 	EvmAddr       string    `json:"evm_addr"`                      // deposit to L2
 	Source        string    `gorm:"not null" json:"source"`        // "deposit", "unknown"
@@ -98,8 +98,12 @@ type Utxo struct {
 
 // DepositResult model, it save deposit data from layer2 events
 type DepositResult struct {
-	ID uint `gorm:"primaryKey" json:"id"`
-	// TODO
+	ID        uint   `gorm:"primaryKey" json:"id"`
+	TxId      string `gorm:"uniqueIndex:idx_tx_id_tx_out" json:"tx_id"`
+	TxOut     uint64 `gorm:"uniqueIndex:idx_tx_id_tx_out" json:"tx_out"`
+	Address   string `gorm:"not null" json:"address"`
+	Amount    uint64 `gorm:"not null" json:"amount"`
+	BlockHash string `gorm:"not null" json:"block_hash"`
 }
 
 // Withdraw model (for managing withdrawals)
@@ -134,10 +138,10 @@ type SendOrder struct {
 type Vin struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	OrderId   string    `json:"order_id"`
+	BtcHeight uint64    `gorm:"not null" json:"btc_height"`
 	Txid      string    `gorm:"not null" json:"txid"`
-	VinTxid   string    `gorm:"not null" json:"vin_txid"`
-	VinVout   int       `gorm:"not null" json:"vin_vout"`
-	Amount    float64   `gorm:"type:decimal(20,8)" json:"amount"` // BTC precision up to 8 decimal places
+	OutIndex  int       `gorm:"not null" json:"out_index"`
+	SigScript []byte    `json:"sig_script"`
 	Sender    string    `json:"sender"`
 	Source    string    `gorm:"not null" json:"source"` // "withdraw", "unknown"
 	Status    string    `gorm:"not null" json:"status"` // "init", "signing", "pending", "processed"
@@ -148,14 +152,15 @@ type Vin struct {
 type Vout struct {
 	ID         uint      `gorm:"primaryKey" json:"id"`
 	OrderId    string    `json:"order_id"`
+	BtcHeight  uint64    `gorm:"not null" json:"btc_height"`
 	Txid       string    `gorm:"not null" json:"txid"`
 	OutIndex   int       `gorm:"not null" json:"out_index"`
-	WithdrawId string    `json:"withdraw_id"`                      // EvmTxId
-	Amount     float64   `gorm:"type:decimal(20,8)" json:"amount"` // BTC precision up to 8 decimal places
-	Receiver   string    `gorm:"not null" json:"receiver"`         // withdraw To
-	Sender     string    `json:"sender"`                           // MPC address
-	Source     string    `gorm:"not null" json:"source"`           // "withdraw", "unknown"
-	Status     string    `gorm:"not null" json:"status"`           // "init", "signing", "pending", "processed"
+	WithdrawId string    `json:"withdraw_id"`              // EvmTxId
+	Amount     int64     `gorm:"not null" json:"amount"`   // BTC precision up to 8 decimal places
+	Receiver   string    `gorm:"not null" json:"receiver"` // withdraw To
+	Sender     string    `json:"sender"`                   // MPC address
+	Source     string    `gorm:"not null" json:"source"`   // "withdraw", "unknown"
+	Status     string    `gorm:"not null" json:"status"`   // "init", "signing", "pending", "processed"
 	UpdatedAt  time.Time `gorm:"not null" json:"updated_at"`
 }
 

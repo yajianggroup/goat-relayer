@@ -191,6 +191,11 @@ func (lis *Layer2Listener) processNewDeposit(block uint64, attributes []abcitype
 		if key == "amount" {
 			amount, _ = strconv.ParseUint(value, 10, 64)
 		}
+		// TODO goat emit event with block hash, should match deposit with height
+		// if key == "block_hash" {
+		// 	blockHash = value
+		// }
+		lis.state.AddDepositResult(txid, txout, address.Hex(), amount, "")
 	}
 	log.Infof("Abci NewDeposit, block: %d, txid: %s, txout: %d, address: %v, amount: %d", block, txid, txout, address, amount)
 

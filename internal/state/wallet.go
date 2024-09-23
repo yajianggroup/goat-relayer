@@ -8,7 +8,7 @@ import (
 	"gorm.io/gorm"
 )
 
-func (s *State) UpdateUtxoStatusProcessed(txid string, out uint) error {
+func (s *State) UpdateUtxoStatusProcessed(txid string, out int) error {
 	s.walletMu.Lock()
 	defer s.walletMu.Unlock()
 
@@ -27,6 +27,22 @@ func (s *State) UpdateUtxoStatusProcessed(txid string, out uint) error {
 	return s.saveUtxo(utxo)
 }
 
+func (s *State) UpdateUtxoStatusSpent(txid string, out int) error {
+	s.walletMu.Lock()
+	defer s.walletMu.Unlock()
+
+	utxo, err := s.getUtxo(txid, out)
+	if err != nil && err != gorm.ErrRecordNotFound {
+		return err
+	}
+	if err == gorm.ErrRecordNotFound {
+		return nil
+	}
+
+	utxo.Status = "spent"
+	return s.saveUtxo(utxo)
+}
+
 func (s *State) AddUtxo(utxo *db.Utxo) error {
 	s.walletMu.Lock()
 	defer s.walletMu.Unlock()
@@ -42,7 +58,13 @@ func (s *State) AddUtxo(utxo *db.Utxo) error {
 	}
 
 	if utxo.Status == "confirmed" {
-		// TODO check deposit table (from layer2)
+		// check deposit table (from layer2)
+		var depositResult db.DepositResult
+		err := s.dbm.GetBtcCacheDB().Where("tx_id=? and tx_out=?", utxo.Txid, utxo.OutIndex).First(&depositResult).Error
+		if err != nil && err != gorm.ErrRecordNotFound {
+			return err
+		}
+
 		// if found
 		utxo.Source = "deposit"
 		utxo.Status = "processed"
@@ -51,7 +73,36 @@ func (s *State) AddUtxo(utxo *db.Utxo) error {
 	return s.saveUtxo(utxo)
 }
 
-func (s *State) getUtxo(txid string, out uint) (*db.Utxo, error) {
+func (s *State) AddDepositResult(txid string, out uint64, address string, amount uint64, blockHash string) error {
+	s.walletMu.Lock()
+	defer s.walletMu.Unlock()
+
+	return s.dbm.GetBtcCacheDB().Create(&db.DepositResult{
+		TxId:      txid,
+		TxOut:     out,
+		Address:   address,
+		Amount:    amount,
+		BlockHash: blockHash,
+	}).Error
+}
+
+func (s *State) AddVin(vin *db.Vin) error {
+	s.walletMu.Lock()
+	defer s.walletMu.Unlock()
+
+	s.UpdateUtxoStatusSpent(vin.Txid, vin.OutIndex)
+
+	return s.dbm.GetBtcCacheDB().Create(vin).Error
+}
+
+func (s *State) AddVout(vout *db.Vout) error {
+	s.walletMu.Lock()
+	defer s.walletMu.Unlock()
+
+	return s.dbm.GetBtcCacheDB().Create(vout).Error
+}
+
+func (s *State) getUtxo(txid string, out int) (*db.Utxo, error) {
 	var utxo db.Utxo
 	result := s.dbm.GetWalletDB().Where("txid=? and out_index=?", txid, out).First(&utxo)
 	if result.Error != nil {

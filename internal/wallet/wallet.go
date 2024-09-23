@@ -30,7 +30,7 @@ func NewWalletServer(libp2p *p2p.LibP2PService, st *state.State, db *db.Database
 func (w *WalletServer) Start(ctx context.Context) {
 	w.state.EventBus.Subscribe(state.BlockScanned, w.blockCh)
 
-	go blockScanLoop(ctx)
+	go w.blockScanLoop(ctx)
 
 	log.Info("WalletServer started.")
 
