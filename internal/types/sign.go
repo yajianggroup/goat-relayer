@@ -1,7 +1,5 @@
 package types
 
-import bitcointypes "github.com/goatnetwork/goat/x/bitcoin/types"
-
 type MsgSign struct {
 	RequestId    string `json:"request_id"`
 	Sequence     uint64 `json:"sequence"`
@@ -24,5 +22,16 @@ type MsgSignNewBlock struct {
 type MsgSignDeposit struct {
 	MsgSign
 
-	Deposit *bitcointypes.MsgNewDeposits
+	BlockHeader       []byte `json:"block_header"`
+	BlockNumber       uint64 `json:"block_number"`
+	Version           uint32 `json:"version,omitempty"`
+	TxHash            []byte `json:"tx_hash"`
+	TxIndex           uint32 `json:"tx_index"`
+	IntermediateProof []byte `json:"intermediate_proof"`
+	MerkleRoot        []byte `json:"merkle_root"`
+	NoWitnessTx       []byte `json:"no_witness_tx,omitempty"`
+	OutputIndex       uint32 `json:"output_index"`
+	EvmAddress        []byte `json:"evm_address"`
+	RelayerPubkey     []byte `json:"relayer_pubkey"`
+	Proposer          string `json:"proposer"`
 }

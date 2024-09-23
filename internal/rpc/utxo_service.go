@@ -4,18 +4,25 @@ import (
 	"bytes"
 	"context"
 	"encoding/hex"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/btcsuite/btcd/btcec/v2"
+	"github.com/btcsuite/btcd/btcec/v2/schnorr"
+	"github.com/goatnetwork/goat-relayer/internal/btc"
+	"github.com/goatnetwork/goat-relayer/internal/types"
+	relayertypes "github.com/goatnetwork/goat/x/relayer/types"
+
 	"net"
 
-	"github.com/btcsuite/btcd/chaincfg"
-	"github.com/goatnetwork/goat-relayer/internal/layer2"
-	"github.com/goatnetwork/goat-relayer/internal/state"
-	bitcointypes "github.com/goatnetwork/goat/x/bitcoin/types"
-	"google.golang.org/grpc/credentials/insecure"
-
 	"github.com/btcsuite/btcd/btcutil"
+	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/wire"
-	"github.com/goatnetwork/goat-relayer/internal/btc"
 	"github.com/goatnetwork/goat-relayer/internal/config"
+	"github.com/goatnetwork/goat-relayer/internal/layer2"
+	"github.com/goatnetwork/goat-relayer/internal/p2p"
+	"github.com/goatnetwork/goat-relayer/internal/state"
 	pb "github.com/goatnetwork/goat-relayer/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -37,7 +44,7 @@ func (s *UtxoServer) Start(ctx context.Context) {
 	}
 
 	server := grpc.NewServer()
-	pb.RegisterBitcoinLightWalletServer(server, &UtxoServer{})
+	pb.RegisterBitcoinLightWalletServer(server, s)
 	reflection.Register(server)
 
 	log.Infof("gRPC server is running on port %s", config.AppConfig.RPCPort)
@@ -76,36 +83,63 @@ func (s *UtxoServer) NewTransaction(ctx context.Context, req *pb.NewTransactionR
 		return nil, err
 	}
 
+	deposit := types.MsgUtxoDeposit{
+		RawTx:     req.RawTransaction,
+		TxId:      req.TransactionId,
+		EvmAddr:   req.EvmAddress,
+		Timestamp: time.Now().Unix(),
+	}
+
+	p2p.PublishMessage(context.Background(), p2p.Message{
+		MessageType: p2p.MessageTypeDepositReceive,
+		RequestId:   fmt.Sprintf("DEPOSIT:%s:%s", config.AppConfig.RelayerAddress, deposit.TxId),
+		DataType:    "MsgUtxoDeposit",
+		Data:        deposit,
+	})
+
 	return &pb.NewTransactionResponse{
 		ErrorMessage: "Confirming transaction",
 	}, nil
 }
 
 func (s *UtxoServer) QueryDepositAddress(ctx context.Context, req *pb.QueryDepositAddressRequest) (*pb.QueryDepositAddressResponse, error) {
-	//l2Info := s.state.GetL2Info()
-	//
-	//publicKey, err := hex.DecodeString(l2Info.DepositKey)
-	//if err != nil {
-	//	return nil, err
-	//}
+	l2Info := s.state.GetL2Info()
 
-	//pubkeyResponse := s.layer2Listener.QueryPubKey(ctx)
-
-	grpcConn, err := grpc.NewClient(config.AppConfig.GoatChainGRPCURI, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		return nil, err
+	var err error
+	var pubKey []byte
+	if l2Info.DepositKey == "" {
+		// query from layer2 goat chain
+		pubkeyResponse := s.layer2Listener.QueryPubKey(ctx)
+		pubKey = relayertypes.EncodePublicKey(&pubkeyResponse.PublicKey)
+	} else {
+		pubKey, err = hex.DecodeString(l2Info.DepositKey)
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	client := bitcointypes.NewQueryClient(grpcConn)
-	pubkeyResponse, err := client.Pubkey(ctx, &bitcointypes.QueryPubkeyRequest{})
-	if err != nil {
-		log.Errorf("Error while querying relayer status: %v", err)
+	var newPubKey []byte
+	if len(pubKey)-1 == btcec.PubKeyBytesLenCompressed {
+		newPubKey = relayertypes.DecodePublicKey(pubKey).GetSecp256K1()
+	} else if len(pubKey)-1 == schnorr.PubKeyBytesLen {
+		newPubKey = relayertypes.DecodePublicKey(pubKey).GetSchnorr()
+	} else {
+		return nil, errors.New("invalid public key")
 	}
 
-	pubKey := pubkeyResponse.PublicKey.GetSecp256K1()
+	var network *chaincfg.Params
+	switch config.AppConfig.BTCNetworkType {
+	case "":
+		network = &chaincfg.MainNetParams
+	case "mainnet":
+		network = &chaincfg.MainNetParams
+	case "regtest":
+		network = &chaincfg.RegressionNetParams
+	case "testnet3":
+		network = &chaincfg.TestNet3Params
+	}
 
-	network := &chaincfg.MainNetParams
-	p2wpkh, err := btcutil.NewAddressWitnessPubKeyHash(btcutil.Hash160(pubKey), network)
+	p2wpkh, err := btcutil.NewAddressWitnessPubKeyHash(btcutil.Hash160(newPubKey), network)
 	if err != nil {
 		return nil, err
 	}

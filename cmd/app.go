@@ -16,6 +16,7 @@ import (
 	"github.com/goatnetwork/goat-relayer/internal/p2p"
 	"github.com/goatnetwork/goat-relayer/internal/rpc"
 	"github.com/goatnetwork/goat-relayer/internal/state"
+	"github.com/goatnetwork/goat-relayer/internal/utxo"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -28,6 +29,7 @@ type Application struct {
 	LibP2PService   *p2p.LibP2PService
 	BTCListener     *btc.BTCListener
 	UTXOService     *rpc.UtxoServer
+	Deposit         *utxo.Deposit
 }
 
 func NewApplication() *Application {
@@ -41,6 +43,7 @@ func NewApplication() *Application {
 	httpServer := http.NewHTTPServer(libP2PService, state, dbm)
 	btcListener := btc.NewBTCListener(libP2PService, state, dbm)
 	utxoService := rpc.NewUtxoServer(state, layer2Listener)
+	deposit := utxo.NewDeposit(state, signer, dbm)
 
 	return &Application{
 		DatabaseManager: dbm,
@@ -51,6 +54,7 @@ func NewApplication() *Application {
 		HTTPServer:      httpServer,
 		BTCListener:     btcListener,
 		UTXOService:     utxoService,
+		Deposit:         deposit,
 	}
 }
 
@@ -99,6 +103,12 @@ func (app *Application) Run() {
 		app.UTXOService.Start(ctx)
 	}()
 
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		app.Deposit.Start(ctx)
+	}()
+
 	<-stop
 	log.Info("Receiving exit signal...")
 
@@ -106,4 +116,9 @@ func (app *Application) Run() {
 
 	wg.Wait()
 	log.Info("Server stopped")
+}
+
+func main() {
+	app := NewApplication()
+	app.Run()
 }

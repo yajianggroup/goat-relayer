@@ -76,10 +76,6 @@ func SerializeNoWitnessTx(rawTransaction []byte) ([]byte, error) {
 }
 
 func VerifyTransaction(tx wire.MsgTx, txHash string, evmAddress string) error {
-	if tx.TxID() != txHash {
-		return fmt.Errorf("raw transaction is empty")
-	}
-
 	// TODO: Implement more detailed verification
 	// type 0:
 	// |-- extract receiver, txout=0?, get receiver, evm_address, goat

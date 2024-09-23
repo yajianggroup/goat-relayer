@@ -149,7 +149,7 @@ type BtcBlockData struct {
 	ID           uint   `gorm:"primaryKey" json:"id"`
 	BlockHeight  uint64 `gorm:"unique;not null" json:"block_height"`
 	BlockHash    string `gorm:"unique;not null" json:"block_hash"`
-	Header       string `json:"header"`
+	Header       []byte `json:"header"`
 	Difficulty   uint32 `json:"difficulty"`
 	RandomNumber uint32 `json:"random_number"`
 	MerkleRoot   string `json:"merkle_root"`

@@ -188,7 +188,7 @@ func (lis *Layer2Listener) Start(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info("Layer2Listener stoping...")
+			log.Info("Layer2Listener stopping...")
 			lis.stop()
 			return
 		default:
@@ -384,11 +384,13 @@ func (lis *Layer2Listener) getGoatChainGenesisState(ctx context.Context) (*db.L2
 		return nil, nil, 0, 0, "", err
 	}
 
+	pubKey := hex.EncodeToString(relayertypes.EncodePublicKey(bitcoinState.Pubkey))
+
 	l2Info := &db.L2Info{
 		Height:          1,
 		Syncing:         true,
 		Threshold:       "2/3",
-		DepositKey:      hex.EncodeToString(bitcoinState.Pubkey.GetSecp256K1()),
+		DepositKey:      pubKey,
 		StartBtcHeight:  bitcoinState.BlockTip,
 		LatestBtcHeight: bitcoinState.BlockTip,
 		UpdatedAt:       time.Now(),

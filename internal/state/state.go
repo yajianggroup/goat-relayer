@@ -28,7 +28,7 @@ type State struct {
 
 // InitializeState initializes the state by reading from the DB
 func InitializeState(dbm *db.DatabaseManager) *State {
-	// Load layer2State, btcHeadState, walletState from db when start up
+	// Load layer2State, btcHeadState, walletState, depositState from db when start up
 	var (
 		l2Info                db.L2Info
 		epochVoter            db.EpochVoter
@@ -38,7 +38,7 @@ func InitializeState(dbm *db.DatabaseManager) *State {
 		latestBtcBlock        db.BtcBlock
 		unconfirmBtcQueue     []*db.BtcBlock
 		sigBtcQueue           []*db.BtcBlock
-		latestDepositBlock    db.Deposit
+		latestDeposit         db.Deposit
 		unconfirmDepositQueue []*db.Deposit
 		sigDepositQueue       []*db.Deposit
 		sendOrderQueue        []*db.SendOrder
@@ -49,6 +49,7 @@ func InitializeState(dbm *db.DatabaseManager) *State {
 
 	l2InfoDb := dbm.GetL2InfoDB()
 	btcLightDb := dbm.GetBtcLightDB()
+	btcCacheDb := dbm.GetBtcCacheDB()
 	walletDb := dbm.GetWalletDB()
 
 	loadData := func(db *gorm.DB, dest interface{}, query string, args ...interface{}) {
@@ -58,7 +59,7 @@ func InitializeState(dbm *db.DatabaseManager) *State {
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(8)
+	wg.Add(11)
 
 	go func() {
 		defer wg.Done()
@@ -125,6 +126,23 @@ func InitializeState(dbm *db.DatabaseManager) *State {
 
 	go func() {
 		defer wg.Done()
+		if err := btcCacheDb.Where("status = ?", "processed").Order("id").First(&latestDeposit).Error; err != nil {
+			log.Warnf("Failed to load latest processed deposit: %v", err)
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		loadData(btcCacheDb, &unconfirmDepositQueue, "status in (?)", []string{"unconfirm", "confirmed"})
+	}()
+
+	go func() {
+		defer wg.Done()
+		loadData(btcCacheDb, &sigDepositQueue, "status in (?)", []string{"signing", "pending"})
+	}()
+
+	go func() {
+		defer wg.Done()
 		loadData(walletDb, &sendOrderQueue, "status <> ?", "processed")
 		loadData(walletDb, &vinQueue, "status <> ?", "processed")
 		loadData(walletDb, &voutQueue, "status <> ?", "processed")
@@ -158,7 +176,7 @@ func InitializeState(dbm *db.DatabaseManager) *State {
 			Utxo:           utxo,
 		},
 		depositState: DepositState{
-			Latest:         latestDepositBlock,
+			Latest:         latestDeposit,
 			UnconfirmQueue: unconfirmDepositQueue,
 			SigQueue:       sigDepositQueue,
 		},

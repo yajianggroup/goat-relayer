@@ -2,6 +2,7 @@ package bls
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -45,9 +46,9 @@ func (s *Signer) handleSigStart(ctx context.Context, event interface{}) {
 			s.state.EventBus.Publish(state.SigFailed, e)
 		}
 	case types.MsgSignDeposit:
-		log.Debugf("Event handleSigStart is of type MsgSignDeposit, request id %s", e.RequestId)
+		log.Debugf("Event handleDepositReceive is of type MsgSignDeposit, request id %s", e.RequestId)
 		if err := s.handleSigStartNewDeposit(ctx, e); err != nil {
-			log.Errorf("Error handleSigStart MsgSignDeposit, %v", err)
+			log.Errorf("Error handleDepositReceive MsgSignDeposit, %v", err)
 		}
 	default:
 		log.Debug("Unknown event handleSigStart type")
@@ -65,11 +66,6 @@ func (s *Signer) handleSigReceive(ctx context.Context, event interface{}) {
 			log.Errorf("Error handleSigReceive MsgSignNewBlock, %v", err)
 			// feedback SigFailed
 			s.state.EventBus.Publish(state.SigFailed, e)
-		}
-	case types.MsgSignDeposit:
-		log.Debugf("Event handleSigReceive is of type MsgSignDeposit, request id %s", e.RequestId)
-		if err := s.handleSigReceiveNewDeposit(ctx, e); err != nil {
-			log.Errorf("Error handleSigReceive MsgSignDeposit, %v", err)
 		}
 	default:
 		// check e['msg_type'] from libp2p
@@ -141,7 +137,7 @@ func (s *Signer) handleSigStartNewBlock(ctx context.Context, e types.MsgSignNewB
 		return nil
 	}
 
-	err = s.retrySubmit(ctx, e.RequestId, rpcMsg, config.AppConfig.L2SubmitRetry)
+	err = s.RetrySubmit(ctx, e.RequestId, rpcMsg, config.AppConfig.L2SubmitRetry)
 	if err != nil {
 		log.Errorf("SigStart proposer submit NewBlock to RPC error, request id: %s, err: %v", e.RequestId, err)
 		s.removeSigMap(e.RequestId, false)
@@ -154,27 +150,6 @@ func (s *Signer) handleSigStartNewBlock(ctx context.Context, e types.MsgSignNewB
 	s.state.EventBus.Publish(state.SigFinish, e)
 
 	log.Infof("SigStart proposer submit NewBlock to RPC ok, request id: %s", e.RequestId)
-	return nil
-}
-
-func (s *Signer) handleSigStartNewDeposit(ctx context.Context, e types.MsgSignDeposit) error {
-	// do not send p2p here, it doesn't need to aggregate sign here
-	isProposer := s.IsProposer()
-	if isProposer {
-		log.Info("SigStart proposer submit NewDeposits to consensus")
-		// TODO test
-		err := s.retrySubmit(ctx, e.RequestId, e.Deposit, config.AppConfig.L2SubmitRetry)
-		if err != nil {
-			log.Errorf("SigStart proposer submit NewDeposit to RPC error, request id: %s, err: %v", e.RequestId, err)
-			// feedback SigFailed, deposit should module subscribe it to save UTXO or mark confirm
-			s.state.EventBus.Publish(state.SigFailed, e)
-			return err
-		}
-
-		// feedback SigFinish, deposit should module subscribe it to save UTXO or mark confirm
-		s.state.EventBus.Publish(state.SigFinish, e)
-	}
-
 	return nil
 }
 
@@ -216,7 +191,7 @@ func (s *Signer) handleSigReceiveNewBlock(ctx context.Context, e types.MsgSignNe
 			return nil
 		}
 
-		err = s.retrySubmit(ctx, e.RequestId, rpcMsg, config.AppConfig.L2SubmitRetry)
+		err = s.RetrySubmit(ctx, e.RequestId, rpcMsg, config.AppConfig.L2SubmitRetry)
 		if err != nil {
 			log.Errorf("SigReceive proposer submit NewBlock to RPC error, request id: %s, err: %v", e.RequestId, err)
 			s.removeSigMap(e.RequestId, false)
@@ -278,12 +253,56 @@ func (s *Signer) handleSigReceiveNewBlock(ctx context.Context, e types.MsgSignNe
 	}
 }
 
-func (s *Signer) handleSigReceiveNewDeposit(ctx context.Context, e types.MsgSignDeposit) error {
-	// not occur
+func (s *Signer) handleSigStartNewDeposit(ctx context.Context, e types.MsgSignDeposit) error {
+	// do not send p2p here, it doesn't need to aggregate sign here
+	isProposer := s.IsProposer()
+	if isProposer {
+		log.Info("DepositReceive proposer submit NewDeposits to consensus")
+		// TODO test
+
+		headers := make(map[uint64][]byte)
+		headers[e.BlockNumber] = e.BlockHeader
+		headersBytes, err := json.Marshal(headers)
+		if err != nil {
+			log.Errorf("Failed to marshal headers: %v", err)
+			return err
+		}
+
+		pubKey := relayertypes.DecodePublicKey(e.RelayerPubkey)
+		deposits := make([]*bitcointypes.Deposit, 1)
+		deposits[0] = &bitcointypes.Deposit{
+			Version:           e.Version,
+			BlockNumber:       e.BlockNumber,
+			TxIndex:           e.TxIndex,
+			NoWitnessTx:       e.NoWitnessTx,
+			OutputIndex:       e.OutputIndex,
+			IntermediateProof: e.IntermediateProof,
+			EvmAddress:        e.EvmAddress,
+			RelayerPubkey:     pubKey,
+		}
+
+		msgDeposits := &bitcointypes.MsgNewDeposits{
+			Proposer:     e.Proposer,
+			BlockHeaders: headersBytes,
+			Deposits:     deposits,
+		}
+
+		err = s.RetrySubmit(ctx, e.RequestId, msgDeposits, config.AppConfig.L2SubmitRetry)
+		if err != nil {
+			log.Errorf("DepositReceive proposer submit NewDeposit to RPC error, request id: %s, err: %v", e.RequestId, err)
+			// feedback SigFailed, deposit should module subscribe it to save UTXO or mark confirm
+			s.state.EventBus.Publish(state.SigFailed, e)
+			return err
+		}
+
+		// feedback SigFinish, deposit should module subscribe it to save UTXO or mark confirm
+		s.state.EventBus.Publish(state.SigFinish, e)
+		log.Infof("DepositReceive proposer submit MsgNewDeposit to consensus ok, request id: %s", e.RequestId)
+	}
 	return nil
 }
 
-func (s *Signer) retrySubmit(ctx context.Context, requestId string, msg interface{}, retries int) error {
+func (s *Signer) RetrySubmit(ctx context.Context, requestId string, msg interface{}, retries int) error {
 	var err error
 	for i := 0; i <= retries; i++ {
 		resultTx, err := s.layer2Listener.SubmitToConsensus(ctx, msg)
