@@ -222,7 +222,7 @@ func (s *State) UpdateL2InfoSequence(block uint64, sequence uint64) error {
 	if epochVoter.Height <= block {
 		epochVoter.UpdatedAt = time.Now()
 		epochVoter.Height = block
-		epochVoter.Sequence = sequence
+		epochVoter.Sequence = sequence + 1
 
 		err := s.saveEpochVoter(epochVoter)
 		if err != nil {
