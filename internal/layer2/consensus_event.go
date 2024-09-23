@@ -15,37 +15,35 @@ import (
 	relayertypes "github.com/goatnetwork/goat/x/relayer/types"
 )
 
-// processEvent returns a boolean indicating whether the relayer status requires a re-sync
-// and an error if the event processing fails
-func (lis *Layer2Listener) processEvent(block uint64, event abcitypes.Event) (bool, error) {
+func (lis *Layer2Listener) processEvent(block uint64, event abcitypes.Event) error {
 	switch event.Type {
 	case relayertypes.EventTypeNewEpoch:
-		return false, lis.processNewEpochEvent(block, event.Attributes)
+		return lis.processNewEpochEvent(block, event.Attributes)
 	case relayertypes.EventFinalizedProposal:
-		return false, lis.processFinalizedProposalEvent(block, event.Attributes)
+		return lis.processFinalizedProposalEvent(block, event.Attributes)
 	case relayertypes.EventElectedProposer:
-		return false, lis.processElectedProposerEvent(block, event.Attributes)
+		return lis.processElectedProposerEvent(block, event.Attributes)
 	case relayertypes.EventAcceptedProposer:
-		return false, lis.processAcceptedProposerEvent(block, event.Attributes)
+		return lis.processAcceptedProposerEvent(block, event.Attributes)
 	case relayertypes.EventVoterPending, relayertypes.EventVoterOnBoarding, relayertypes.EventVoterBoarded, relayertypes.EventVoterOffBoarding, relayertypes.EventVoterActivated, relayertypes.EventVoterDischarged:
-		return false, lis.processVoterEvent(block, event.Type, event.Attributes)
+		return lis.processVoterEvent(block, event.Type, event.Attributes)
 
 	case bitcointypes.EventTypeNewBlockHash:
-		return true, lis.processNewBtcBlockHash(block, event.Attributes)
+		return lis.processNewBtcBlockHash(block, event.Attributes)
 	case bitcointypes.EventTypeNewKey:
-		return false, lis.processNewWalletKey(block, event.Attributes)
+		return lis.processNewWalletKey(block, event.Attributes)
 	case bitcointypes.EventTypeNewDeposit:
-		return false, lis.processNewDeposit(block, event.Attributes)
+		return lis.processNewDeposit(block, event.Attributes)
 	case bitcointypes.EventTypeInitializeWithdrawal:
-		return true, lis.processNewWithdrawal(block, event.Attributes)
+		return lis.processNewWithdrawal(block, event.Attributes)
 	case bitcointypes.EventTypeWithdrawalCancellation:
-		return false, lis.processCancelWithdrawal(block, event.Attributes)
+		return lis.processCancelWithdrawal(block, event.Attributes)
 	case bitcointypes.EventTypeFinalizeWithdrawal:
-		return false, lis.processFinalizeWithdrawal(block, event.Attributes)
+		return lis.processFinalizeWithdrawal(block, event.Attributes)
 
 	default:
 		// log.Debugf("Unrecognized event type: %s", event.Type)
-		return false, nil
+		return nil
 	}
 }
 

@@ -332,36 +332,21 @@ func (lis *Layer2Listener) getGoatBlock(ctx context.Context, height uint64) erro
 		return fmt.Errorf("failed to get block results: %w", err)
 	}
 
-	needsSync := false
 	// Process events and handle logic
 	for _, txResult := range blockResults.TxsResults {
 		for _, event := range txResult.Events {
-			updateRelayer, err := lis.processEvent(height, event)
-			if err != nil {
+			if err := lis.processEvent(height, event); err != nil {
 				return fmt.Errorf("failed to process tx event: %w", err)
-			}
-			if !needsSync && updateRelayer {
-				needsSync = true
 			}
 		}
 	}
 
 	for _, event := range blockResults.FinalizeBlockEvents {
-		updateRelayer, err := lis.processEvent(height, event)
-		if err != nil {
+		if err := lis.processEvent(height, event); err != nil {
 			return fmt.Errorf("failed to process EndBlock event: %w", err)
-		}
-		if !needsSync && updateRelayer {
-			needsSync = true
 		}
 	}
 
-	if needsSync {
-		err := lis.processBlockVoters(height)
-		if err != nil {
-			return fmt.Errorf("failed to process block voters: %w", err)
-		}
-	}
 	// End block processing
 	if err := lis.processEndBlock(height); err != nil {
 		return fmt.Errorf("failed to process end block: %w", err)
