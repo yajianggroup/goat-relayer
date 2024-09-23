@@ -69,30 +69,34 @@ type BtcBlock struct {
 
 // Utxo model (wallet UTXO)
 type Utxo struct {
-	ID           uint      `gorm:"primaryKey" json:"id"`
-	Uid          string    `gorm:"not null" json:"uid"`
-	Txid         string    `gorm:"not null;index:unique_txid_out_index,unique" json:"txid"`
-	OutIndex     uint      `gorm:"not null;index:unique_txid_out_index,unique" json:"out_index"`
-	Amount       float64   `gorm:"type:decimal(20,8)" json:"amount"` // BTC precision up to 8 decimal places
-	Receiver     string    `gorm:"not null" json:"receiver"`         // it is MPC address here, or taproot (need collect)
-	Sender       string    `gorm:"not null" json:"sender"`
-	EvmAddr      string    `json:"evm_addr"`                      // deposit to L2
-	Source       string    `gorm:"not null" json:"source"`        // "deposit", "unknown"
-	ReceiverType string    `gorm:"not null" json:"receiver_type"` // "P2PKH", "PTR", "P2SH-P2WPKH", "P2WPKH"
-	Status       string    `gorm:"not null" json:"status"`        // "unconfirm", "confirmed", "pending", "spent"
-	UpdatedAt    time.Time `gorm:"not null" json:"updated_at"`
+	ID            uint      `gorm:"primaryKey" json:"id"`
+	Uid           string    `gorm:"not null" json:"uid"`
+	Txid          string    `gorm:"not null;index:unique_txid_out_index,unique" json:"txid"`
+	PkScript      []byte    `json:"pk_script"`
+	OutIndex      uint      `gorm:"not null;index:unique_txid_out_index,unique" json:"out_index"`
+	Amount        float64   `gorm:"type:decimal(20,8)" json:"amount"` // BTC precision up to 8 decimal places
+	Receiver      string    `gorm:"not null" json:"receiver"`         // it is MPC address here, or p2wsh (need collect)
+	WalletVersion string    `gorm:"not null" json:"wallet_vesion"`    // MPC wallet version, it always sets to tss version, "fireblocks:1:2" = fireblocks workspace 1 account 2
+	Sender        string    `gorm:"not null" json:"sender"`
+	EvmAddr       string    `json:"evm_addr"`                      // deposit to L2
+	Source        string    `gorm:"not null" json:"source"`        // "deposit", "unknown"
+	ReceiverType  string    `gorm:"not null" json:"receiver_type"` // P2PKH P2SH P2WSH P2WPKH P2TR
+	Status        string    `gorm:"not null" json:"status"`        // "unconfirm", "confirmed", "processed", "pending (spend out)", "spent"
+	ReceiveBlock  uint64    `gorm:"not null" json:"receive_block"` // recieve at BTC block height
+	SpentBlock    uint64    `gorm:"not null" json:"spent_block"`   // spent at BTC block height
+	UpdatedAt     time.Time `gorm:"not null" json:"updated_at"`
 }
 
 // Withdraw model (for managing withdrawals)
 type Withdraw struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	EvmTxId   string    `gorm:"not null;uniqueIndex" json:"evm_tx_id"`
-	Block     uint64    `gorm:"not null" json:"block"`
+	GoatBlock uint64    `gorm:"not null" json:"goat_block"`       // Goat block height
 	Amount    float64   `gorm:"type:decimal(20,8)" json:"amount"` // BTC precision up to 8 decimal places
 	MaxTxFee  uint      `gorm:"not null" json:"max_tx_fee"`       // Unit is satoshis
 	From      string    `gorm:"not null" json:"from"`
 	To        string    `gorm:"not null" json:"to"`
-	Status    string    `gorm:"not null" json:"status"` // "init", "signing", "pending", "processed"
+	Status    string    `gorm:"not null" json:"status"` // "create", "init", "signing", "pending", "processed"
 	OrderId   string    `json:"order_id"`               // update when signing
 	UpdatedAt time.Time `gorm:"not null" json:"updated_at"`
 }
@@ -104,7 +108,10 @@ type SendOrder struct {
 	Proposer  string    `gorm:"not null" json:"proposer"`
 	Amount    float64   `gorm:"type:decimal(20,8)" json:"amount"` // BTC precision up to 8 decimal places
 	MaxTxFee  uint      `gorm:"not null" json:"max_tx_fee"`
-	Status    string    `gorm:"not null" json:"status"` // "init", "signing", "pending", "feedback", "processed"
+	Status    string    `gorm:"not null" json:"status"`                          // "init", "signing", "pending", "rbf-request", "unconfirm", "confirmed", "processed"
+	OrderType string    `gorm:"not null" json:"order_type"`                      // "withdrawal", "consolidation"
+	BtcBlock  uint64    `gorm:"not null" json:"btc_block"`                       // BTC block height
+	Txid      string    `gorm:"not null;index:sendorder_txid_index" json:"txid"` // txid will update after signing status
 	UpdatedAt time.Time `gorm:"not null" json:"updated_at"`
 }
 
