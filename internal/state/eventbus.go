@@ -18,11 +18,12 @@ const (
 	SigFailed
 	SigTimeout
 	DepositReceive
+	WithdrawRequest
 	BlockScanned
 )
 
 func (e EventType) String() string {
-	return [...]string{"EventUnkown", "SigStart", "SigReceive", "SigFinish", "SigFailed", "SigTimeout", "DepositReceive", "BlockScanned"}[e]
+	return [...]string{"EventUnkown", "SigStart", "SigReceive", "SigFinish", "SigFailed", "SigTimeout", "DepositReceive", "WithdrawRequest", "BlockScanned"}[e]
 }
 
 type EventBus struct {

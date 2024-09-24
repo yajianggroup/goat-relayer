@@ -110,6 +110,7 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 							Sender:    addresses[0].EncodeAddress(),
 							Source:    "unknown",
 							Status:    "confirmed",
+							UpdatedAt: time.Now(),
 						})
 					}
 				}
@@ -154,6 +155,8 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 							ReceiverType:  receiverType,
 							Status:        "confirmed",
 							ReceiveBlock:  btcBlock.BlockNumber,
+							SpentBlock:    0,
+							UpdatedAt:     time.Now(),
 						})
 					}
 					vouts = append(vouts, &db.Vout{

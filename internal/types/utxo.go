@@ -27,6 +27,13 @@ type MsgUtxoDeposit struct {
 	Timestamp   int64  `json:"timestamp"`
 }
 
+// MsgUtxoWithdraw defines withdraw UTXO broadcast to p2p which received in relayer rpc
+type MsgUtxoWithdraw struct {
+	TxId      string `json:"tx_id"`
+	EvmAddr   string `json:"evm_addr"`
+	Timestamp int64  `json:"timestamp"`
+}
+
 type BtcBlockExt struct {
 	wire.MsgBlock
 
