@@ -434,7 +434,7 @@ func (s *Signer) removeSigMap(requestId string, reportTimeout bool) {
 	if reportTimeout {
 		if voteMap, ok := s.sigMap[requestId]; ok {
 			if voteMsg, ok := voteMap[s.address]; ok {
-				log.Debug("Report timeout when remove sig map, found msg, request id %s, proposer %s", requestId, s.address)
+				log.Debugf("Report timeout when remove sig map, found msg, request id %s, proposer %s", requestId, s.address)
 				s.state.EventBus.Publish(state.SigTimeout, voteMsg)
 			}
 		}

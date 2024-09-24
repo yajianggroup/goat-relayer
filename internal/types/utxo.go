@@ -39,9 +39,14 @@ func isOpReturn(txOut *wire.TxOut) bool {
 
 func parseOpReturnGoatMagic(data []byte) (common.Address, error) {
 	// Ensure the data is long enough to contain the magic bytes
-	if len(data) < len(GOAT_MAGIC_BYTES) {
+	if len(data) < len(GOAT_MAGIC_BYTES)+1 {
 		return common.Address{}, fmt.Errorf("data is too short, expected at least %d bytes, got %d", len(GOAT_MAGIC_BYTES), len(data))
 	}
+	dataLen := uint32(data[0])
+	if dataLen != 24 {
+		return common.Address{}, fmt.Errorf("data length is not expected 24, got %d", dataLen)
+	}
+	data = data[1:]
 	// Check if the data starts with GOAT_MAGIC_BYTES
 	if !bytes.HasPrefix(data, GOAT_MAGIC_BYTES) {
 		return common.Address{}, errors.New("data does not start with magic bytes")

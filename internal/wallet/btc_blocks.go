@@ -51,17 +51,14 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 			pubkeyBytes, err := base64.StdEncoding.DecodeString(pubkey.PubKey)
 			if err != nil {
 				log.Fatalf("Base64 decode pubkey %s err %v", pubkey.PubKey, err)
-				continue
 			}
 			p2pkhAddress, err := types.GenerateP2PKHAddress(pubkeyBytes, network)
 			if err != nil {
 				log.Fatalf("Gen P2PKH address from pubkey %s err %v", pubkey.PubKey, err)
-				continue
 			}
 			p2wpkhAddress, err := types.GenerateP2WPKHAddress(pubkeyBytes, network)
 			if err != nil {
 				log.Fatalf("Gen P2WPKH address from pubkey %s err %v", pubkey.PubKey, err)
-				continue
 			}
 
 			for _, tx := range btcBlock.Transactions {
