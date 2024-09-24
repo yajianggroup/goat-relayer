@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"time"
 
+	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/goatnetwork/goat-relayer/internal/config"
@@ -63,12 +64,14 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 				continue
 			}
 
-			var utxos []*db.Utxo
-			var vins []*db.Vin
-			var vouts []*db.Vout
-
 			for _, tx := range btcBlock.Transactions {
+				var utxos []*db.Utxo
+				var vins []*db.Vin
+				var vouts []*db.Vout
+				// isUtxo means it will save to utxo table
+				// isVin means it will save to vin|vout table
 				isUtxo, isVin := false, false
+				isWithdrawl, isDeposit, isConsolidation := false, false, false
 				for _, vin := range tx.TxIn {
 					_, addresses, requireSigs, err := txscript.ExtractPkScriptAddrs(vin.SignatureScript, network)
 					if err != nil {
@@ -87,15 +90,35 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 					if addresses[0].EncodeAddress() == p2pkhAddress.EncodeAddress() || addresses[0].EncodeAddress() == p2wpkhAddress.EncodeAddress() {
 						// should save vin db logic
 						isVin = true
+						// if TxOut len is 1 and receiver is self p2pkh|p2wpkh, it is consolidation
+						// if TxOut len is 2+, or len is 1 but receiver is not self, it is withdrawal with change
+						if len(tx.TxOut) == 1 {
+							_, outZeroAddresses, outSigs, err := txscript.ExtractPkScriptAddrs(tx.TxOut[0].PkScript, network)
+							if err == nil && outZeroAddresses != nil && outSigs == 1 {
+								if outZeroAddresses[0].EncodeAddress() == p2pkhAddress.EncodeAddress() || outZeroAddresses[0].EncodeAddress() == p2wpkhAddress.EncodeAddress() {
+									isConsolidation = true
+								} else {
+									isWithdrawl = true
+								}
+							}
+						} else {
+							isWithdrawl = true
+						}
 						vins = append(vins, &db.Vin{
+							OrderId:   "",
+							BtcHeight: btcBlock.BlockNumber,
 							Txid:      vin.PreviousOutPoint.Hash.String(),
 							OutIndex:  int(vin.PreviousOutPoint.Index),
 							SigScript: vin.SignatureScript,
 							Sender:    addresses[0].EncodeAddress(),
-							Source:    "withdraw",
+							Source:    "unknown",
+							Status:    "confirmed",
 						})
 					}
 				}
+
+				var receiverType, evmAddr string
+				isDeposit, evmAddr = types.IsUtxoGoatDepositV1(tx, []btcutil.Address{p2pkhAddress, p2wpkhAddress}, network)
 
 				for idx, vout := range tx.TxOut {
 					_, addresses, requireSigs, err := txscript.ExtractPkScriptAddrs(vout.PkScript, network)
@@ -112,13 +135,10 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 						continue
 					}
 
-					var receiverType, evmAddr string
 					if addresses[0].EncodeAddress() == p2pkhAddress.EncodeAddress() {
 						receiverType = "P2PKH"
-						evmAddr = ""
 					} else if addresses[0].EncodeAddress() == p2wpkhAddress.EncodeAddress() {
 						receiverType = "P2WPKH"
-						evmAddr = ""
 					}
 					if receiverType == "P2PKH" || receiverType == "P2WPKH" {
 						// should save vout db logic
@@ -133,7 +153,7 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 							WalletVersion: "1",
 							Sender:        vins[0].Sender,
 							EvmAddr:       evmAddr,
-							Source:        "deposit",
+							Source:        "unknown",
 							ReceiverType:  receiverType,
 							Status:        "confirmed",
 							ReceiveBlock:  btcBlock.BlockNumber,
@@ -148,8 +168,8 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 						Amount:     vout.Value,
 						Receiver:   addresses[0].EncodeAddress(),
 						Sender:     vins[0].Sender,
-						Source:     "deposit",
-						Status:     "init",
+						Source:     "unknown",
+						Status:     "confirmed",
 						UpdatedAt:  time.Now(),
 					})
 				}
@@ -157,6 +177,13 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 				if isUtxo {
 					// save utxo db, check if it is deposit from layer2
 					for _, utxo := range utxos {
+						if isDeposit {
+							utxo.Source = "deposit"
+						} else if isConsolidation {
+							utxo.Source = "consolidation"
+						} else if isWithdrawl {
+							utxo.Source = "withdrawal"
+						}
 						err = w.state.AddUtxo(utxo)
 						if err != nil {
 							// TODO if err, update btc height before fatal quit
@@ -167,10 +194,32 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 				if isVin {
 					// save vin, vout db, check if it is withdraw from layer2
 					for _, vin := range vins {
-						w.state.AddVin(vin)
+						if isDeposit {
+							vin.Source = "deposit"
+						} else if isConsolidation {
+							vin.Source = "consolidation"
+						} else if isWithdrawl {
+							vin.Source = "withdrawal"
+						}
+						err = w.state.AddOrUpdateVin(vin)
+						if err != nil {
+							// TODO if err, update btc height before fatal quit
+							log.Fatalf("Add vin %v err %v", vin, err)
+						}
 					}
 					for _, vout := range vouts {
-						w.state.AddVout(vout)
+						if isDeposit {
+							vout.Source = "deposit"
+						} else if isConsolidation {
+							vout.Source = "consolidation"
+						} else if isWithdrawl {
+							vout.Source = "withdrawal"
+						}
+						err = w.state.AddOrUpdateVout(vout)
+						if err != nil {
+							// TODO if err, update btc height before fatal quit
+							log.Fatalf("Add vout %v err %v", vout, err)
+						}
 					}
 				}
 

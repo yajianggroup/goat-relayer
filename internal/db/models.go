@@ -115,7 +115,7 @@ type Withdraw struct {
 	MaxTxFee  uint      `gorm:"not null" json:"max_tx_fee"`       // Unit is satoshis
 	From      string    `gorm:"not null" json:"from"`
 	To        string    `gorm:"not null" json:"to"`
-	Status    string    `gorm:"not null" json:"status"` // "create", "init", "signing", "pending", "processed"
+	Status    string    `gorm:"not null" json:"status"` // "create", "init", "signing", "pending", "unconfirm", "confirmed", "processed"
 	OrderId   string    `json:"order_id"`               // update when signing
 	UpdatedAt time.Time `gorm:"not null" json:"updated_at"`
 }
@@ -144,7 +144,7 @@ type Vin struct {
 	SigScript []byte    `json:"sig_script"`
 	Sender    string    `json:"sender"`
 	Source    string    `gorm:"not null" json:"source"` // "withdraw", "unknown"
-	Status    string    `gorm:"not null" json:"status"` // "init", "signing", "pending", "processed"
+	Status    string    `gorm:"not null" json:"status"` // "init", "signing", "pending", "unconfirm", "confirmed", "processed"
 	UpdatedAt time.Time `gorm:"not null" json:"updated_at"`
 }
 
@@ -160,7 +160,7 @@ type Vout struct {
 	Receiver   string    `gorm:"not null" json:"receiver"` // withdraw To
 	Sender     string    `json:"sender"`                   // MPC address
 	Source     string    `gorm:"not null" json:"source"`   // "withdraw", "unknown"
-	Status     string    `gorm:"not null" json:"status"`   // "init", "signing", "pending", "processed"
+	Status     string    `gorm:"not null" json:"status"`   // "init", "signing", "pending", "unconfirm", "confirmed", "processed"
 	UpdatedAt  time.Time `gorm:"not null" json:"updated_at"`
 }
 
