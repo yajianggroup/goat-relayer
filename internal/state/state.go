@@ -206,3 +206,11 @@ func (s *State) GetDepositState() DepositState {
 
 	return s.depositState
 }
+
+// UpdateDepositState update the DepositState from memory
+func (s *State) UpdateDepositState(deposits []*db.Deposit) {
+	s.depositMu.RLock()
+	defer s.depositMu.RUnlock()
+
+	s.depositState.UnconfirmQueue = deposits
+}

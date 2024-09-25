@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"strings"
 	"time"
 
@@ -289,19 +288,9 @@ func (s *Signer) handleSigStartNewDeposit(ctx context.Context, e types.MsgSignDe
 
 		err = s.RetrySubmit(ctx, e.RequestId, msgDeposits, config.AppConfig.L2SubmitRetry)
 		if err != nil {
-			log.Errorf("proposer submit NewDeposit to consensus error, request id: %s, err: %v", e.RequestId, err)
+			log.Errorf("Proposer submit NewDeposit to consensus error, request id: %s, err: %v", e.RequestId, err)
 			// feedback SigFailed, deposit should module subscribe it to save UTXO or mark confirm
 			s.state.EventBus.Publish(state.SigFailed, e)
-			return err
-		}
-
-		hash, err := chainhash.NewHash(e.TxHash)
-		if err != nil {
-			return err
-		}
-
-		err = s.state.UpdateProcessedDeposit(hash.String())
-		if err != nil {
 			return err
 		}
 
