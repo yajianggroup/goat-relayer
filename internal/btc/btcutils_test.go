@@ -73,11 +73,24 @@ func TestP2wshDeposit(t *testing.T) {
 	}
 
 	evmAddress_, _ := hex.DecodeString(evmAddress)
-	const prevTxId = "1a4ecdb32ca38287e862de3d7e21e551a0d76645d72cb7229058600b7a817553"
-	const prevTxout = 0
-	const amount = 1e8
-	const fee = 1e3
-	rawTxHex, err := P2wshDeposit(&chaincfg.RegressionNetParams, privKey, evmAddress_, prevTxId, prevTxout, amount, fee)
+
+	evmAddresses := [][]byte{
+		evmAddress_,
+	}
+
+	prevTxIds := []string{
+		"1a4ecdb32ca38287e862de3d7e21e551a0d76645d72cb7229058600b7a817553",
+	}
+
+	prevTxouts := []int{
+		0,
+	}
+	amounts := []int64{
+		1e8,
+	}
+
+	rawTxHex, err := P2wshDeposit(&chaincfg.RegressionNetParams, privKey, evmAddresses, prevTxIds, prevTxouts, amounts,
+		1e3)
 	assert.Nil(t, err)
 	assert.NotEmpty(t, rawTxHex)
 
@@ -90,4 +103,5 @@ func TestP2wshDeposit(t *testing.T) {
 
 	assert.NotNil(t, tx.TxOut)
 	assert.NotNil(t, tx.TxIn)
+	assert.Equal(t, len(tx.TxIn), len(evmAddresses))
 }

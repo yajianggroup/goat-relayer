@@ -92,78 +92,89 @@ func VerifyTransaction(tx wire.MsgTx, txHash string, evmAddress string) error {
 	return nil
 }
 
-func P2wshDeposit(netwk *chaincfg.Params, tssGroupKey *btcec.PrivateKey, evmAddress []byte,
-	prevTxId string, prevTxout int, amount int64, fee int64) (string, error) {
-	redeemScript, err := txscript.NewScriptBuilder().
-		AddData(evmAddress).
-		AddOp(txscript.OP_DROP).
-		AddData(tssGroupKey.PubKey().SerializeCompressed()).
-		AddOp(txscript.OP_CHECKSIG).Script()
-	if err != nil {
-		return "", fmt.Errorf("failed to build redeemScript: %v", err)
+func P2wshDeposit(netwk *chaincfg.Params, tssGroupKey *btcec.PrivateKey, evmAddresses [][]byte, prevTxIds []string,
+	prevTxouts []int, amounts []int64, fee int64) (string, error) {
+	if len(prevTxIds) != len(prevTxouts) || len(prevTxouts) != len(amounts) || len(evmAddresses) != len(prevTxIds) {
+		return "", fmt.Errorf("mismatched input lengths")
 	}
 
-	witnessProg := sha256.Sum256(redeemScript)
-	//depositAddress, err := btcutil.NewAddressWitnessScriptHash(witnessProg[:], netwk)
-	//if err != nil {
-	//	return "", fmt.Errorf("failed to build depositAddress: %v", err)
-	//}
-	//fmt.Println("depositAddress", depositAddress.EncodeAddress())
+	// Create a new transaction
+	newtx := wire.NewMsgTx(2)
 
-	tssGroupAddress, err := btcutil.NewAddressWitnessPubKeyHash(btcutil.Hash160(tssGroupKey.PubKey().SerializeCompressed()), netwk)
-	if err != nil {
-		return "", fmt.Errorf("failed to build tssGroupAddress: %v", err)
-	}
+	totalInputAmount := int64(0)
+	for i, evmAddress := range evmAddresses {
+		// Create redeemScript for each evmAddress
+		redeemScript, err := txscript.NewScriptBuilder().
+			AddData(evmAddress).
+			AddOp(txscript.OP_DROP).
+			AddData(tssGroupKey.PubKey().SerializeCompressed()).
+			AddOp(txscript.OP_CHECKSIG).Script()
+		if err != nil {
+			return "", fmt.Errorf("failed to build redeemScript: %v", err)
+		}
 
-	{
-		newtx := wire.NewMsgTx(2)
+		witnessProg := sha256.Sum256(redeemScript)
 
-		prevTxid, err := chainhash.NewHashFromStr(prevTxId)
+		// Add the UTXO inputs
+		prevTxid, err := chainhash.NewHashFromStr(prevTxIds[i])
 		if err != nil {
 			return "", fmt.Errorf("failed to build prevTxid: %v", err)
 		}
 
+		// Script for previous UTXO
 		prevPkScript, err := txscript.NewScriptBuilder().AddOp(txscript.OP_0).AddData(witnessProg[:]).Script()
 		if err != nil {
 			return "", fmt.Errorf("failed to build prevPkScript: %v", err)
 		}
 
-		// txout to the internal tss group address
-		{
-			outputAddress, err := txscript.PayToAddrScript(tssGroupAddress)
-			if err != nil {
-				return "", fmt.Errorf("failed to build outputAddress: %v", err)
-			}
-			txout := wire.NewTxOut(amount-fee, outputAddress)
-			newtx.AddTxOut(txout)
+		txin := wire.NewTxIn(wire.NewOutPoint(prevTxid, uint32(prevTxouts[i])), nil, nil)
+		newtx.AddTxIn(txin)
+
+		// Update total input amount
+		totalInputAmount += amounts[i]
+
+		// Create the witness signature for each input
+		sigHashes := txscript.NewTxSigHashes(newtx,
+			txscript.NewCannedPrevOutputFetcher(prevPkScript, amounts[i]))
+
+		witSig, err := txscript.RawTxInWitnessSignature(
+			newtx, sigHashes, i,
+			amounts[i], redeemScript,
+			txscript.SigHashAll, tssGroupKey,
+		)
+		if err != nil {
+			return "", fmt.Errorf("failed to build witSig: %v", err)
 		}
 
-		// txin, spend the user deposit
-		{
-			const txIdx = 0
-			txin := wire.NewTxIn(wire.NewOutPoint(prevTxid, uint32(prevTxout)), nil, nil)
-			newtx.AddTxIn(txin)
-
-			sigHashes := txscript.NewTxSigHashes(newtx,
-				txscript.NewCannedPrevOutputFetcher(prevPkScript, amount))
-
-			witSig, err := txscript.RawTxInWitnessSignature(
-				newtx, sigHashes, txIdx,
-				amount, redeemScript,
-				txscript.SigHashAll, tssGroupKey,
-			)
-			if err != nil {
-				return "", fmt.Errorf("failed to build witSig: %v", err)
-			}
-			// witness = <unlock script> + <redeem script>
-			// unlock script should be splited, refer to bip141 for the details
-			txin.Witness = wire.TxWitness{witSig, redeemScript}
-		}
-
-		txbuf := bytes.NewBuffer(nil)
-		if err := newtx.Serialize(txbuf); err != nil {
-			return "", fmt.Errorf("failed to build txbuf: %v", err)
-		}
-		return hex.EncodeToString(txbuf.Bytes()), nil
+		// Add witness data
+		txin.Witness = wire.TxWitness{witSig, redeemScript}
 	}
+
+	// Output to the internal TSS group address
+	tssGroupAddress, err := btcutil.NewAddressWitnessPubKeyHash(btcutil.Hash160(tssGroupKey.PubKey().SerializeCompressed()), netwk)
+	if err != nil {
+		return "", fmt.Errorf("failed to build tssGroupAddress: %v", err)
+	}
+
+	outputAddress, err := txscript.PayToAddrScript(tssGroupAddress)
+	if err != nil {
+		return "", fmt.Errorf("failed to build outputAddress: %v", err)
+	}
+
+	// Deduct fee and create output
+	totalOutputAmount := totalInputAmount - fee
+	if totalOutputAmount <= 0 {
+		return "", fmt.Errorf("output amount is too small")
+	}
+
+	txout := wire.NewTxOut(totalOutputAmount, outputAddress)
+	newtx.AddTxOut(txout)
+
+	// Serialize the transaction
+	txbuf := bytes.NewBuffer(nil)
+	if err := newtx.Serialize(txbuf); err != nil {
+		return "", fmt.Errorf("failed to build txbuf: %v", err)
+	}
+
+	return hex.EncodeToString(txbuf.Bytes()), nil
 }
