@@ -35,16 +35,16 @@ func (s *UtxoServer) Start(ctx context.Context) {
 	addr := ":" + config.AppConfig.RPCPort
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+		log.Fatalf("Failed to listen: %v", err)
 	}
 
 	server := grpc.NewServer()
 	pb.RegisterBitcoinLightWalletServer(server, s)
 	reflection.Register(server)
 
-	log.Infof("gRPC server is running on port %s", config.AppConfig.RPCPort)
+	log.Infof("GRPC server is running on port %s", config.AppConfig.RPCPort)
 	if err := server.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
+		log.Fatalf("Failed to serve: %v", err)
 	}
 }
 

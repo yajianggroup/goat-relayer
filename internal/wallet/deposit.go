@@ -44,19 +44,22 @@ func (w *WalletServer) depositLoop(ctx context.Context) {
 func (w *WalletServer) processConfirmedDeposit(ctx context.Context) {
 	for {
 		queues := w.state.GetDepositState().UnconfirmQueue
-		if len(queues) != 0 {
-			for _, queue := range queues {
-				tx := DepositTransaction{
-					TxHash:      queue.TxHash,
-					RawTx:       queue.RawTx,
-					EvmAddress:  queue.EvmAddr,
-					SignVersion: queue.SignVersion,
-				}
-				go w.confirmingDeposit(ctx, tx, 0)
-			}
-		} else {
+		if len(queues) == 0 {
 			time.Sleep(5 * time.Second)
+			continue
 		}
+
+		deposit := queues[0]
+		queues = queues[1:] // remove the first element
+		w.state.UpdateDepositState(queues)
+
+		tx := DepositTransaction{
+			TxHash:      deposit.TxHash,
+			RawTx:       deposit.RawTx,
+			EvmAddress:  deposit.EvmAddr,
+			SignVersion: deposit.SignVersion,
+		}
+		go w.confirmingDeposit(ctx, tx, 0)
 	}
 }
 
@@ -122,12 +125,12 @@ func (w *WalletServer) confirmingDeposit(ctx context.Context, tx DepositTransact
 
 		msgSignDeposit, err := newMsgSignDeposit(tx, proposer, depositKey, merkleRoot, proof, txIndex)
 		if err != nil {
-			log.Errorf("newMsgSignDeposit err: %v", err)
+			log.Errorf("NewMsgSignDeposit err: %v", err)
 			return
 		}
 		w.state.EventBus.Publish(internalstate.SigStart, *msgSignDeposit)
 
-		log.Infof("p2p publish msgSignDeposit success, request id: %s", requestId)
+		log.Infof("P2P publish msgSignDeposit success, request id: %s", requestId)
 	}
 	// update Deposit status to confirmed
 	err = w.state.SaveConfirmDeposit(tx.TxHash, tx.RawTx, tx.EvmAddress)
@@ -136,7 +139,7 @@ func (w *WalletServer) confirmingDeposit(ctx context.Context, tx DepositTransact
 		return
 	}
 
-	log.Infof("ConfirmedDeposit success, blockHeight: %v", tx.BlockHeight)
+	log.Infof("Confirmed deposit success, blockHeight: %v", tx.BlockHeight)
 }
 
 func newMsgSignDeposit(tx DepositTransaction, proposer string, pubKey []byte, merkleRoot []byte, proof []byte, txIndex uint32) (*types.MsgSignDeposit, error) {
@@ -144,17 +147,17 @@ func newMsgSignDeposit(tx DepositTransaction, proposer string, pubKey []byte, me
 
 	txHash, err := chainhash.NewHashFromStr(tx.TxHash)
 	if err != nil {
-		return nil, fmt.Errorf("NewHashFromStr err: %v", err)
+		return nil, fmt.Errorf("newHashFromStr err: %v", err)
 	}
 
 	decodeString, err := hex.DecodeString(tx.RawTx)
 	if err != nil {
-		return nil, fmt.Errorf("DecodeString err: %v", err)
+		return nil, fmt.Errorf("decodeString err: %v", err)
 	}
 
 	noWitnessTx, err := btc.SerializeNoWitnessTx(decodeString)
 	if err != nil {
-		return nil, fmt.Errorf("SerializeNoWitnessTx err: %v", err)
+		return nil, fmt.Errorf("serializeNoWitnessTx err: %v", err)
 	}
 
 	headers := make(map[uint64][]byte)
