@@ -29,12 +29,12 @@ func (w *WalletServer) depositLoop(ctx context.Context) {
 		case deposit := <-w.depositCh:
 			depositData, ok := deposit.(types.MsgUtxoDeposit)
 			if !ok {
-				log.Errorf("Invalid deposit data type")
+				log.Errorf("invalid deposit data type")
 				continue
 			}
 			err := w.state.AddUnconfirmDeposit(depositData.TxId, depositData.RawTx, depositData.EvmAddr, depositData.SignVersion)
 			if err != nil {
-				log.Errorf("Failed to add unconfirmed deposit: %v", err)
+				log.Errorf("failed to add unconfirmed deposit: %v", err)
 				continue
 			}
 		}
@@ -65,7 +65,7 @@ func (w *WalletServer) processConfirmedDeposit(ctx context.Context) {
 
 func (w *WalletServer) confirmingDeposit(ctx context.Context, tx DepositTransaction, attempt int) {
 	if attempt > 7 {
-		log.Errorf("Confirmed deposit discarded after 7 attempts, txHahs: %s", tx.TxHash)
+		log.Errorf("confirmed deposit discarded after 7 attempts, txHahs: %s", tx.TxHash)
 		return
 	}
 
@@ -73,10 +73,10 @@ func (w *WalletServer) confirmingDeposit(ctx context.Context, tx DepositTransact
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// if tx not found, retry
-			log.Info("confirmed deposit not found, retrying...")
+			log.Info("Confirmed deposit not found, retrying...")
 		} else {
 			// if tx validate or other error found, add attempt
-			log.Infof("confirmed deposit error: %v, attempt %d retrying...", err, attempt)
+			log.Infof("Confirmed deposit error: %v, attempt %d retrying...", err, attempt)
 			attempt++
 		}
 		// TODO sleep how long?
@@ -93,7 +93,7 @@ func (w *WalletServer) confirmingDeposit(ctx context.Context, tx DepositTransact
 	var parsedHashes []chainhash.Hash
 	err = json.Unmarshal([]byte(block.TxHashes), &parsedHashes)
 	if err != nil {
-		log.Errorf("Unmarshal TxHashes error: %v", err)
+		log.Errorf("unmarshal TxHashes error: %v", err)
 		return
 	}
 
@@ -106,7 +106,7 @@ func (w *WalletServer) confirmingDeposit(ctx context.Context, tx DepositTransact
 	// generate spv proof
 	merkleRoot, proof, txIndex, err := btc.GenerateSPVProof(tx.TxHash, tx.TxHashList)
 	if err != nil {
-		log.Errorf("GenerateSPVProof err: %v", err)
+		log.Errorf("generateSPVProof err: %v", err)
 		return
 	}
 
@@ -115,7 +115,7 @@ func (w *WalletServer) confirmingDeposit(ctx context.Context, tx DepositTransact
 		l2Info := w.state.GetL2Info()
 		depositKey, err := hex.DecodeString(l2Info.DepositKey)
 		if err != nil {
-			log.Errorf("DecodeString DepositKey err: %v", err)
+			log.Errorf("decodeString DepositKey err: %v", err)
 			return
 		}
 
@@ -125,21 +125,21 @@ func (w *WalletServer) confirmingDeposit(ctx context.Context, tx DepositTransact
 
 		msgSignDeposit, err := newMsgSignDeposit(tx, proposer, depositKey, merkleRoot, proof, txIndex)
 		if err != nil {
-			log.Errorf("NewMsgSignDeposit err: %v", err)
+			log.Errorf("newMsgSignDeposit err: %v", err)
 			return
 		}
 		w.state.EventBus.Publish(internalstate.SigStart, *msgSignDeposit)
 
-		log.Infof("p2p publish msgSignDeposit success, request id: %s", requestId)
+		log.Infof("P2P publish msgSignDeposit success, request id: %s", requestId)
 	}
 	// update Deposit status to confirmed
 	err = w.state.SaveConfirmDeposit(tx.TxHash, tx.RawTx, tx.EvmAddress)
 	if err != nil {
-		log.Errorf("SaveConfirmDeposit err: %v", err)
+		log.Errorf("saveConfirmDeposit err: %v", err)
 		return
 	}
 
-	log.Infof("confirmed deposit success, blockHeight: %v", tx.BlockHeight)
+	log.Infof("Confirmed deposit success, blockHeight: %v", tx.BlockHeight)
 }
 
 func newMsgSignDeposit(tx DepositTransaction, proposer string, pubKey []byte, merkleRoot []byte, proof []byte, txIndex uint32) (*types.MsgSignDeposit, error) {
@@ -147,17 +147,17 @@ func newMsgSignDeposit(tx DepositTransaction, proposer string, pubKey []byte, me
 
 	txHash, err := chainhash.NewHashFromStr(tx.TxHash)
 	if err != nil {
-		return nil, fmt.Errorf("NewHashFromStr err: %v", err)
+		return nil, fmt.Errorf("newHashFromStr err: %v", err)
 	}
 
 	decodeString, err := hex.DecodeString(tx.RawTx)
 	if err != nil {
-		return nil, fmt.Errorf("DecodeString err: %v", err)
+		return nil, fmt.Errorf("decodeString err: %v", err)
 	}
 
 	noWitnessTx, err := btc.SerializeNoWitnessTx(decodeString)
 	if err != nil {
-		return nil, fmt.Errorf("SerializeNoWitnessTx err: %v", err)
+		return nil, fmt.Errorf("serializeNoWitnessTx err: %v", err)
 	}
 
 	headers := make(map[uint64][]byte)

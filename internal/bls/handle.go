@@ -257,13 +257,13 @@ func (s *Signer) handleSigStartNewDeposit(ctx context.Context, e types.MsgSignDe
 	// do not send p2p here, it doesn't need to aggregate sign here
 	isProposer := s.IsProposer()
 	if isProposer {
-		log.Info("proposer submit NewDeposits to consensus")
+		log.Info("Proposer submit NewDeposits to consensus")
 
 		headers := make(map[uint64][]byte)
 		headers[e.BlockNumber] = e.BlockHeader
 		headersBytes, err := json.Marshal(headers)
 		if err != nil {
-			log.Errorf("Failed to marshal headers: %v", err)
+			log.Errorf("failed to marshal headers: %v", err)
 			return err
 		}
 
@@ -288,7 +288,7 @@ func (s *Signer) handleSigStartNewDeposit(ctx context.Context, e types.MsgSignDe
 
 		err = s.RetrySubmit(ctx, e.RequestId, msgDeposits, config.AppConfig.L2SubmitRetry)
 		if err != nil {
-			log.Errorf("Proposer submit NewDeposit to consensus error, request id: %s, err: %v", e.RequestId, err)
+			log.Errorf("proposer submit NewDeposit to consensus error, request id: %s, err: %v", e.RequestId, err)
 			// feedback SigFailed, deposit should module subscribe it to save UTXO or mark confirm
 			s.state.EventBus.Publish(state.SigFailed, e)
 			return err
@@ -296,7 +296,7 @@ func (s *Signer) handleSigStartNewDeposit(ctx context.Context, e types.MsgSignDe
 
 		// feedback SigFinish, deposit should module subscribe it to save UTXO or mark confirm
 		s.state.EventBus.Publish(state.SigFinish, e)
-		log.Infof("proposer submit MsgNewDeposit to consensus ok, request id: %s", e.RequestId)
+		log.Infof("Proposer submit MsgNewDeposit to consensus ok, request id: %s", e.RequestId)
 	}
 	return nil
 }

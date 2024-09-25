@@ -42,7 +42,7 @@ func (s *UtxoServer) Start(ctx context.Context) {
 	pb.RegisterBitcoinLightWalletServer(server, s)
 	reflection.Register(server)
 
-	log.Infof("gRPC server is running on port %s", config.AppConfig.RPCPort)
+	log.Infof("GRPC server is running on port %s", config.AppConfig.RPCPort)
 	if err := server.Serve(lis); err != nil {
 		log.Fatalf("failed to serve: %v", err)
 	}
@@ -63,19 +63,19 @@ func (s *UtxoServer) NewTransaction(ctx context.Context, req *pb.NewTransactionR
 
 	var tx wire.MsgTx
 	if err := tx.Deserialize(bytes.NewReader(rawTxBytes)); err != nil {
-		log.Errorf("Failed to decode transaction: %v", err)
+		log.Errorf("failed to decode transaction: %v", err)
 		return nil, err
 	}
 
 	isTrue, signVersion, err := s.VerifyDeposit(tx, req.EvmAddress)
 	if err != nil || !isTrue {
-		log.Errorf("Failed to verify deposit: %v", err)
+		log.Errorf("failed to verify deposit: %v", err)
 		return nil, err
 	}
 
 	err = s.state.AddUnconfirmDeposit(req.TransactionId, req.RawTransaction, req.EvmAddress, signVersion)
 	if err != nil {
-		log.Errorf("Failed to add unconfirmed deposit: %v", err)
+		log.Errorf("failed to add unconfirmed deposit: %v", err)
 		return nil, err
 	}
 
