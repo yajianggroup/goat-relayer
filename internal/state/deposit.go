@@ -89,6 +89,13 @@ func (s *State) UpdateProcessedDeposit(txHash string) error {
 
 	deposit, err := s.queryDepositByTxHash(txHash)
 	if err != nil {
+		// query db failed, update cache
+		s.depositState.Latest = db.Deposit{
+			TxHash:    deposit.TxHash,
+			RawTx:     deposit.RawTx,
+			EvmAddr:   deposit.EvmAddr,
+			UpdatedAt: time.Now(),
+		}
 		return err
 	}
 	deposit.Status = "processed"

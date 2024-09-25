@@ -3,52 +3,18 @@ package wallet
 import (
 	"context"
 
-	"github.com/goatnetwork/goat-relayer/internal/bls"
-	"github.com/goatnetwork/goat-relayer/internal/db"
-	"github.com/goatnetwork/goat-relayer/internal/state"
 	"github.com/goatnetwork/goat-relayer/internal/types"
 	log "github.com/sirupsen/logrus"
-	"gorm.io/gorm"
 )
 
-// Withdraw struct
-type Withdraw struct {
-	state   *state.State
-	signer  *bls.Signer
-	cacheDb *gorm.DB
-	lightDb *gorm.DB
-
-	confirmWithdrawCh chan interface{}
-}
-
-// NewWithdraw creates a new Withdraw instance
-func NewWithdraw(st *state.State, signer *bls.Signer, dbm *db.DatabaseManager) *Withdraw {
-	cacheDb := dbm.GetBtcCacheDB()
-	lightDb := dbm.GetBtcLightDB()
-	return &Withdraw{
-		state:             st,
-		signer:            signer,
-		cacheDb:           cacheDb,
-		lightDb:           lightDb,
-		confirmWithdrawCh: make(chan interface{}, 100),
-	}
-}
-
-// Start starts the withdraw process
-func (w *Withdraw) Start(ctx context.Context) {
-	w.state.EventBus.Subscribe(state.WithdrawRequest, w.confirmWithdrawCh)
-	go w.withdrawLoop(ctx)
-	go w.ProcessConfirmedWithdraw(ctx)
-}
-
 // withdrawLoop handles unconfirmed withdrawals
-func (w *Withdraw) withdrawLoop(ctx context.Context) {
+func (w *WalletServer) withdrawLoop(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
 			log.Info("UnConfirm withdraw query stopping...")
 			return
-		case withdraw := <-w.confirmWithdrawCh:
+		case withdraw := <-w.withdrawCh:
 			withdrawData, ok := withdraw.(types.MsgUtxoWithdraw)
 			if !ok {
 				log.Errorf("Invalid withdraw data type")
@@ -68,13 +34,13 @@ func (w *Withdraw) withdrawLoop(ctx context.Context) {
 }
 
 // ProcessConfirmedWithdraw processes confirmed withdrawals
-func (w *Withdraw) ProcessConfirmedWithdraw(ctx context.Context) {
+func (w *WalletServer) processConfirmedWithdraw(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
 			log.Info("Confirmed withdraw query stopping...")
 			return
-		case withdraw := <-w.confirmWithdrawCh:
+		case withdraw := <-w.withdrawCh:
 			withdrawData, ok := withdraw.(types.MsgUtxoWithdraw)
 			if !ok {
 				log.Errorf("Invalid withdraw data type")
