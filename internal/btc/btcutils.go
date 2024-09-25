@@ -93,7 +93,7 @@ func VerifyTransaction(tx wire.MsgTx, txHash string, evmAddress string) error {
 }
 
 func P2wshDeposit(netwk *chaincfg.Params, tssGroupKey *btcec.PrivateKey, evmAddress []byte,
-	prevTxId string, prevTxout int) (string, error) {
+	prevTxId string, prevTxout int, amount int64, fee int64) (string, error) {
 	redeemScript, err := txscript.NewScriptBuilder().
 		AddData(evmAddress).
 		AddOp(txscript.OP_DROP).
@@ -118,9 +118,6 @@ func P2wshDeposit(netwk *chaincfg.Params, tssGroupKey *btcec.PrivateKey, evmAddr
 	{
 		newtx := wire.NewMsgTx(2)
 
-		const prevAmountSat = 1e8
-		const curAmountSat = prevAmountSat - 1e3
-
 		prevTxid, err := chainhash.NewHashFromStr(prevTxId)
 		if err != nil {
 			return "", fmt.Errorf("failed to build prevTxid: %v", err)
@@ -137,7 +134,7 @@ func P2wshDeposit(netwk *chaincfg.Params, tssGroupKey *btcec.PrivateKey, evmAddr
 			if err != nil {
 				return "", fmt.Errorf("failed to build outputAddress: %v", err)
 			}
-			txout := wire.NewTxOut(curAmountSat, outputAddress)
+			txout := wire.NewTxOut(amount-fee, outputAddress)
 			newtx.AddTxOut(txout)
 		}
 
@@ -148,11 +145,11 @@ func P2wshDeposit(netwk *chaincfg.Params, tssGroupKey *btcec.PrivateKey, evmAddr
 			newtx.AddTxIn(txin)
 
 			sigHashes := txscript.NewTxSigHashes(newtx,
-				txscript.NewCannedPrevOutputFetcher(prevPkScript, prevAmountSat))
+				txscript.NewCannedPrevOutputFetcher(prevPkScript, amount))
 
 			witSig, err := txscript.RawTxInWitnessSignature(
 				newtx, sigHashes, txIdx,
-				prevAmountSat, redeemScript,
+				amount, redeemScript,
 				txscript.SigHashAll, tssGroupKey,
 			)
 			if err != nil {
