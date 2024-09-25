@@ -36,11 +36,11 @@ func (lis *Layer2Listener) processEvent(block uint64, event abcitypes.Event) err
 	case bitcointypes.EventTypeNewDeposit:
 		return lis.processNewDeposit(block, event.Attributes)
 	case bitcointypes.EventTypeWithdrawalCancellation:
-		return lis.processRequestCancelWithdrawal(block, event.Attributes)
+		return lis.processUserRequestCancelWithdrawal(block, event.Attributes)
 	case bitcointypes.EventTypeWithdrawalRequest:
-		return lis.processRequestWithdrawal(block, event.Attributes)
+		return lis.processUserRequestWithdrawal(block, event.Attributes)
 	case bitcointypes.EventTypeWithdrawalReplace:
-		return lis.processRequestReplaceWithdrawal(block, event.Attributes)
+		return lis.processUserRequestReplaceWithdrawal(block, event.Attributes)
 	case bitcointypes.EventTypeInitializeWithdrawal:
 		return lis.processNewWithdrawal(block, event.Attributes)
 	case bitcointypes.EventTypeApproveCancellation:
@@ -124,7 +124,7 @@ func (lis *Layer2Listener) processBlockVoters(block uint64) error {
 	return err
 }
 
-func (lis *Layer2Listener) processRequestCancelWithdrawal(block uint64, attributes []abcitypes.EventAttribute) error {
+func (lis *Layer2Listener) processUserRequestCancelWithdrawal(block uint64, attributes []abcitypes.EventAttribute) error {
 	// TODO check uint64
 	var id string
 	for _, attr := range attributes {
@@ -141,7 +141,7 @@ func (lis *Layer2Listener) processRequestCancelWithdrawal(block uint64, attribut
 	return nil
 }
 
-func (lis *Layer2Listener) processRequestReplaceWithdrawal(block uint64, attributes []abcitypes.EventAttribute) error {
+func (lis *Layer2Listener) processUserRequestReplaceWithdrawal(block uint64, attributes []abcitypes.EventAttribute) error {
 	var txid string
 	var txPrice uint64
 	for _, attr := range attributes {
@@ -163,7 +163,7 @@ func (lis *Layer2Listener) processRequestReplaceWithdrawal(block uint64, attribu
 	return nil
 }
 
-func (lis *Layer2Listener) processRequestWithdrawal(block uint64, attributes []abcitypes.EventAttribute) error {
+func (lis *Layer2Listener) processUserRequestWithdrawal(block uint64, attributes []abcitypes.EventAttribute) error {
 	var id string
 	var txid string
 	var address string
