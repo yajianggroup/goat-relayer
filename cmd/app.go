@@ -16,7 +16,7 @@ import (
 	"github.com/goatnetwork/goat-relayer/internal/p2p"
 	"github.com/goatnetwork/goat-relayer/internal/rpc"
 	"github.com/goatnetwork/goat-relayer/internal/state"
-	"github.com/goatnetwork/goat-relayer/internal/utxo"
+	"github.com/goatnetwork/goat-relayer/internal/wallet"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -29,7 +29,7 @@ type Application struct {
 	LibP2PService   *p2p.LibP2PService
 	BTCListener     *btc.BTCListener
 	UTXOService     *rpc.UtxoServer
-	Deposit         *utxo.Deposit
+	WalletService   *wallet.WalletServer
 }
 
 func NewApplication() *Application {
@@ -43,7 +43,7 @@ func NewApplication() *Application {
 	httpServer := http.NewHTTPServer(libP2PService, state, dbm)
 	btcListener := btc.NewBTCListener(libP2PService, state, dbm)
 	utxoService := rpc.NewUtxoServer(state, layer2Listener)
-	deposit := utxo.NewDeposit(state, signer, dbm)
+	walletService := wallet.NewWalletServer(libP2PService, state, signer)
 
 	return &Application{
 		DatabaseManager: dbm,
@@ -54,7 +54,7 @@ func NewApplication() *Application {
 		HTTPServer:      httpServer,
 		BTCListener:     btcListener,
 		UTXOService:     utxoService,
-		Deposit:         deposit,
+		WalletService:   walletService,
 	}
 }
 
@@ -106,7 +106,7 @@ func (app *Application) Run() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		app.Deposit.Start(ctx)
+		app.WalletService.Start(ctx)
 	}()
 
 	<-stop

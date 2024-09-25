@@ -3,7 +3,7 @@ package wallet
 import (
 	"context"
 
-	"github.com/goatnetwork/goat-relayer/internal/db"
+	"github.com/goatnetwork/goat-relayer/internal/bls"
 	"github.com/goatnetwork/goat-relayer/internal/p2p"
 	"github.com/goatnetwork/goat-relayer/internal/state"
 	log "github.com/sirupsen/logrus"
@@ -11,19 +11,23 @@ import (
 
 type WalletServer struct {
 	libp2p *p2p.LibP2PService
-	db     *db.DatabaseManager
 	state  *state.State
+	signer *bls.Signer
 
-	blockCh chan interface{}
+	depositCh  chan interface{}
+	withdrawCh chan interface{}
+	blockCh    chan interface{}
 }
 
-func NewWalletServer(libp2p *p2p.LibP2PService, st *state.State, db *db.DatabaseManager) *WalletServer {
-	return &WalletServer{
-		libp2p: libp2p,
-		db:     db,
-		state:  st,
+func NewWalletServer(libp2p *p2p.LibP2PService, st *state.State, signer *bls.Signer) *WalletServer {
 
-		blockCh: make(chan interface{}, state.BTC_BLOCK_CHAN_LENGTH),
+	return &WalletServer{
+		libp2p:     libp2p,
+		state:      st,
+		signer:     signer,
+		depositCh:  make(chan interface{}, 100),
+		withdrawCh: make(chan interface{}, 100),
+		blockCh:    make(chan interface{}, state.BTC_BLOCK_CHAN_LENGTH),
 	}
 }
 
@@ -31,6 +35,10 @@ func (w *WalletServer) Start(ctx context.Context) {
 	w.state.EventBus.Subscribe(state.BlockScanned, w.blockCh)
 
 	go w.blockScanLoop(ctx)
+	go w.depositLoop(ctx)
+	go w.withdrawLoop(ctx)
+	go w.processConfirmedDeposit(ctx)
+	go w.processConfirmedWithdraw(ctx)
 
 	log.Info("WalletServer started.")
 
