@@ -35,9 +35,15 @@ func (lis *Layer2Listener) processEvent(block uint64, event abcitypes.Event) err
 		return lis.processNewWalletKey(block, event.Attributes)
 	case bitcointypes.EventTypeNewDeposit:
 		return lis.processNewDeposit(block, event.Attributes)
+	case bitcointypes.EventTypeWithdrawalCancellation:
+		return lis.processRequestCancelWithdrawal(block, event.Attributes)
+	case bitcointypes.EventTypeWithdrawalRequest:
+		return lis.processRequestWithdrawal(block, event.Attributes)
+	case bitcointypes.EventTypeWithdrawalReplace:
+		return lis.processRequestReplaceWithdrawal(block, event.Attributes)
 	case bitcointypes.EventTypeInitializeWithdrawal:
 		return lis.processNewWithdrawal(block, event.Attributes)
-	case bitcointypes.EventTypeWithdrawalCancellation:
+	case bitcointypes.EventTypeApproveCancellation:
 		return lis.processCancelWithdrawal(block, event.Attributes)
 	case bitcointypes.EventTypeFinalizeWithdrawal:
 		return lis.processFinalizeWithdrawal(block, event.Attributes)
@@ -116,6 +122,79 @@ func (lis *Layer2Listener) processBlockVoters(block uint64) error {
 		log.Debugf("Abci voters update, len %d, addr: %s", len(voters), lis.state.GetEpochVoter().VoteAddrList)
 	}
 	return err
+}
+
+func (lis *Layer2Listener) processRequestCancelWithdrawal(block uint64, attributes []abcitypes.EventAttribute) error {
+	// TODO check uint64
+	var id string
+	for _, attr := range attributes {
+		key := attr.Key
+		value := attr.Value
+
+		if key == "id" {
+			id = value
+		}
+	}
+	log.Infof("Abci RequestCancelWithdrawal, block: %d, id: %s", block, id)
+
+	// TODO
+	return nil
+}
+
+func (lis *Layer2Listener) processRequestReplaceWithdrawal(block uint64, attributes []abcitypes.EventAttribute) error {
+	var txid string
+	var txPrice uint64
+	for _, attr := range attributes {
+		key := attr.Key
+		value := attr.Value
+
+		if key == "txid" {
+			// BE hash
+			txid = value
+		}
+		if key == "tx_price" {
+			txPrice, _ = strconv.ParseUint(value, 10, 64)
+		}
+
+	}
+	log.Infof("Abci RequestReplaceWithdrawal, block: %d, txid: %s, txPrice: %d", block, txid, txPrice)
+
+	// TODO amount, address ?
+	return nil
+}
+
+func (lis *Layer2Listener) processRequestWithdrawal(block uint64, attributes []abcitypes.EventAttribute) error {
+	var id string
+	var txid string
+	var address string
+	var txPrice uint64
+	var amount uint64
+	for _, attr := range attributes {
+		key := attr.Key
+		value := attr.Value
+
+		if key == "id" {
+			id = value
+		}
+		if key == "txid" {
+			// BE hash
+			txid = value
+		}
+		if key == "address" {
+			address = value
+		}
+		if key == "tx_price" {
+			txPrice, _ = strconv.ParseUint(value, 10, 64)
+		}
+		if key == "amount" {
+			amount, _ = strconv.ParseUint(value, 10, 64)
+		}
+	}
+
+	lis.state.CreateWithdrawal(id, txid, address, float64(txPrice), uint(amount))
+	log.Infof("Abci RequestWithdrawal, block: %d, txid: %s, txPrice: %d, amount: %d", block, txid, txPrice, amount)
+
+	return nil
 }
 
 func (lis *Layer2Listener) processFinalizeWithdrawal(block uint64, attributes []abcitypes.EventAttribute) error {
