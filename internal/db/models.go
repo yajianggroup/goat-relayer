@@ -25,6 +25,15 @@ type L2Info struct {
 	UpdatedAt       time.Time `gorm:"not null" json:"updated_at"`
 }
 
+// L2 Deposit public key
+type DepositPubKey struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	BtcHeight uint64    `gorm:"not null" json:"btc_height"`
+	PubType   string    `gorm:"not null" json:"pub_type"`
+	PubKey    string    `gorm:"not null" json:"pub_key"`
+	UpdatedAt time.Time `gorm:"not null" json:"updated_at"`
+}
+
 // Voter model
 type Voter struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
@@ -73,10 +82,10 @@ type Utxo struct {
 	Uid           string    `gorm:"not null" json:"uid"`
 	Txid          string    `gorm:"not null;index:unique_txid_out_index,unique" json:"txid"`
 	PkScript      []byte    `json:"pk_script"`
-	OutIndex      uint      `gorm:"not null;index:unique_txid_out_index,unique" json:"out_index"`
-	Amount        float64   `gorm:"type:decimal(20,8)" json:"amount"` // BTC precision up to 8 decimal places
-	Receiver      string    `gorm:"not null" json:"receiver"`         // it is MPC address here, or p2wsh (need collect)
-	WalletVersion string    `gorm:"not null" json:"wallet_vesion"`    // MPC wallet version, it always sets to tss version, "fireblocks:1:2" = fireblocks workspace 1 account 2
+	OutIndex      int       `gorm:"not null;index:unique_txid_out_index,unique" json:"out_index"`
+	Amount        int64     `gorm:"not null" json:"amount"`        // BTC precision up to 8 decimal places
+	Receiver      string    `gorm:"not null" json:"receiver"`      // it is MPC address here, or p2wsh (need collect)
+	WalletVersion string    `gorm:"not null" json:"wallet_vesion"` // MPC wallet version, it always sets to tss version, "fireblocks:1:2" = fireblocks workspace 1 account 2
 	Sender        string    `gorm:"not null" json:"sender"`
 	EvmAddr       string    `json:"evm_addr"`                      // deposit to L2
 	Source        string    `gorm:"not null" json:"source"`        // "deposit", "unknown"
@@ -85,6 +94,16 @@ type Utxo struct {
 	ReceiveBlock  uint64    `gorm:"not null" json:"receive_block"` // recieve at BTC block height
 	SpentBlock    uint64    `gorm:"not null" json:"spent_block"`   // spent at BTC block height
 	UpdatedAt     time.Time `gorm:"not null" json:"updated_at"`
+}
+
+// DepositResult model, it save deposit data from layer2 events
+type DepositResult struct {
+	ID        uint   `gorm:"primaryKey" json:"id"`
+	TxId      string `gorm:"uniqueIndex:idx_tx_id_tx_out" json:"tx_id"`
+	TxOut     uint64 `gorm:"uniqueIndex:idx_tx_id_tx_out" json:"tx_out"`
+	Address   string `gorm:"not null" json:"address"`
+	Amount    uint64 `gorm:"not null" json:"amount"`
+	BlockHash string `gorm:"not null" json:"block_hash"`
 }
 
 // Withdraw model (for managing withdrawals)
@@ -96,7 +115,7 @@ type Withdraw struct {
 	MaxTxFee  uint      `gorm:"not null" json:"max_tx_fee"`       // Unit is satoshis
 	From      string    `gorm:"not null" json:"from"`
 	To        string    `gorm:"not null" json:"to"`
-	Status    string    `gorm:"not null" json:"status"` // "create", "init", "signing", "pending", "processed"
+	Status    string    `gorm:"not null" json:"status"` // "create", "init", "signing", "pending", "unconfirm", "confirmed", "processed"
 	OrderId   string    `json:"order_id"`               // update when signing
 	UpdatedAt time.Time `gorm:"not null" json:"updated_at"`
 }
@@ -119,13 +138,13 @@ type SendOrder struct {
 type Vin struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	OrderId   string    `json:"order_id"`
+	BtcHeight uint64    `gorm:"not null" json:"btc_height"`
 	Txid      string    `gorm:"not null" json:"txid"`
-	VinTxid   string    `gorm:"not null" json:"vin_txid"`
-	VinVout   int       `gorm:"not null" json:"vin_vout"`
-	Amount    float64   `gorm:"type:decimal(20,8)" json:"amount"` // BTC precision up to 8 decimal places
+	OutIndex  int       `gorm:"not null" json:"out_index"`
+	SigScript []byte    `json:"sig_script"`
 	Sender    string    `json:"sender"`
 	Source    string    `gorm:"not null" json:"source"` // "withdraw", "unknown"
-	Status    string    `gorm:"not null" json:"status"` // "init", "signing", "pending", "processed"
+	Status    string    `gorm:"not null" json:"status"` // "init", "signing", "pending", "unconfirm", "confirmed", "processed"
 	UpdatedAt time.Time `gorm:"not null" json:"updated_at"`
 }
 
@@ -133,14 +152,15 @@ type Vin struct {
 type Vout struct {
 	ID         uint      `gorm:"primaryKey" json:"id"`
 	OrderId    string    `json:"order_id"`
+	BtcHeight  uint64    `gorm:"not null" json:"btc_height"`
 	Txid       string    `gorm:"not null" json:"txid"`
 	OutIndex   int       `gorm:"not null" json:"out_index"`
-	WithdrawId string    `json:"withdraw_id"`                      // EvmTxId
-	Amount     float64   `gorm:"type:decimal(20,8)" json:"amount"` // BTC precision up to 8 decimal places
-	Receiver   string    `gorm:"not null" json:"receiver"`         // withdraw To
-	Sender     string    `json:"sender"`                           // MPC address
-	Source     string    `gorm:"not null" json:"source"`           // "withdraw", "unknown"
-	Status     string    `gorm:"not null" json:"status"`           // "init", "signing", "pending", "processed"
+	WithdrawId string    `json:"withdraw_id"`              // EvmTxId
+	Amount     int64     `gorm:"not null" json:"amount"`   // BTC precision up to 8 decimal places
+	Receiver   string    `gorm:"not null" json:"receiver"` // withdraw To
+	Sender     string    `json:"sender"`                   // MPC address
+	Source     string    `gorm:"not null" json:"source"`   // "withdraw", "unknown"
+	Status     string    `gorm:"not null" json:"status"`   // "init", "signing", "pending", "unconfirm", "confirmed", "processed"
 	UpdatedAt  time.Time `gorm:"not null" json:"updated_at"`
 }
 
@@ -186,13 +206,13 @@ func (dm *DatabaseManager) autoMigrate() {
 	if err := dm.l2SyncDb.AutoMigrate(&L2SyncStatus{}); err != nil {
 		log.Fatalf("Failed to migrate database 1: %v", err)
 	}
-	if err := dm.l2InfoDb.AutoMigrate(&L2Info{}, &Voter{}, &EpochVoter{}, &VoterQueue{}); err != nil {
+	if err := dm.l2InfoDb.AutoMigrate(&L2Info{}, &Voter{}, &EpochVoter{}, &VoterQueue{}, &DepositPubKey{}); err != nil {
 		log.Fatalf("Failed to migrate database 2: %v", err)
 	}
 	if err := dm.btcLightDb.AutoMigrate(&BtcBlock{}); err != nil {
 		log.Fatalf("Failed to migrate database 3: %v", err)
 	}
-	if err := dm.walletDb.AutoMigrate(&Utxo{}, &Withdraw{}, &SendOrder{}, &Vin{}, &Vout{}); err != nil {
+	if err := dm.walletDb.AutoMigrate(&Utxo{}, &Withdraw{}, &SendOrder{}, &Vin{}, &Vout{}, &DepositResult{}); err != nil {
 		log.Fatalf("Failed to migrate database 4: %v", err)
 	}
 	if err := dm.btcCacheDb.AutoMigrate(&BtcSyncStatus{}, &BtcBlockData{}, &BtcTXOutput{}, &Deposit{}); err != nil {

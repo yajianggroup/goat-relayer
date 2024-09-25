@@ -16,6 +16,22 @@ func (s *State) GetEpochVoter() db.EpochVoter {
 	return *s.layer2State.EpochVoter
 }
 
+func (s *State) GetDepositKeyByBtcBlock(block uint64) (*db.DepositPubKey, error) {
+	s.layer2Mu.RLock()
+	defer s.layer2Mu.RUnlock()
+
+	sql := "pub_type='secp256k1'"
+	if block > 0 {
+		sql += " and " + fmt.Sprintf("btc_height<=%d", block)
+	}
+	var pubKey db.DepositPubKey
+	result := s.dbm.GetL2InfoDB().Where(sql).Order("id DESC").First(&pubKey)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return &pubKey, nil
+}
+
 func (s *State) UpdateL2ChainStatus(latestBlock, l2Confirmations uint64, catchingUp bool) error {
 	s.layer2Mu.Lock()
 	defer s.layer2Mu.Unlock()
@@ -154,6 +170,17 @@ func (s *State) UpdateL2InfoWallet(block uint64, walletType string, walletKey st
 		if err != nil {
 			return err
 		}
+
+		// save BTC_HEIGHT <-> wallet_key
+		err = s.savePubKey(&db.DepositPubKey{
+			PubType:   walletType,
+			PubKey:    walletKey,
+			BtcHeight: l2Info.LatestBtcHeight,
+			UpdatedAt: time.Now(),
+		})
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -263,6 +290,15 @@ func (s *State) saveVoters(voters []*db.Voter) error {
 	result := s.dbm.GetL2InfoDB().Save(voters)
 	if result.Error != nil {
 		log.Errorf("State saveVoters error: %v", result.Error)
+		return result.Error
+	}
+	return nil
+}
+
+func (s *State) savePubKey(pubKey *db.DepositPubKey) error {
+	result := s.dbm.GetL2InfoDB().Save(pubKey)
+	if result.Error != nil {
+		log.Errorf("State savePubKey error: %v", result.Error)
 		return result.Error
 	}
 	return nil

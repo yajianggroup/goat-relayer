@@ -35,7 +35,7 @@ type DepositTransaction struct {
 var deduplicateChannel = make(chan DepositTransaction)
 var confirmedChannel = make(chan DepositTransaction)
 
-func (d *Deposit) AddUnconfirmedDeposit(ctx context.Context) {
+func (d *Deposit) depositLoop(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():

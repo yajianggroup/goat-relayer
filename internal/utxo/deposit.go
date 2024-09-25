@@ -20,11 +20,11 @@ type Deposit struct {
 	confirmDepositCh chan interface{}
 }
 
-func NewDeposit(state *state.State, signer *bls.Signer, dbm *db.DatabaseManager) *Deposit {
+func NewDeposit(st *state.State, signer *bls.Signer, dbm *db.DatabaseManager) *Deposit {
 	cacheDb := dbm.GetBtcCacheDB()
 	lightDb := dbm.GetBtcLightDB()
 	return &Deposit{
-		state:            state,
+		state:            st,
 		signer:           signer,
 		cacheDb:          cacheDb,
 		lightDb:          lightDb,
@@ -35,6 +35,6 @@ func NewDeposit(state *state.State, signer *bls.Signer, dbm *db.DatabaseManager)
 func (d *Deposit) Start(ctx context.Context) {
 	d.state.EventBus.Subscribe(state.DepositReceive, d.confirmDepositCh)
 	// TODO wait for btc & goat chain complete blocks sync
-	go d.AddUnconfirmedDeposit(ctx)
+	go d.depositLoop(ctx)
 	go d.ProcessConfirmedDeposit(ctx)
 }

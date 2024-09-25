@@ -2,6 +2,7 @@ package layer2
 
 import (
 	"context"
+	"encoding/base64"
 	"strconv"
 	"time"
 
@@ -64,8 +65,27 @@ func (lis *Layer2Listener) processEndBlock(block uint64) error {
 	return nil
 }
 
-func (lis *Layer2Listener) processFirstBlock(info *db.L2Info, voters []*db.Voter, epoch, sequence uint64, proposer string) error {
-	return lis.state.UpdateL2InfoFirstBlock(1, info, voters, epoch, sequence, proposer)
+func (lis *Layer2Listener) processFirstBlock(info *db.L2Info, voters []*db.Voter, epoch, sequence uint64, proposer string, pubkey relayertypes.PublicKey) error {
+	err := lis.state.UpdateL2InfoFirstBlock(1, info, voters, epoch, sequence, proposer)
+	if err != nil {
+		return err
+	}
+	err = lis.state.UpdateL2InfoLatestBtc(1, info.StartBtcHeight)
+	if err != nil {
+		return err
+	}
+	// save pubkey
+	walletType := "unknown"
+	walletKey := ""
+	switch v := pubkey.Key.(type) {
+	case *relayertypes.PublicKey_Secp256K1:
+		walletType = "secp256k1"
+		walletKey = base64.StdEncoding.EncodeToString(v.Secp256K1)
+	case *relayertypes.PublicKey_Schnorr:
+		walletType = "schnorr"
+		walletKey = base64.StdEncoding.EncodeToString(v.Schnorr)
+	}
+	return lis.state.UpdateL2InfoWallet(1, walletType, walletKey)
 }
 
 func (lis *Layer2Listener) processBlockVoters(block uint64) error {
@@ -171,6 +191,11 @@ func (lis *Layer2Listener) processNewDeposit(block uint64, attributes []abcitype
 		if key == "amount" {
 			amount, _ = strconv.ParseUint(value, 10, 64)
 		}
+		// TODO goat emit event with block hash, should match deposit with height
+		// if key == "block_hash" {
+		// 	blockHash = value
+		// }
+		lis.state.AddDepositResult(txid, txout, address.Hex(), amount, "")
 	}
 	log.Infof("Abci NewDeposit, block: %d, txid: %s, txout: %d, address: %v, amount: %d", block, txid, txout, address, amount)
 

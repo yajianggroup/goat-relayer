@@ -3,16 +3,14 @@ package rpc
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/hex"
-	"errors"
 	"fmt"
+	"strings"
 	"time"
 
-	"github.com/btcsuite/btcd/btcec/v2"
-	"github.com/btcsuite/btcd/btcec/v2/schnorr"
 	"github.com/goatnetwork/goat-relayer/internal/btc"
 	"github.com/goatnetwork/goat-relayer/internal/types"
-	relayertypes "github.com/goatnetwork/goat/x/relayer/types"
 
 	"net"
 
@@ -108,23 +106,20 @@ func (s *UtxoServer) QueryDepositAddress(ctx context.Context, req *pb.QueryDepos
 	var err error
 	var pubKey []byte
 	if l2Info.DepositKey == "" {
-		// query from layer2 goat chain
-		pubkeyResponse := s.layer2Listener.QueryPubKey(ctx)
-		pubKey = relayertypes.EncodePublicKey(&pubkeyResponse.PublicKey)
-	} else {
-		pubKey, err = hex.DecodeString(l2Info.DepositKey)
+		depositPubKey, err := s.state.GetDepositKeyByBtcBlock(0)
 		if err != nil {
 			return nil, err
 		}
-	}
-
-	var newPubKey []byte
-	if len(pubKey)-1 == btcec.PubKeyBytesLenCompressed {
-		newPubKey = relayertypes.DecodePublicKey(pubKey).GetSecp256K1()
-	} else if len(pubKey)-1 == schnorr.PubKeyBytesLen {
-		newPubKey = relayertypes.DecodePublicKey(pubKey).GetSchnorr()
+		pubKey, err = base64.StdEncoding.DecodeString(depositPubKey.PubKey)
+		if err != nil {
+			return nil, err
+		}
 	} else {
-		return nil, errors.New("invalid public key")
+		pubKeyStr := strings.Split(l2Info.DepositKey, ",")[1]
+		pubKey, err = base64.StdEncoding.DecodeString(pubKeyStr)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	var network *chaincfg.Params
@@ -139,7 +134,7 @@ func (s *UtxoServer) QueryDepositAddress(ctx context.Context, req *pb.QueryDepos
 		network = &chaincfg.TestNet3Params
 	}
 
-	p2wpkh, err := btcutil.NewAddressWitnessPubKeyHash(btcutil.Hash160(newPubKey), network)
+	p2wpkh, err := btcutil.NewAddressWitnessPubKeyHash(btcutil.Hash160(pubKey), network)
 	if err != nil {
 		return nil, err
 	}
