@@ -1,4 +1,4 @@
-package utxo
+package wallet
 
 import (
 	"context"
