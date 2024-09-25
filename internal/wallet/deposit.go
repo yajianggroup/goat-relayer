@@ -29,12 +29,12 @@ func (w *WalletServer) depositLoop(ctx context.Context) {
 		case deposit := <-w.depositCh:
 			depositData, ok := deposit.(types.MsgUtxoDeposit)
 			if !ok {
-				log.Errorf("invalid deposit data type")
+				log.Errorf("Invalid deposit data type")
 				continue
 			}
 			err := w.state.AddUnconfirmDeposit(depositData.TxId, depositData.RawTx, depositData.EvmAddr, depositData.SignVersion)
 			if err != nil {
-				log.Errorf("failed to add unconfirmed deposit: %v", err)
+				log.Errorf("Failed to add unconfirmed deposit: %v", err)
 				continue
 			}
 		}
@@ -65,7 +65,7 @@ func (w *WalletServer) processConfirmedDeposit(ctx context.Context) {
 
 func (w *WalletServer) confirmingDeposit(ctx context.Context, tx DepositTransaction, attempt int) {
 	if attempt > 7 {
-		log.Errorf("confirmed deposit discarded after 7 attempts, txHahs: %s", tx.TxHash)
+		log.Errorf("Confirmed deposit discarded after 7 attempts, txHahs: %s", tx.TxHash)
 		return
 	}
 
@@ -93,7 +93,7 @@ func (w *WalletServer) confirmingDeposit(ctx context.Context, tx DepositTransact
 	var parsedHashes []chainhash.Hash
 	err = json.Unmarshal([]byte(block.TxHashes), &parsedHashes)
 	if err != nil {
-		log.Errorf("unmarshal TxHashes error: %v", err)
+		log.Errorf("Unmarshal TxHashes error: %v", err)
 		return
 	}
 
@@ -106,7 +106,7 @@ func (w *WalletServer) confirmingDeposit(ctx context.Context, tx DepositTransact
 	// generate spv proof
 	merkleRoot, proof, txIndex, err := btc.GenerateSPVProof(tx.TxHash, tx.TxHashList)
 	if err != nil {
-		log.Errorf("generateSPVProof err: %v", err)
+		log.Errorf("GenerateSPVProof err: %v", err)
 		return
 	}
 
@@ -115,7 +115,7 @@ func (w *WalletServer) confirmingDeposit(ctx context.Context, tx DepositTransact
 		l2Info := w.state.GetL2Info()
 		depositKey, err := hex.DecodeString(l2Info.DepositKey)
 		if err != nil {
-			log.Errorf("decodeString DepositKey err: %v", err)
+			log.Errorf("DecodeString DepositKey err: %v", err)
 			return
 		}
 
@@ -125,7 +125,7 @@ func (w *WalletServer) confirmingDeposit(ctx context.Context, tx DepositTransact
 
 		msgSignDeposit, err := newMsgSignDeposit(tx, proposer, depositKey, merkleRoot, proof, txIndex)
 		if err != nil {
-			log.Errorf("newMsgSignDeposit err: %v", err)
+			log.Errorf("NewMsgSignDeposit err: %v", err)
 			return
 		}
 		w.state.EventBus.Publish(internalstate.SigStart, *msgSignDeposit)
@@ -135,7 +135,7 @@ func (w *WalletServer) confirmingDeposit(ctx context.Context, tx DepositTransact
 	// update Deposit status to confirmed
 	err = w.state.SaveConfirmDeposit(tx.TxHash, tx.RawTx, tx.EvmAddress)
 	if err != nil {
-		log.Errorf("saveConfirmDeposit err: %v", err)
+		log.Errorf("SaveConfirmDeposit err: %v", err)
 		return
 	}
 

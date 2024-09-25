@@ -33,7 +33,7 @@ func NewBTCListener(libp2p *p2p.LibP2PService, state *state.State, dbm *db.Datab
 	}
 	client, err := rpcclient.New(connConfig, nil)
 	if err != nil {
-		log.Fatalf("failed to start bitcoin client: %v", err)
+		log.Fatalf("Failed to start bitcoin client: %v", err)
 	}
 	notifier := NewBTCNotifier(client, cache, poller)
 

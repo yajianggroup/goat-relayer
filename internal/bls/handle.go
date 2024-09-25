@@ -263,7 +263,7 @@ func (s *Signer) handleSigStartNewDeposit(ctx context.Context, e types.MsgSignDe
 		headers[e.BlockNumber] = e.BlockHeader
 		headersBytes, err := json.Marshal(headers)
 		if err != nil {
-			log.Errorf("failed to marshal headers: %v", err)
+			log.Errorf("Failed to marshal headers: %v", err)
 			return err
 		}
 
@@ -288,7 +288,7 @@ func (s *Signer) handleSigStartNewDeposit(ctx context.Context, e types.MsgSignDe
 
 		err = s.RetrySubmit(ctx, e.RequestId, msgDeposits, config.AppConfig.L2SubmitRetry)
 		if err != nil {
-			log.Errorf("proposer submit NewDeposit to consensus error, request id: %s, err: %v", e.RequestId, err)
+			log.Errorf("Proposer submit NewDeposit to consensus error, request id: %s, err: %v", e.RequestId, err)
 			// feedback SigFailed, deposit should module subscribe it to save UTXO or mark confirm
 			s.state.EventBus.Publish(state.SigFailed, e)
 			return err
