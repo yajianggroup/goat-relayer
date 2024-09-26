@@ -4,26 +4,16 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"strings"
+
 	"github.com/btcsuite/btcd/btcutil"
-	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/goatnetwork/goat-relayer/internal/config"
 	"github.com/goatnetwork/goat-relayer/internal/types"
-	"strings"
 )
 
 func (s *UtxoServer) VerifyDeposit(tx wire.MsgTx, evmAddress string) (isTrue bool, signVersion uint32, err error) {
-	var network *chaincfg.Params
-	switch config.AppConfig.BTCNetworkType {
-	case "":
-		network = &chaincfg.MainNetParams
-	case "mainnet":
-		network = &chaincfg.MainNetParams
-	case "regtest":
-		network = &chaincfg.RegressionNetParams
-	case "testnet3":
-		network = &chaincfg.TestNet3Params
-	}
+	network := types.GetBTCNetwork(config.AppConfig.BTCNetworkType)
 
 	pubKey, err := s.getPubKey()
 	if err != nil {
