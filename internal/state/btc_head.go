@@ -7,6 +7,20 @@ import (
 	"gorm.io/gorm"
 )
 
+func (s *State) UpdateBtcNetworkFee(fee uint64) {
+	s.btcHeadMu.Lock()
+	defer s.btcHeadMu.Unlock()
+
+	s.btcHeadState.NetworkFee = fee
+}
+
+func (s *State) UpdateBtcSyncing(syncing bool) {
+	s.btcHeadMu.Lock()
+	defer s.btcHeadMu.Unlock()
+
+	s.btcHeadState.Syncing = syncing
+}
+
 /*
 AddUnconfirmBtcBlock
 when btc scanner detected a new block, save to unconfirmed,

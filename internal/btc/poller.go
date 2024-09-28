@@ -49,6 +49,7 @@ type BTCPoller struct {
 
 	sigHashQueue *SigHashQueue
 	sigHashMu    sync.Mutex
+	once         sync.Once
 }
 
 func NewBTCPoller(state *state.State, db *gorm.DB) *BTCPoller {
@@ -70,9 +71,19 @@ func NewBTCPoller(state *state.State, db *gorm.DB) *BTCPoller {
 func (p *BTCPoller) Start(ctx context.Context) {
 	go p.pollLoop(ctx)
 	go p.signLoop(ctx)
+
+	<-ctx.Done()
+	log.Info("BTCPoller is stopping...")
+	p.Stop()
 }
 
 func (p *BTCPoller) Stop() {
+	p.once.Do(func() {
+		close(p.sigFailChan)
+		close(p.sigFinishChan)
+		close(p.sigTimeoutChan)
+		close(p.confirmChan)
+	})
 }
 
 func (p *BTCPoller) pollLoop(ctx context.Context) {

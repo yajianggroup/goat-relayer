@@ -104,9 +104,22 @@ func (bn *BTCNotifier) checkConfirmations(ctx context.Context) {
 			bn.syncMu.Unlock()
 
 			if syncConfirmedHeight >= confirmedHeight {
+				bn.poller.state.UpdateBtcSyncing(false)
 				log.Debugf("Btc check block confirmation ignored by up to confirmed height, best height: %d, synced: %d, confirmed: %d", bestHeight, syncConfirmedHeight, confirmedHeight)
 				continue
 			}
+
+			bn.poller.state.UpdateBtcSyncing(true)
+
+			// get network fee
+			feeEstimate, err := bn.client.EstimateSmartFee(bn.confirmations, nil)
+			if err != nil {
+				log.Errorf("Error estimating smart fee: %v", err)
+				continue
+			}
+			satoshiPerVByte := uint64((*feeEstimate.FeeRate * 1e8) / 1000)
+			log.Infof("Btc network fee is %d sat/vbyte", satoshiPerVByte)
+			bn.poller.state.UpdateBtcNetworkFee(satoshiPerVByte)
 
 			newSyncHeight := syncConfirmedHeight
 			grows := false

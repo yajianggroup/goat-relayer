@@ -13,6 +13,12 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const (
+	WALLET_TYPE_P2WPKH = "P2WPKH"
+	WALLET_TYPE_P2PKH  = "P2PKH"
+	WALLET_TYPE_P2WSH  = "P2WSH"
+)
+
 var (
 	GOAT_MAGIC_BYTES = []byte{0x47, 0x54, 0x54, 0x30} // "GTT0"
 )
@@ -127,4 +133,21 @@ func IsUtxoGoatDepositV0(tx *wire.MsgTx, evmAddress string, pubKey []byte, net *
 	}
 
 	return false
+}
+
+// TransactionSizeEstimate estimates the size of a transaction in bytes
+func TransactionSizeEstimate(numInputs, numOutputs int, utxoTypes []string) int64 {
+	var totalSize int64 = 10
+	for _, utxoType := range utxoTypes {
+		switch utxoType {
+		case WALLET_TYPE_P2WPKH:
+			totalSize += 68
+		case WALLET_TYPE_P2PKH:
+			totalSize += 148
+		case WALLET_TYPE_P2WSH:
+			totalSize += 170
+		}
+	}
+	totalSize += int64(34 * numOutputs)
+	return totalSize
 }

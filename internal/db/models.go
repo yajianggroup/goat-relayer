@@ -116,8 +116,9 @@ type Withdraw struct {
 	MaxTxFee  uint64    `gorm:"not null" json:"max_tx_fee"` // Unit is satoshis
 	From      string    `gorm:"not null" json:"from"`
 	To        string    `gorm:"not null" json:"to"`                                    // BTC address, support all 4 types
-	Status    string    `gorm:"not null" json:"status"`                                // "create", "aggregating", "init", "signing", "pending", "unconfirm", "confirmed", "processed", "closed" - means not in use
+	Status    string    `gorm:"not null" json:"status"`                                // "create", "aggregating", "init", "signing", "pending", "unconfirm", "confirmed", "processed", "closed" - means user cancel
 	OrderId   string    `gorm:"not null;index:withdraw_orderid_index" json:"order_id"` // update when signing, it always can be query from SendOrder by BTC txid
+	Txid      string    `gorm:"not null;index:withdraw_txid_index" json:"txid"`        // update when signing
 	UpdatedAt time.Time `gorm:"not null" json:"updated_at"`
 }
 

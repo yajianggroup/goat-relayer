@@ -214,3 +214,10 @@ func (s *State) UpdateDepositState(deposits []*db.Deposit) {
 
 	s.depositState.UnconfirmQueue = deposits
 }
+
+func (s *State) GetBtcHead() BtcHeadState {
+	s.btcHeadMu.RLock()
+	defer s.btcHeadMu.RUnlock()
+
+	return s.btcHeadState
+}

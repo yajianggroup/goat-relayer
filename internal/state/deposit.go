@@ -87,6 +87,7 @@ func (s *State) UpdateProcessedDeposit(txHash string) error {
 	s.depositMu.Lock()
 	defer s.depositMu.Unlock()
 
+	// TODO should rewrite this
 	deposit, err := s.queryDepositByTxHash(txHash)
 	if err != nil {
 		// query db failed, update cache

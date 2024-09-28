@@ -277,6 +277,8 @@ func (lis *Layer2Listener) processNewDeposit(block uint64, attributes []abcitype
 		// }
 	}
 
+	// TODO DB operate: insert if not exist, if P2WSH, should query from BTC client,
+	// if P2WPKH, not need to query, just keep pk_script nil, it should update by BTC Scan
 	// TODO should throw error if error occured
 	lis.state.UpdateProcessedDeposit(txid)
 	lis.state.AddDepositResult(txid, txout, address.Hex(), amount, "")

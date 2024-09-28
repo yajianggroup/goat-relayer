@@ -224,7 +224,14 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 					}
 				}
 
-				// Note, if isUtxo && isVin, it is withdrawal|consolidation with change out to self
+				// Note, if isUtxo && isVin, it is withdrawal||consolidation with change out to self
+				if isWithdrawl || isConsolidation {
+					err = w.state.UpdateSendOrderConfirmed(tx.TxHash().String())
+					if err != nil {
+						// this can be ignore, because recovery model order will not exitst
+						log.Debugf("Update send order confirmed %v err %v", tx.TxHash().String(), err)
+					}
+				}
 
 				// Note, vout is P2WSH can not find here, it should query from BTC client in recovery model
 			}
