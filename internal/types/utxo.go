@@ -18,6 +18,9 @@ const (
 	WALLET_TYPE_P2PKH   = "P2PKH"
 	WALLET_TYPE_P2WSH   = "P2WSH"
 	WALLET_TYPE_UNKNOWN = "UNKNOWN"
+
+	ORDER_TYPE_WITHDRAWAL    = "withdrawal"
+	ORDER_TYPE_CONSOLIDATION = "consolidation"
 )
 
 var (

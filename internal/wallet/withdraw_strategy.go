@@ -14,10 +14,29 @@ import (
 	"github.com/goatnetwork/goat-relayer/internal/types"
 )
 
-func ConsolidateSmallUTXOs(utxos []*db.Utxo, networkFee, threshold int64, maxVin int) ([]*db.Utxo, int64, error) {
+// ConsolidateSmallUTXOs consolidate small utxos
+//
+// Parameters:
+//
+//	utxos - all unspent utxos
+//	networkFee - network fee
+//	threshold - threshold for small utxos
+//	maxVin - maximum vin count
+//
+// Returns:
+//
+//	selectedUtxos - selected utxos for consolidation
+//	totalAmount - total amount of selected utxos
+//	finalAmount - final amount after consolidation, after deducting the network fee
+//	error - error if any
+func ConsolidateSmallUTXOs(utxos []*db.Utxo, networkFee, threshold int64, maxVin int) ([]*db.Utxo, int64, int64, error) {
 	if networkFee > 200 {
-		return nil, 0, fmt.Errorf("network fee is too high, cannot consolidate")
+		return nil, 0, 0, fmt.Errorf("network fee is too high, cannot consolidate")
 	}
+	if len(utxos) < 500 {
+		return nil, 0, 0, fmt.Errorf("not enough utxos to consolidate")
+	}
+
 	var smallUTXOs []*db.Utxo
 	var totalAmount int64 = 0
 
@@ -36,8 +55,8 @@ func ConsolidateSmallUTXOs(utxos []*db.Utxo, networkFee, threshold int64, maxVin
 		}
 	}
 
-	if len(smallUTXOs) == 0 {
-		return nil, 0, fmt.Errorf("no small utxos")
+	if len(smallUTXOs) <= 500 {
+		return nil, 0, 0, fmt.Errorf("not enough small utxos to consolidate")
 	}
 
 	// calculate transaction size and estimated fee
@@ -52,14 +71,29 @@ func ConsolidateSmallUTXOs(utxos []*db.Utxo, networkFee, threshold int64, maxVin
 	// calculate the remaining amount after consolidation
 	finalAmount := totalAmount - estimatedFee
 	if finalAmount <= 0 {
-		return nil, 0, fmt.Errorf("consolidation fee is too high, cannot consolidate")
+		return nil, 0, 0, fmt.Errorf("consolidation fee is too high, cannot consolidate")
 	}
 
-	return smallUTXOs, finalAmount, nil
+	return smallUTXOs, totalAmount, finalAmount, nil
 }
 
 // SelectOptimalUTXOs select optimal utxos for withdrawal
-func SelectOptimalUTXOs(utxos []*db.Utxo, withdrawAmount, networkFee int64, withdrawTotal int) ([]*db.Utxo, int64, error) {
+//
+// Parameters:
+//
+//	utxos - all unspent utxos
+//	withdrawAmount - total amount to withdraw
+//	networkFee - network fee
+//	withdrawTotal - total number of withdrawals
+//
+// Returns:
+//
+//	selectedUtxos - selected utxos for withdrawal
+//	totalSelectedAmount - total amount of selected utxos
+//	withdrawAmount - total amount to withdraw
+//	changeAmount - change amount after withdrawal
+//	error - error if any
+func SelectOptimalUTXOs(utxos []*db.Utxo, withdrawAmount, networkFee int64, withdrawTotal int) ([]*db.Utxo, int64, int64, int64, error) {
 	// sort utxos by amount from large to small
 	sort.Slice(utxos, func(i, j int) bool {
 		return utxos[i].Amount > utxos[j].Amount
@@ -140,19 +174,32 @@ func SelectOptimalUTXOs(utxos []*db.Utxo, withdrawAmount, networkFee int64, with
 
 	// after selecting, check if we have enough UTXO to cover the total target
 	if totalSelectedAmount < totalTarget {
-		return nil, 0, fmt.Errorf("not enough utxos to satisfy the withdrawal amount and network fee, withdraw amount: %d, selected amount: %d, estimated fee: %d", withdrawAmount, totalSelectedAmount, estimatedFee)
+		return nil, 0, 0, 0, fmt.Errorf("not enough utxos to satisfy the withdrawal amount and network fee, withdraw amount: %d, selected amount: %d, estimated fee: %d", withdrawAmount, totalSelectedAmount, estimatedFee)
 	}
 
 	// calculate the change amount
 	changeAmount := totalSelectedAmount - withdrawAmount - estimatedFee
 
-	return selectedUTXOs, changeAmount, nil
+	return selectedUTXOs, totalSelectedAmount, withdrawAmount, changeAmount, nil
 }
 
-func SelectWithdrawals(withdrawals []*db.Withdraw, networkFee int64, maxVout int) ([]*db.Withdraw, int64, error) {
+// SelectWithdrawals select optimal withdrawals for withdrawal
+//
+// Parameters:
+//
+//	withdrawals - all withdrawals can start
+//	networkFee - network fee
+//	maxVout - maximum vout count
+//
+// Returns:
+//
+//	selectedWithdrawals - selected withdrawals
+//	minTxFee - minimum transaction fee
+//	error - error if any
+func SelectWithdrawals(withdrawals []*db.Withdraw, networkFee int64, maxVout int) ([]*db.Withdraw, int64, int64, error) {
 	// if network fee is too high, do not perform withdrawal
 	if networkFee > 500 {
-		return nil, 0, fmt.Errorf("network fee too high, no withdrawals allowed")
+		return nil, 0, 0, fmt.Errorf("network fee too high, no withdrawals allowed")
 	}
 
 	// sort withdrawals by MaxTxFee in descending order
@@ -181,9 +228,9 @@ func SelectWithdrawals(withdrawals []*db.Withdraw, networkFee int64, maxVout int
 	}
 
 	// group withdrawals and calculate the estimated fee
-	applyGroup := func(group []*db.Withdraw, multiplier float64) ([]*db.Withdraw, int64) {
+	applyGroup := func(group []*db.Withdraw, multiplier float64) ([]*db.Withdraw, int64, int64) {
 		if len(group) == 0 {
-			return nil, 0
+			return nil, 0, 0
 		}
 
 		// limit the number of withdrawals to maxVout
@@ -191,12 +238,14 @@ func SelectWithdrawals(withdrawals []*db.Withdraw, networkFee int64, maxVout int
 			group = group[:maxVout]
 		}
 
+		withdrawAmount := uint64(0)
 		// calculate the minimum MaxTxFee in the group
 		groupMinFee := group[0].MaxTxFee
 		for _, withdrawal := range group {
 			if withdrawal.MaxTxFee < groupMinFee {
 				groupMinFee = withdrawal.MaxTxFee
 			}
+			withdrawAmount += withdrawal.Amount
 		}
 
 		// actual fee is the minimum of networkFee * multiplier and the minimum MaxTxFee in the group
@@ -206,31 +255,45 @@ func SelectWithdrawals(withdrawals []*db.Withdraw, networkFee int64, maxVout int
 			actualFee = estimatedFee
 		}
 
-		return group, actualFee
+		return group, int64(withdrawAmount), actualFee
 	}
 
 	// process group1 (MaxTxFee > 150, fee: networkFee * 1.25 or min MaxTxFee in the group)
 	if len(group1) > 0 {
-		selectedWithdrawals, minTxFee := applyGroup(group1, 1.25)
-		return selectedWithdrawals, minTxFee, nil
+		selectedWithdrawals, withdrawAmount, minTxFee := applyGroup(group1, 1.25)
+		return selectedWithdrawals, withdrawAmount, minTxFee, nil
 	}
 
 	// process group2 (50 < MaxTxFee <= 150, fee: networkFee * 1.1 or min MaxTxFee in the group)
 	if len(group2) > 0 {
-		selectedWithdrawals, minTxFee := applyGroup(group2, 1.1)
-		return selectedWithdrawals, minTxFee, nil
+		selectedWithdrawals, withdrawAmount, minTxFee := applyGroup(group2, 1.1)
+		return selectedWithdrawals, withdrawAmount, minTxFee, nil
 	}
 
 	// process group3 (MaxTxFee <= 50, fee: networkFee)
 	if len(group3) > 0 {
-		selectedWithdrawals, minTxFee := applyGroup(group3, 1.0)
-		return selectedWithdrawals, minTxFee, nil
+		selectedWithdrawals, withdrawAmount, minTxFee := applyGroup(group3, 1.0)
+		return selectedWithdrawals, withdrawAmount, minTxFee, nil
 	}
 
 	// no withdrawals found
-	return nil, 0, fmt.Errorf("no withdrawals found")
+	return nil, 0, 0, fmt.Errorf("no withdrawals found")
 }
 
+// CreateRawTransaction create raw transaction
+//
+// Parameters:
+//
+//	utxos - all unspent utxos
+//	withdrawals - all withdrawals
+//	changeAddress - change address
+//	changeAmount - change amount
+//	net - bitcoin network
+//
+// Returns:
+//
+//	tx - raw transaction
+//	error - error if any
 func CreateRawTransaction(utxos []*db.Utxo, withdrawals []*db.Withdraw, changeAddress string, changeAmount int64, net *chaincfg.Params) (*wire.MsgTx, error) {
 	tx := wire.NewMsgTx(wire.TxVersion)
 
@@ -273,8 +336,18 @@ func CreateRawTransaction(utxos []*db.Utxo, withdrawals []*db.Withdraw, changeAd
 	return tx, nil
 }
 
-// SignTransactionByPrivKey
-// Use PrivKey to sign the transaction, and select the corresponding signature method according to the UTXO type
+// SignTransactionByPrivKey, use PrivKey to sign the transaction, and select the corresponding signature method according to the UTXO type
+//
+// Parameters:
+//
+//	privKey - private key
+//	tx - transaction
+//	utxos - all unspent utxos
+//	net - bitcoin network
+//
+// Returns:
+//
+//	error - error if any
 func SignTransactionByPrivKey(privKey *btcec.PrivateKey, tx *wire.MsgTx, utxos []*db.Utxo, net *chaincfg.Params) error {
 	for i, utxo := range utxos {
 		switch utxo.ReceiverType {

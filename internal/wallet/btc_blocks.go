@@ -30,7 +30,6 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 			pubkey, err := w.state.GetDepositKeyByBtcBlock(btcBlock.BlockNumber)
 			if err != nil {
 				log.Fatalf("Get current deposit key by btc height %d err %v", btcBlock.BlockNumber, err)
-				continue
 			}
 
 			network := types.GetBTCNetwork(config.AppConfig.BTCNetworkType)
@@ -107,7 +106,7 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 							Txid:      vin.PreviousOutPoint.Hash.String(),
 							OutIndex:  int(vin.PreviousOutPoint.Index),
 							SigScript: vin.SignatureScript,
-							Sender:    addresses[0].EncodeAddress(),
+							Sender:    sender,
 							Source:    "unknown",
 							Status:    "confirmed",
 							UpdatedAt: time.Now(),

@@ -119,6 +119,7 @@ type Withdraw struct {
 	Status    string    `gorm:"not null;index:withdraw_status_index" json:"status"`    // "create", "aggregating", "init", "signing", "pending", "unconfirm", "confirmed", "processed", "closed" - means user cancel
 	OrderId   string    `gorm:"not null;index:withdraw_orderid_index" json:"order_id"` // update when signing, it always can be query from SendOrder by BTC txid
 	Txid      string    `gorm:"not null;index:withdraw_txid_index" json:"txid"`        // update when signing
+	CreatedAt time.Time `gorm:"not null" json:"created_at"`
 	UpdatedAt time.Time `gorm:"not null" json:"updated_at"`
 }
 
@@ -140,16 +141,18 @@ type SendOrder struct {
 
 // Vin model (sent transaction input)
 type Vin struct {
-	ID        uint      `gorm:"primaryKey" json:"id"`
-	OrderId   string    `gorm:"not null;index:vin_orderid_index" json:"order_id"`
-	BtcHeight uint64    `gorm:"not null" json:"btc_height"`
-	Txid      string    `gorm:"not null;index:vin_txid_out_index" json:"txid"`
-	OutIndex  int       `gorm:"not null;index:vin_txid_out_index" json:"out_index"`
-	SigScript []byte    `json:"sig_script"`
-	Sender    string    `json:"sender"`
-	Source    string    `gorm:"not null" json:"source"`                        // "withdraw", "unknown"
-	Status    string    `gorm:"not null;index:vin_status_index" json:"status"` // "aggregating", "init", "signing", "pending", "unconfirm", "confirmed", "processed", "closed"
-	UpdatedAt time.Time `gorm:"not null" json:"updated_at"`
+	ID           uint      `gorm:"primaryKey" json:"id"`
+	OrderId      string    `gorm:"not null;index:vin_orderid_index" json:"order_id"`
+	BtcHeight    uint64    `gorm:"not null" json:"btc_height"`
+	Txid         string    `gorm:"not null;index:vin_txid_index" json:"txid"`
+	OutIndex     int       `gorm:"not null;index:vin_out_index" json:"out_index"`
+	SigScript    []byte    `json:"sig_script"`
+	RedeemScript []byte    `json:"redeem_script"` // P2WSH Type
+	Sender       string    `json:"sender"`
+	ReceiverType string    `gorm:"not null" json:"receiver_type"`                 // P2PKH P2SH P2WSH P2WPKH P2TR
+	Source       string    `gorm:"not null" json:"source"`                        // "withdraw", "unknown"
+	Status       string    `gorm:"not null;index:vin_status_index" json:"status"` // "aggregating", "init", "signing", "pending", "unconfirm", "confirmed", "processed", "closed"
+	UpdatedAt    time.Time `gorm:"not null" json:"updated_at"`
 }
 
 // Vout model (sent transaction output)

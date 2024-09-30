@@ -58,8 +58,10 @@ func (s *State) AddUtxo(utxo *db.Utxo) error {
 		}
 
 		// if found
-		utxo.Source = "deposit"
-		utxo.Status = "processed"
+		if err == nil {
+			utxo.Source = "deposit"
+			utxo.Status = "processed"
+		}
 	}
 
 	return s.saveUtxo(utxo)
@@ -94,7 +96,8 @@ func (s *State) AddOrUpdateVin(vin *db.Vin) error {
 	if err != nil && err != gorm.ErrRecordNotFound {
 		return err
 	}
-	if vinExists != nil {
+	// if vinExists is closed, add a new vin
+	if vinExists != nil && vinExists.Status != "closed" {
 		if vinExists.Status == "confirmed" || vinExists.Status == "processed" {
 			return nil
 		}
@@ -162,6 +165,21 @@ func (s *State) AddOrUpdateVout(vout *db.Vout) error {
 	return s.saveVout(vout)
 }
 
+func (s *State) GetUtxoCanSpend() ([]*db.Utxo, error) {
+	s.walletMu.RLock()
+	defer s.walletMu.RUnlock()
+
+	utxos, err := s.getUtxoByStatuses(nil, "amount desc", "confirmed", "processed")
+	if err != nil {
+		if err != gorm.ErrRecordNotFound {
+			return nil, err
+		}
+		return nil, nil
+	}
+
+	return utxos, nil
+}
+
 func (s *State) getVin(txid string, out int) (*db.Vin, error) {
 	var vin db.Vin
 	result := s.dbm.GetWalletDB().Where("txid=? and out_index=?", txid, out).Order("id desc").First(&vin)
@@ -187,6 +205,21 @@ func (s *State) getUtxo(txid string, out int) (*db.Utxo, error) {
 		return nil, result.Error
 	}
 	return &utxo, nil
+}
+
+func (s *State) getUtxoByStatuses(tx *gorm.DB, orderBy string, statuses ...string) ([]*db.Utxo, error) {
+	if tx == nil {
+		tx = s.dbm.GetWalletDB()
+	}
+	if orderBy == "" {
+		orderBy = "id asc"
+	}
+	var utxos []*db.Utxo
+	result := tx.Where("status in (?)", statuses).Order(orderBy).Find(&utxos)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return utxos, nil
 }
 
 func (s *State) saveUtxo(utxo *db.Utxo) error {

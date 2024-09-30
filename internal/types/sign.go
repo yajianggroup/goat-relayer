@@ -35,3 +35,14 @@ type MsgSignDeposit struct {
 	RelayerPubkey     []byte `json:"relayer_pubkey"`
 	Proposer          string `json:"proposer"`
 }
+
+// MsgSignSendOrder is used to sign send order, contains withdraw and consolidation
+type MsgSignSendOrder struct {
+	MsgSign
+
+	SendOrder []byte   `json:"send_order"`
+	Utxos     [][]byte `json:"utxos"`
+	Vins      [][]byte `json:"vins"`
+	Vouts     [][]byte `json:"vouts"`
+	Withdraws [][]byte `json:"withdraws"`
+}

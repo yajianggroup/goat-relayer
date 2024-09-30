@@ -34,6 +34,7 @@ func (s *State) CreateWithdrawal(address string, block, id, maxTxFee, amount uin
 		Status:    "create",
 		OrderId:   "",
 		UpdatedAt: time.Now(),
+		CreatedAt: time.Now(),
 	}
 
 	return s.saveWithdraw(withdraw)
