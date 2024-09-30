@@ -69,7 +69,7 @@ Withdrawal
 ## Withdrawal
 - Max Vout 150
 - Max Vin 50
-- NeworkFee <= User MaxTxFee <= 1.25 * NetworkFee
+- 1.25 * NetworkFee <= User MaxTxFee
 - Single UTXO value <= 50 BTC (sum wallet value)
 - Add a smallest value UTXO
 - ==

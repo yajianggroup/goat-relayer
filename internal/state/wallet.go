@@ -164,7 +164,7 @@ func (s *State) AddOrUpdateVout(vout *db.Vout) error {
 
 func (s *State) getVin(txid string, out int) (*db.Vin, error) {
 	var vin db.Vin
-	result := s.dbm.GetWalletDB().Where("txid=? and out_index=?", txid, out).First(&vin)
+	result := s.dbm.GetWalletDB().Where("txid=? and out_index=?", txid, out).Order("id desc").First(&vin)
 	if result.Error != nil {
 		return nil, result.Error
 	}
@@ -173,34 +173,16 @@ func (s *State) getVin(txid string, out int) (*db.Vin, error) {
 
 func (s *State) getVout(txid string, out int) (*db.Vout, error) {
 	var vout db.Vout
-	result := s.dbm.GetWalletDB().Where("txid=? and out_index=?", txid, out).First(&vout)
+	result := s.dbm.GetWalletDB().Where("txid=? and out_index=?", txid, out).Order("id desc").First(&vout)
 	if result.Error != nil {
 		return nil, result.Error
 	}
 	return &vout, nil
 }
 
-func (s *State) getWithdraw(evmTxId string) (*db.Withdraw, error) {
-	var withdraw db.Withdraw
-	result := s.dbm.GetWalletDB().Where("evm_tx_id=?", evmTxId).First(&withdraw)
-	if result.Error != nil {
-		return nil, result.Error
-	}
-	return &withdraw, nil
-}
-
-func (s *State) getSendOrder(orderId string) (*db.SendOrder, error) {
-	var order db.SendOrder
-	result := s.dbm.GetWalletDB().Where("order_id=?", orderId).First(&order)
-	if result.Error != nil {
-		return nil, result.Error
-	}
-	return &order, nil
-}
-
 func (s *State) getUtxo(txid string, out int) (*db.Utxo, error) {
 	var utxo db.Utxo
-	result := s.dbm.GetWalletDB().Where("txid=? and out_index=?", txid, out).First(&utxo)
+	result := s.dbm.GetWalletDB().Where("txid=? and out_index=?", txid, out).Order("id desc").First(&utxo)
 	if result.Error != nil {
 		return nil, result.Error
 	}

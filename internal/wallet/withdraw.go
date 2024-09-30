@@ -82,23 +82,45 @@ func (w *WalletServer) initWithdrawSig() {
 	// clean process, become proposer again, remove all status "create", "aggregating"
 	w.cleanWithdrawProcess()
 
-	// 3. check queue send order in db,
-	// has status 'aggregating', start bls again [6]
-	// there is no status 'aggregating', go to 4
-
-	// 4. query withraw list from db, status 'create'
+	// 3. query withraw list from db, status 'create'
 	// if count > 150, built soon
 	// else if count > 50, check oldest one, if than 2 hours (optional), built
 	// else if check oldest one, if status 'pending', skip
-	// else go to 5
+	// else go to 4
+	// 4. do consolidation
+	// 5. start bls sig
 
-	// 5. do consolidation
+	// step 3
+	withdraws, err := w.state.GetWithdrawsCanStart()
+	if err != nil {
+		log.Errorf("WalletServer initWithdrawSig getWithdrawsCanStart error: %v", err)
+		return
+	}
 
-	// 6. start bls sig
+	wCount := len(withdraws)
+	if wCount > 0 {
+		log.Infof("WalletServer initWithdrawSig getWithdrawsCanStart, count: %d", wCount)
+	}
+
+	if wCount > 150 {
+		log.Infof("WalletServer initWithdrawSig start build soon, count: %d", wCount)
+
+		// group by tx fee, step 50 sat/vbyte
+	} else if wCount > 50 {
+		log.Infof("WalletServer initWithdrawSig start build, count: %d", wCount)
+	} else if wCount > 0 {
+		log.Infof("WalletServer initWithdrawSig start build, count: %d", wCount)
+	} else {
+		log.Infof("WalletServer initWithdrawSig no withdraw can start, count: %d", wCount)
+	}
 
 	// w.sigStatus should update to false after layer2 InitalWithdraw callback
 }
 
 func (w *WalletServer) cleanWithdrawProcess() {
-	// TODO remove all status "create", "aggregating"
+	// unset all status "create", "aggregating"
+	err := w.state.CleanProcessingWithdraw()
+	if err != nil {
+		log.Fatal("WalletServer cleanWithdrawProcess unexpected error %v", err)
+	}
 }

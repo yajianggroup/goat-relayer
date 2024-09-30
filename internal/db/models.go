@@ -84,9 +84,9 @@ type Utxo struct {
 	PkScript      []byte    `json:"pk_script"`
 	RedeemScript  []byte    `json:"redeem_script"` // P2WSH Type
 	OutIndex      int       `gorm:"not null;index:unique_txid_out_index,unique" json:"out_index"`
-	Amount        int64     `gorm:"not null" json:"amount"`        // BTC precision up to 8 decimal places
-	Receiver      string    `gorm:"not null" json:"receiver"`      // it is MPC p2wpkh address here, or p2wsh (need collect)
-	WalletVersion string    `gorm:"not null" json:"wallet_vesion"` // MPC wallet version, it always sets to tss version, "fireblocks:1:2" = fireblocks workspace 1 account 2
+	Amount        int64     `gorm:"not null;index:utxo_amount_index" json:"amount"`     // BTC precision up to 8 decimal places
+	Receiver      string    `gorm:"not null;index:utxo_receiver_index" json:"receiver"` // it is MPC p2wpkh address here, or p2wsh (need collect)
+	WalletVersion string    `gorm:"not null" json:"wallet_vesion"`                      // MPC wallet version, it always sets to tss version, "fireblocks:1:2" = fireblocks workspace 1 account 2
 	Sender        string    `gorm:"not null" json:"sender"`
 	EvmAddr       string    `json:"evm_addr"`                      // deposit to L2
 	Source        string    `gorm:"not null" json:"source"`        // "deposit", "unknown"
@@ -111,12 +111,12 @@ type DepositResult struct {
 type Withdraw struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	RequestId uint64    `gorm:"not null;uniqueIndex" json:"request_id"`
-	GoatBlock uint64    `gorm:"not null" json:"goat_block"` // Goat block height
-	Amount    uint64    `gorm:"not null" json:"amount"`     // BTC precision up to 8 decimal places
-	MaxTxFee  uint64    `gorm:"not null" json:"max_tx_fee"` // Unit is satoshis
+	GoatBlock uint64    `gorm:"not null" json:"goat_block"`                             // Goat block height
+	Amount    uint64    `gorm:"not null;index:withdraw_amount_index" json:"amount"`     // BTC precision up to 8 decimal places
+	MaxTxFee  uint64    `gorm:"not null;index:withdraw_maxfee_index" json:"max_tx_fee"` // Unit is satoshis
 	From      string    `gorm:"not null" json:"from"`
 	To        string    `gorm:"not null" json:"to"`                                    // BTC address, support all 4 types
-	Status    string    `gorm:"not null" json:"status"`                                // "create", "aggregating", "init", "signing", "pending", "unconfirm", "confirmed", "processed", "closed" - means user cancel
+	Status    string    `gorm:"not null;index:withdraw_status_index" json:"status"`    // "create", "aggregating", "init", "signing", "pending", "unconfirm", "confirmed", "processed", "closed" - means user cancel
 	OrderId   string    `gorm:"not null;index:withdraw_orderid_index" json:"order_id"` // update when signing, it always can be query from SendOrder by BTC txid
 	Txid      string    `gorm:"not null;index:withdraw_txid_index" json:"txid"`        // update when signing
 	UpdatedAt time.Time `gorm:"not null" json:"updated_at"`
@@ -129,7 +129,7 @@ type SendOrder struct {
 	Proposer  string    `gorm:"not null" json:"proposer"`
 	Amount    uint64    `gorm:"not null" json:"amount"` // BTC precision up to 8 decimal places
 	MaxTxFee  uint64    `gorm:"not null" json:"max_tx_fee"`
-	Status    string    `gorm:"not null" json:"status"`                                     // "aggregating", "init", "signing", "pending", "rbf-request", "unconfirm", "confirmed", "processed", "closed" - means not in use, should rollback withdraw, vin, vout
+	Status    string    `gorm:"not null;index:sendorder_status_index" json:"status"`        // "aggregating", "init", "signing", "pending", "rbf-request", "unconfirm", "confirmed", "processed", "closed" - means not in use, should rollback withdraw, vin, vout
 	OrderType string    `gorm:"not null;index:sendorder_ordertype_index" json:"order_type"` // "withdrawal", "consolidation"
 	BtcBlock  uint64    `gorm:"not null" json:"btc_block"`                                  // BTC block height
 	Txid      string    `gorm:"not null;index:sendorder_txid_index" json:"txid"`            // txid will update after signing status
@@ -147,8 +147,8 @@ type Vin struct {
 	OutIndex  int       `gorm:"not null;index:vin_txid_out_index" json:"out_index"`
 	SigScript []byte    `json:"sig_script"`
 	Sender    string    `json:"sender"`
-	Source    string    `gorm:"not null" json:"source"` // "withdraw", "unknown"
-	Status    string    `gorm:"not null" json:"status"` // "aggregating", "init", "signing", "pending", "unconfirm", "confirmed", "processed"
+	Source    string    `gorm:"not null" json:"source"`                        // "withdraw", "unknown"
+	Status    string    `gorm:"not null;index:vin_status_index" json:"status"` // "aggregating", "init", "signing", "pending", "unconfirm", "confirmed", "processed", "closed"
 	UpdatedAt time.Time `gorm:"not null" json:"updated_at"`
 }
 
@@ -159,12 +159,12 @@ type Vout struct {
 	BtcHeight  uint64    `gorm:"not null" json:"btc_height"`
 	Txid       string    `gorm:"not null;index:vout_txid_out_index" json:"txid"`
 	OutIndex   int       `gorm:"not null;index:vout_txid_out_index" json:"out_index"`
-	WithdrawId string    `json:"withdraw_id"`              // EvmTxId
-	Amount     int64     `gorm:"not null" json:"amount"`   // BTC precision up to 8 decimal places
-	Receiver   string    `gorm:"not null" json:"receiver"` // withdraw To
-	Sender     string    `json:"sender"`                   // MPC address
-	Source     string    `gorm:"not null" json:"source"`   // "withdraw", "unknown"
-	Status     string    `gorm:"not null" json:"status"`   // "aggregating", "init", "signing", "pending", "unconfirm", "confirmed", "processed"
+	WithdrawId string    `json:"withdraw_id"`                                    // EvmTxId
+	Amount     int64     `gorm:"not null" json:"amount"`                         // BTC precision up to 8 decimal places
+	Receiver   string    `gorm:"not null" json:"receiver"`                       // withdraw To
+	Sender     string    `json:"sender"`                                         // MPC address
+	Source     string    `gorm:"not null" json:"source"`                         // "withdraw", "unknown"
+	Status     string    `gorm:"not null;index:vout_status_index" json:"status"` // "aggregating", "init", "signing", "pending", "unconfirm", "confirmed", "processed", "closed"
 	UpdatedAt  time.Time `gorm:"not null" json:"updated_at"`
 }
 

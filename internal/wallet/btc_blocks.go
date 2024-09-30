@@ -135,9 +135,11 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 					}
 
 					if receiver == p2pkhAddress.EncodeAddress() {
-						receiverType = "P2PKH"
+						receiverType = types.WALLET_TYPE_P2PKH
 					} else if receiver == p2wpkhAddress.EncodeAddress() {
-						receiverType = "P2WPKH"
+						receiverType = types.WALLET_TYPE_P2WPKH
+					} else {
+						receiverType = types.WALLET_TYPE_UNKNOWN
 					}
 					if receiverType == "P2PKH" || receiverType == "P2WPKH" {
 						// should save vout db logic
