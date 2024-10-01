@@ -180,7 +180,7 @@ func (w *WalletServer) initWithdrawSig() {
 		startBls = true
 
 		// create SendOrder for selectedUtxos consolidation
-		tx, err := CreateRawTransaction(selectedUtxos, nil, p2wpkhAddress.EncodeAddress(), finalAmount, 0, network)
+		tx, _, err := CreateRawTransaction(selectedUtxos, nil, p2wpkhAddress.EncodeAddress(), finalAmount, 0, network)
 		if err != nil {
 			log.Errorf("WalletServer initWithdrawSig CreateRawTransaction for consolidation error: %v", err)
 			return
@@ -201,9 +201,18 @@ func (w *WalletServer) initWithdrawSig() {
 		}
 		log.Infof("WalletServer initWithdrawSig SelectOptimalUTXOs, totalSelectedAmount: %d, withdrawAmount: %d, changeAmount: %d, selectedUtxos: %d", totalSelectedAmount, withdrawAmount, changeAmount, len(selectOptimalUTXOs))
 
-		tx, err := CreateRawTransaction(selectOptimalUTXOs, selectedWithdraws, p2wpkhAddress.EncodeAddress(), changeAmount, estimateFee, network)
+		tx, dustWithdrawId, err := CreateRawTransaction(selectOptimalUTXOs, selectedWithdraws, p2wpkhAddress.EncodeAddress(), changeAmount, estimateFee, network)
 		if err != nil {
 			log.Errorf("WalletServer initWithdrawSig CreateRawTransaction for withdraw error: %v", err)
+			if dustWithdrawId > 0 {
+				// update this withdraw to closed
+				err = w.state.CloseWithdraw(dustWithdrawId, "dust limit")
+				if err != nil {
+					log.Errorf("WalletServer initWithdrawSig CloseWithdraw for dust limit withdraw %d, error: %v", dustWithdrawId, err)
+				} else {
+					log.Infof("WalletServer initWithdrawSig CloseWithdraw for dust limit withdraw %d ok, ave tx fee %d", dustWithdrawId, estimateFee/int64(len(selectedWithdraws)))
+				}
+			}
 			return
 		}
 		log.Infof("WalletServer initWithdrawSig CreateRawTransaction for withdraw, tx: %s", tx.TxHash().String())

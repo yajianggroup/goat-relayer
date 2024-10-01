@@ -120,6 +120,7 @@ type Withdraw struct {
 	Status    string    `gorm:"not null;index:withdraw_status_index" json:"status"`    // "create", "aggregating", "init", "signing", "pending", "unconfirm", "confirmed", "processed", "closed" - means user cancel
 	OrderId   string    `gorm:"not null;index:withdraw_orderid_index" json:"order_id"` // update when signing, it always can be query from SendOrder by BTC txid
 	Txid      string    `gorm:"not null;index:withdraw_txid_index" json:"txid"`        // update when signing
+	Reason    string    `gorm:"not null" json:"reason"`                                // reason for closed
 	CreatedAt time.Time `gorm:"not null" json:"created_at"`
 	UpdatedAt time.Time `gorm:"not null" json:"updated_at"`
 }

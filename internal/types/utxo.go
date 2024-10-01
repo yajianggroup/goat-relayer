@@ -19,6 +19,8 @@ const (
 	WALLET_TYPE_P2SH   = "P2SH"
 	WALLET_TYPE_P2WSH  = "P2WSH"
 	WALLET_TYPE_P2TR   = "P2TR"
+
+	DUST_LIMIT = 550 // 546 satoshis for P2PKH
 )
 
 var (

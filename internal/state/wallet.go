@@ -189,6 +189,18 @@ func (s *State) getVin(txid string, out int) (*db.Vin, error) {
 	return &vin, nil
 }
 
+func (s *State) getVinsByOrderId(tx *gorm.DB, orderId string) ([]*db.Vin, error) {
+	if tx == nil {
+		tx = s.dbm.GetWalletDB()
+	}
+	var vins []*db.Vin
+	err := tx.Where("order_id=?", orderId).Find(&vins).Error
+	if err != nil && err != gorm.ErrRecordNotFound {
+		return nil, err
+	}
+	return vins, nil
+}
+
 func (s *State) getVout(txid string, out int) (*db.Vout, error) {
 	var vout db.Vout
 	result := s.dbm.GetWalletDB().Where("txid=? and out_index=?", txid, out).Order("id desc").First(&vout)

@@ -294,15 +294,16 @@ func SelectWithdrawals(withdrawals []*db.Withdraw, networkFee int64, maxVout int
 // Returns:
 //
 //	tx - raw transaction
+//	dustWithdraw - value lower than dust limit withdraw id
 //	error - error if any
-func CreateRawTransaction(utxos []*db.Utxo, withdrawals []*db.Withdraw, changeAddress string, changeAmount, estimatedFee int64, net *chaincfg.Params) (*wire.MsgTx, error) {
+func CreateRawTransaction(utxos []*db.Utxo, withdrawals []*db.Withdraw, changeAddress string, changeAmount, estimatedFee int64, net *chaincfg.Params) (*wire.MsgTx, uint, error) {
 	tx := wire.NewMsgTx(wire.TxVersion)
 
 	// add utxos as transaction inputs
 	for _, utxo := range utxos {
 		hash, err := chainhash.NewHashFromStr(utxo.Txid)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		outPoint := wire.NewOutPoint(hash, uint32(utxo.OutIndex))
 		tx.AddTxIn(wire.NewTxIn(outPoint, nil, nil))
@@ -322,15 +323,15 @@ func CreateRawTransaction(utxos []*db.Utxo, withdrawals []*db.Withdraw, changeAd
 	for _, withdrawal := range withdrawals {
 		addr, err := btcutil.DecodeAddress(withdrawal.To, net)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		pkScript, err := txscript.PayToAddrScript(addr)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		val := int64(withdrawal.Amount) - actualFee
-		if val < 0 {
-			val = 0
+		if val <= types.DUST_LIMIT {
+			return nil, withdrawal.ID, fmt.Errorf("withdrawal amount too small after fee deduction: %d", val)
 		}
 		// re-set TxFee field
 		withdrawal.TxFee = withdrawal.Amount - uint64(val)
@@ -341,16 +342,16 @@ func CreateRawTransaction(utxos []*db.Utxo, withdrawals []*db.Withdraw, changeAd
 	if changeAmount-actualFee > 0 {
 		changeAddr, err := btcutil.DecodeAddress(changeAddress, net)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		changePkScript, err := txscript.PayToAddrScript(changeAddr)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		tx.AddTxOut(wire.NewTxOut(changeAmount-actualFee, changePkScript))
 	}
 
-	return tx, nil
+	return tx, 0, nil
 }
 
 // SignTransactionByPrivKey, use PrivKey to sign the transaction, and select the corresponding signature method according to the UTXO type

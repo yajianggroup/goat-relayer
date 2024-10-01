@@ -1,6 +1,7 @@
 package state
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/goatnetwork/goat-relayer/internal/db"
@@ -41,6 +42,7 @@ func (s *State) CreateWithdrawal(address string, block, id, txPrice, amount uint
 		TxFee:     0,
 		Status:    db.WITHDRAW_STATUS_CREATE,
 		OrderId:   "",
+		Reason:    "",
 		UpdatedAt: time.Now(),
 		CreatedAt: time.Now(),
 	}
@@ -54,6 +56,53 @@ func (s *State) CreateSendOrder(order *db.SendOrder, selectedUtxos []*db.Utxo, s
 	defer s.walletMu.Unlock()
 
 	err := s.dbm.GetWalletDB().Transaction(func(tx *gorm.DB) error {
+		err := s.saveOrder(tx, order)
+		if err != nil {
+			return err
+		}
+
+		if err = tx.Create(&vins).Error; err != nil {
+			return err
+		}
+
+		if err = tx.Create(&vouts).Error; err != nil {
+			return err
+		}
+
+		// update utxo status
+		for _, utxo := range selectedUtxos {
+			var utxoInDb *db.Utxo
+			if err = tx.Where("id = ?", utxo.ID).First(utxoInDb).Error; err != nil {
+				return err
+			}
+			if utxoInDb.Status == db.UTXO_STATUS_UNCONFIRM || utxoInDb.Status == db.UTXO_STATUS_PENDING || utxoInDb.Status == db.UTXO_STATUS_SPENT {
+				return fmt.Errorf("utxo status can not be make withdrawal or consolidation, utxo id: %d, status: %s", utxo.ID, utxoInDb.Status)
+			}
+			err = tx.Model(&db.Utxo{}).Where("id = ?", utxo.ID).Updates(&db.Utxo{Status: db.UTXO_STATUS_PENDING, UpdatedAt: time.Now()}).Error
+			if err != nil {
+				log.Errorf("State CreateSendOrder update utxo records error: %v", err)
+				return err
+			}
+		}
+
+		// update withdraw status
+		if order.OrderType == db.ORDER_TYPE_WITHDRAWAL {
+			for _, withdraw := range selectedUtxos {
+				var withdrawInDb *db.Withdraw
+				if err = tx.Where("id = ?", withdraw.ID).First(withdrawInDb).Error; err != nil {
+					return err
+				}
+				if withdrawInDb.Status != db.WITHDRAW_STATUS_CREATE {
+					return fmt.Errorf("withdraw status can not be make withdrawal, id: %d, status: %s", withdraw.ID, withdrawInDb.Status)
+				}
+				err = tx.Model(&db.Withdraw{}).Where("id = ?", withdraw.ID).Updates(&db.Utxo{Status: db.WITHDRAW_STATUS_AGGREGATING, UpdatedAt: time.Now()}).Error
+				if err != nil {
+					log.Errorf("State CreateSendOrder update withdraw records error: %v", err)
+					return err
+				}
+			}
+		}
+
 		return nil
 	})
 	return err
@@ -229,8 +278,7 @@ func (s *State) UpdateWithdrawFinalized(txid string) error {
 	return err
 }
 
-// CleanProcessingWithdraw
-// clean all status "aggregating" orders and related withdraws
+// CleanProcessingWithdraw, clean all status "aggregating" orders and related withdraws
 func (s *State) CleanProcessingWithdraw() error {
 	s.walletMu.Lock()
 	defer s.walletMu.Unlock()
@@ -254,6 +302,27 @@ func (s *State) CleanProcessingWithdraw() error {
 				if err != nil {
 					return err
 				}
+
+				// update UTXO from pending to processed by vins
+				vins, err := s.getVinsByOrderId(tx, order.OrderId)
+				if err != nil {
+					return err
+				}
+				for _, vin := range vins {
+					var utxoInDb *db.Utxo
+					if err = tx.Where("txid = ? and out_index", vin.Txid, vin.OutIndex).First(utxoInDb).Error; err != nil {
+						continue
+					}
+					if utxoInDb.Status != db.UTXO_STATUS_PENDING {
+						continue
+					}
+					err = tx.Model(&db.Utxo{}).Where("id = ?", utxoInDb.ID).Updates(&db.Utxo{Status: db.UTXO_STATUS_PROCESSED, UpdatedAt: time.Now()}).Error
+					if err != nil {
+						log.Errorf("State CleanProcessingWithdraw update utxo txid %s - out %d error: %v", utxoInDb.Txid, utxoInDb.OutIndex, err)
+						return err
+					}
+				}
+
 				err = s.updateOtherStatusByOrder(tx, order.OrderId, db.ORDER_STATUS_CLOSED)
 				if err != nil {
 					return err
@@ -291,6 +360,18 @@ func (s *State) GetWithdrawsCanStart() ([]*db.Withdraw, error) {
 	}
 
 	return withdraws, nil
+}
+
+func (s *State) CloseWithdraw(id uint, reason string) error {
+	s.walletMu.RLock()
+	defer s.walletMu.RUnlock()
+
+	err := s.dbm.GetWalletDB().Model(&db.Withdraw{}).Where("id = ?", id).Updates(&db.Withdraw{Status: db.WITHDRAW_STATUS_CLOSED, Reason: reason, UpdatedAt: time.Now()}).Error
+	if err != nil && err != gorm.ErrRecordNotFound {
+		log.Errorf("State CloseWithdraw Withdraw by id: %d, reason: %s, error: %v", id, reason, err)
+		return err
+	}
+	return nil
 }
 
 func (s *State) getWithdraw(evmTxId string) (*db.Withdraw, error) {
