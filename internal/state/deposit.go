@@ -1,9 +1,11 @@
 package state
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/goatnetwork/goat-relayer/internal/db"
+	"github.com/goatnetwork/goat-relayer/internal/types"
 	"gorm.io/gorm"
 )
 
@@ -173,32 +175,54 @@ func (s *State) QueryUnConfirmDeposit() ([]db.Deposit, error) {
 	return deposit, nil
 }
 
-func (s *State) QueryBlockByTxHash(txHash string) (block *db.BtcBlockData, err error) {
-	var btcTxOutput db.BtcTXOutput
-	if err := s.dbm.GetBtcCacheDB().Where("tx_hash = ?", txHash).First(&btcTxOutput).Error; err != nil {
-		return nil, err
+// QueryBtcBlockDataByHeight query btc block data by height
+func (s *State) QueryBtcBlockDataByBlockHashes(blockHashes []string) ([]db.BtcBlockData, error) {
+	var btcBlockData []db.BtcBlockData
+	result := s.dbm.GetBtcCacheDB().Where("block_hash IN (?)", blockHashes).Find(&btcBlockData)
+	if result.Error != nil {
+		return nil, result.Error
 	}
+	return btcBlockData, nil
+}
+
+func (s *State) UpdateConfirmedDepositsByBtcHeight(blockHeight uint64, blockHash string) (err error) {
+	s.depositMu.Lock()
+	defer s.depositMu.Unlock()
 
 	var btcBlockData db.BtcBlockData
-	if err := s.dbm.GetBtcCacheDB().Where("id = ?", btcTxOutput.BlockID).First(&btcBlockData).Error; err != nil {
-		return nil, err
+	result := s.dbm.GetBtcCacheDB().Where("height = ?", blockHeight).Find(&btcBlockData)
+	if result.Error != nil {
+		return result.Error
 	}
 
-	var btcBlock db.BtcBlock
-	if err := s.dbm.GetBtcLightDB().Where("height = ? and status = ?", btcBlockData.BlockHeight, db.DEPOSIT_STATUS_PROCESSED).First(&btcBlock).Error; err != nil {
-		return nil, err
+	// Save to confirmed while the block has the deposit tx
+	if err != nil {
+		return err
 	}
-	// TODO check block hash by pkscript
-	// blockHashBytes := btcTxOutput.PkScript[:32] // Assuming the block hash is the first 32 bytes of PkScript
-	// blockHash, err := chainhash.NewHash(blockHashBytes)
-	// if err != nil {
-	// 	return nil, err
-	// }
+	for _, deposit := range s.depositState.UnconfirmQueue {
+		txHashes := make([]string, 0)
+		err := json.Unmarshal([]byte(btcBlockData.TxHashes), &txHashes)
+		if err != nil {
+			return err
+		}
+		merkleRoot, proofBytes, txIndex, err := types.GenerateSPVProof(deposit.TxHash, txHashes)
+		if deposit.Status == "unconfirm" && txIndex != -1 {
+			if err != nil {
+				return err
+			}
+			deposit.Status = "confirmed"
+			deposit.BlockHash = blockHash
+			deposit.BlockHeight = blockHeight
+			deposit.TxIndex = uint64(txIndex)
+			deposit.MerkleRoot = string(merkleRoot)
+			deposit.Proof = string(proofBytes)
+			deposit.UpdatedAt = time.Now()
+			result := s.dbm.GetBtcCacheDB().Save(deposit)
+			if result.Error != nil {
+				return result.Error
+			}
+		}
+	}
 
-	// // checkout block
-	// if btcBlockData.BlockHash != blockHash.String() {
-	// 	return nil, errors.New("block hash mismatch")
-	// }
-
-	return &btcBlockData, nil
+	return nil
 }

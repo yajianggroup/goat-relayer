@@ -339,7 +339,17 @@ func (lis *Layer2Listener) processNewBtcBlockHash(block uint64, attributes []abc
 		}
 
 		// manage BtcHeadState queue
-		return lis.state.UpdateProcessedBtcBlock(block, u64, hash)
+		err = lis.state.UpdateProcessedBtcBlock(block, u64, hash)
+		if err != nil {
+			return err
+		}
+
+		// update deposit state
+		err = lis.state.UpdateConfirmedDepositsByBtcHeight(u64, hash)
+		if err != nil {
+			return err
+		}
+		return nil
 	}
 	return nil
 }
