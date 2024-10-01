@@ -2,7 +2,6 @@ package rpc
 
 import (
 	"encoding/base64"
-	"encoding/hex"
 	"errors"
 	"strings"
 
@@ -12,46 +11,35 @@ import (
 	"github.com/goatnetwork/goat-relayer/internal/types"
 )
 
-func (s *UtxoServer) VerifyDeposit(tx wire.MsgTx, evmAddress string) (isTrue bool, signVersion uint32, err error) {
+func (s *UtxoServer) VerifyDeposit(tx wire.MsgTx, evmAddress string) (isTrue bool, signVersion uint32, outputIndex int, err error) {
 	network := types.GetBTCNetwork(config.AppConfig.BTCNetworkType)
 
 	pubKey, err := s.getPubKey()
 	if err != nil {
-		return false, 100, err
+		return false, 100, -1, err
 	}
 
-	version := uint32(100)
-	for _, out := range tx.TxOut {
-		pkScript := hex.EncodeToString(out.PkScript)
-		if pkScript[:4] == "0014" {
-			version = 1
-			break
-		} else if pkScript[:4] == "0020" {
-			version = 0
-			break
-		} else {
-			continue
-		}
+	p2wpkh, err := types.GenerateP2WPKHAddress(pubKey, network)
+	if err != nil {
+		return false, 100, -1, err
 	}
 
-	if version == 1 {
-		p2wpkh, err := types.GenerateP2WPKHAddress(pubKey, network)
-		if err != nil {
-			return false, 100, err
-		}
-
-		isTrue, _ = types.IsUtxoGoatDepositV1(&tx, []btcutil.Address{p2wpkh}, network)
-		if isTrue {
-			return true, 1, nil
-		}
-	} else if version == 0 {
-		isTrue = types.IsUtxoGoatDepositV0(&tx, evmAddress, pubKey, network)
-		if isTrue {
-			return true, 0, nil
-		}
+	isTrue, _ = types.IsUtxoGoatDepositV1(&tx, []btcutil.Address{p2wpkh}, network)
+	if isTrue {
+		return true, 1, 0, nil
 	}
 
-	return false, 100, errors.New("invalid deposit address")
+	p2wsh, err := types.GenerateV0P2WSHAddress(pubKey, evmAddress, network)
+	if err != nil {
+		return false, 100, -1, err
+	}
+
+	isTrue, outputIndex = types.IsUtxoGoatDepositV0(&tx, []btcutil.Address{p2wsh}, network)
+	if isTrue {
+		return true, 0, outputIndex, nil
+	}
+
+	return false, 100, -1, errors.New("invalid deposit address")
 }
 
 func (s *UtxoServer) getPubKey() ([]byte, error) {

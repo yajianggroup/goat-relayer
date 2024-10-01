@@ -40,7 +40,7 @@ func (s *Signer) handleSigStartNewDeposit(ctx context.Context, e types.MsgSignDe
 			BlockNumber:       tx.BlockNumber,
 			TxIndex:           tx.TxIndex,
 			NoWitnessTx:       tx.NoWitnessTx,
-			OutputIndex:       tx.OutputIndex,
+			OutputIndex:       uint32(tx.OutputIndex),
 			IntermediateProof: tx.IntermediateProof,
 			EvmAddress:        tx.EvmAddress,
 			RelayerPubkey:     pubKey,

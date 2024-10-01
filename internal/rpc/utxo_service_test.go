@@ -32,7 +32,7 @@ func TestAddUnconfirmDeposit(t *testing.T) {
 	signVersion := uint32(1)
 
 	// Test adding unconfirmed deposit
-	err := s.AddUnconfirmDeposit(txID, rawTx, evmAddress, signVersion)
+	err := s.AddUnconfirmDeposit(txID, rawTx, evmAddress, signVersion, 0)
 	assert.NoError(t, err)
 
 	// // Verify if the deposit was correctly added
@@ -46,6 +46,6 @@ func TestAddUnconfirmDeposit(t *testing.T) {
 	// assert.Error(t, err) // Should return an error because the deposit already exists
 
 	// Test adding a different deposit
-	err = s.AddUnconfirmDeposit("anotherTxID", "anotherRawTx", "anotherEvmAddress", uint32(0))
+	err = s.AddUnconfirmDeposit("anotherTxID", "anotherRawTx", "anotherEvmAddress", uint32(0), 0)
 	assert.NoError(t, err)
 }

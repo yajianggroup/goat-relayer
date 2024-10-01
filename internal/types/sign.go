@@ -35,7 +35,7 @@ type DepositTX struct {
 	IntermediateProof []byte `json:"intermediate_proof"`
 	MerkleRoot        []byte `json:"merkle_root"`
 	NoWitnessTx       []byte `json:"no_witness_tx,omitempty"`
-	OutputIndex       uint32 `json:"output_index"`
+	OutputIndex       int    `json:"output_index"`
 	EvmAddress        []byte `json:"evm_address"`
 }
 

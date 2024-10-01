@@ -13,7 +13,7 @@ import (
 AddUnconfirmDeposit
 when utxo scanner detected a new transaction in 1 confirm, save to unconfirmed,
 */
-func (s *State) AddUnconfirmDeposit(txHash string, rawTx string, evmAddr string, signVersion uint32) error {
+func (s *State) AddUnconfirmDeposit(txHash string, rawTx string, evmAddr string, signVersion uint32, outputIndex int) error {
 	s.depositMu.Lock()
 	defer s.depositMu.Unlock()
 
@@ -36,6 +36,7 @@ func (s *State) AddUnconfirmDeposit(txHash string, rawTx string, evmAddr string,
 		RawTx:       rawTx,
 		EvmAddr:     evmAddr,
 		SignVersion: signVersion,
+		OutputIndex: outputIndex,
 	}
 	result := s.dbm.GetBtcCacheDB().Save(deposit)
 	if result.Error != nil {
