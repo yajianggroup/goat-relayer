@@ -14,13 +14,11 @@ import (
 )
 
 const (
-	WALLET_TYPE_P2WPKH  = "P2WPKH"
-	WALLET_TYPE_P2PKH   = "P2PKH"
-	WALLET_TYPE_P2WSH   = "P2WSH"
-	WALLET_TYPE_UNKNOWN = "UNKNOWN"
-
-	ORDER_TYPE_WITHDRAWAL    = "withdrawal"
-	ORDER_TYPE_CONSOLIDATION = "consolidation"
+	WALLET_TYPE_P2WPKH = "P2WPKH"
+	WALLET_TYPE_P2PKH  = "P2PKH"
+	WALLET_TYPE_P2SH   = "P2SH"
+	WALLET_TYPE_P2WSH  = "P2WSH"
+	WALLET_TYPE_P2TR   = "P2TR"
 )
 
 var (
@@ -141,17 +139,22 @@ func IsUtxoGoatDepositV0(tx *wire.MsgTx, evmAddress string, pubKey []byte, net *
 
 // TransactionSizeEstimate estimates the size of a transaction in bytes
 func TransactionSizeEstimate(numInputs, numOutputs int, utxoTypes []string) int64 {
-	var totalSize int64 = 10
+	var totalSize int64 = 10 // Base transaction size (version, locktime, etc.)
 	for _, utxoType := range utxoTypes {
 		switch utxoType {
 		case WALLET_TYPE_P2WPKH:
-			totalSize += 68
+			totalSize += 68 // P2WPKH input size
 		case WALLET_TYPE_P2PKH:
-			totalSize += 148
+			totalSize += 148 // P2PKH input size
 		case WALLET_TYPE_P2WSH:
-			totalSize += 170
+			totalSize += 170 // P2WSH input size
+		case WALLET_TYPE_P2SH:
+			totalSize += 296 // P2SH input size
+		case WALLET_TYPE_P2TR:
+			totalSize += 57 // P2TR input size
 		}
 	}
+	// Each output (for both P2PKH, P2WPKH, P2SH, and P2TR) is around 34 bytes, except P2SH which is 32 bytes
 	totalSize += int64(34 * numOutputs)
 	return totalSize
 }

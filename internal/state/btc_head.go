@@ -40,9 +40,9 @@ func (s *State) AddUnconfirmBtcBlock(height uint64, hash string) error {
 		return nil
 	}
 
-	status := "unconfirm"
+	status := db.BTC_BLOCK_STATUS_UNCONFIRM
 	if height <= s.btcHeadState.Latest.Height {
-		status = "processed"
+		status = db.BTC_BLOCK_STATUS_PROCESSED
 	}
 
 	btcBlock := &db.BtcBlock{
@@ -64,9 +64,9 @@ func (s *State) SaveConfirmBtcBlock(height uint64, hash string) error {
 	defer s.btcHeadMu.Unlock()
 
 	btcBlock, err := s.queryBtcBlockByHeigh(height)
-	status := "confirmed"
+	status := db.BTC_BLOCK_STATUS_CONFIRMED
 	if height <= s.btcHeadState.Latest.Height {
-		status = "processed"
+		status = db.BTC_BLOCK_STATUS_PROCESSED
 	}
 
 	if err != nil {
@@ -82,7 +82,7 @@ func (s *State) SaveConfirmBtcBlock(height uint64, hash string) error {
 			return err
 		}
 	} else {
-		if btcBlock.Status != "processed" {
+		if btcBlock.Status != db.BTC_BLOCK_STATUS_PROCESSED {
 			btcBlock.Status = status
 			btcBlock.Hash = hash
 		}
@@ -111,10 +111,10 @@ func (s *State) UpdateProcessedBtcBlock(block uint64, height uint64, hash string
 		return err
 	}
 
-	if btcBlock.Status == "processed" {
+	if btcBlock.Status == db.BTC_BLOCK_STATUS_PROCESSED {
 		return nil
 	}
-	btcBlock.Status = "processed"
+	btcBlock.Status = db.BTC_BLOCK_STATUS_PROCESSED
 
 	// update height
 	result := s.dbm.GetBtcLightDB().Save(btcBlock)

@@ -111,9 +111,10 @@ type DepositResult struct {
 type Withdraw struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	RequestId uint64    `gorm:"not null;uniqueIndex" json:"request_id"`
-	GoatBlock uint64    `gorm:"not null" json:"goat_block"`                             // Goat block height
-	Amount    uint64    `gorm:"not null;index:withdraw_amount_index" json:"amount"`     // BTC precision up to 8 decimal places
-	MaxTxFee  uint64    `gorm:"not null;index:withdraw_maxfee_index" json:"max_tx_fee"` // Unit is satoshis
+	GoatBlock uint64    `gorm:"not null" json:"goat_block"`                            // Goat block height
+	Amount    uint64    `gorm:"not null;index:withdraw_amount_index" json:"amount"`    // withdraw BTC satoshis, build tx out should minus tx fee
+	TxPrice   uint64    `gorm:"not null;index:withdraw_txprice_index" json:"tx_price"` // Unit is satoshis
+	TxFee     uint64    `gorm:"not null" json:"tx_fee"`                                // will update when aggregating build
 	From      string    `gorm:"not null" json:"from"`
 	To        string    `gorm:"not null" json:"to"`                                    // BTC address, support all 4 types
 	Status    string    `gorm:"not null;index:withdraw_status_index" json:"status"`    // "create", "aggregating", "init", "signing", "pending", "unconfirm", "confirmed", "processed", "closed" - means user cancel
@@ -125,18 +126,19 @@ type Withdraw struct {
 
 // SendOrder model (should send withdraw, vin, vout via off-chain consensus)
 type SendOrder struct {
-	ID        uint      `gorm:"primaryKey" json:"id"`
-	OrderId   string    `gorm:"not null;uniqueIndex" json:"order_id"`
-	Proposer  string    `gorm:"not null" json:"proposer"`
-	Amount    uint64    `gorm:"not null" json:"amount"` // BTC precision up to 8 decimal places
-	MaxTxFee  uint64    `gorm:"not null" json:"max_tx_fee"`
-	Status    string    `gorm:"not null;index:sendorder_status_index" json:"status"`        // "aggregating", "init", "signing", "pending", "rbf-request", "unconfirm", "confirmed", "processed", "closed" - means not in use, should rollback withdraw, vin, vout
-	OrderType string    `gorm:"not null;index:sendorder_ordertype_index" json:"order_type"` // "withdrawal", "consolidation"
-	BtcBlock  uint64    `gorm:"not null" json:"btc_block"`                                  // BTC block height
-	Txid      string    `gorm:"not null;index:sendorder_txid_index" json:"txid"`            // txid will update after signing status
-	SigScript []byte    `json:"sig_script"`                                                 // sig script will update after signing status
-	TxFee     uint64    `gorm:"not null" json:"tx_fee"`                                     // the real tx fee will update after tx built
-	UpdatedAt time.Time `gorm:"not null" json:"updated_at"`
+	ID         uint      `gorm:"primaryKey" json:"id"`
+	OrderId    string    `gorm:"not null;uniqueIndex" json:"order_id"`
+	Proposer   string    `gorm:"not null" json:"proposer"`
+	Amount     uint64    `gorm:"not null" json:"amount"` // BTC precision up to 8 decimal places
+	MaxTxFee   uint64    `gorm:"not null" json:"max_tx_fee"`
+	Status     string    `gorm:"not null;index:sendorder_status_index" json:"status"`        // "aggregating", "init", "signing", "pending", "rbf-request", "unconfirm", "confirmed", "processed", "closed" - means not in use, should rollback withdraw, vin, vout
+	OrderType  string    `gorm:"not null;index:sendorder_ordertype_index" json:"order_type"` // "withdrawal", "consolidation"
+	BtcBlock   uint64    `gorm:"not null" json:"btc_block"`                                  // BTC block height
+	Txid       string    `gorm:"not null;index:sendorder_txid_index" json:"txid"`            // txid will update after signing status
+	SigScripts [][]byte  `json:"sig_scripts"`                                                // sig script will update after signing status
+	PkScripts  [][]byte  `json:"pk_scripts"`
+	TxFee      uint64    `gorm:"not null" json:"tx_fee"` // the real tx fee will update after tx built
+	UpdatedAt  time.Time `gorm:"not null" json:"updated_at"`
 }
 
 // Vin model (sent transaction input)

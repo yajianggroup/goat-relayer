@@ -25,7 +25,7 @@ func (s *State) AddUnconfirmDeposit(txHash string, rawTx string, evmAddr string,
 		return nil
 	}
 
-	status := "unconfirm"
+	status := db.DEPOSIT_STATUS_UNCONFIRM
 
 	deposit := &db.Deposit{
 		Status:      status,
@@ -54,7 +54,7 @@ func (s *State) SaveConfirmDeposit(txHash string, rawTx string, evmAddr string) 
 	defer s.depositMu.Unlock()
 
 	deposit, err := s.queryDepositByTxHash(txHash)
-	status := "confirmed"
+	status := db.DEPOSIT_STATUS_CONFIRMED
 
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -67,7 +67,7 @@ func (s *State) SaveConfirmDeposit(txHash string, rawTx string, evmAddr string) 
 			return err
 		}
 	} else {
-		if deposit.Status != "processed" {
+		if deposit.Status != db.DEPOSIT_STATUS_PROCESSED {
 			deposit.Status = status
 		}
 		deposit.UpdatedAt = time.Now()
@@ -99,7 +99,7 @@ func (s *State) UpdateProcessedDeposit(txHash string) error {
 		}
 		return err
 	}
-	deposit.Status = "processed"
+	deposit.Status = db.DEPOSIT_STATUS_PROCESSED
 
 	result := s.dbm.GetBtcCacheDB().Save(deposit)
 	if result.Error != nil {
@@ -166,7 +166,7 @@ func (s *State) queryDepositByTxHash(txHash string) (*db.Deposit, error) {
 
 func (s *State) QueryUnConfirmDeposit() ([]db.Deposit, error) {
 	var deposit []db.Deposit
-	result := s.dbm.GetBtcCacheDB().Where("status = ?", "unconfirm").Find(&deposit)
+	result := s.dbm.GetBtcCacheDB().Where("status = ?", db.DEPOSIT_STATUS_UNCONFIRM).Find(&deposit)
 	if result.Error != nil {
 		return nil, result.Error
 	}
@@ -185,7 +185,7 @@ func (s *State) QueryBlockByTxHash(txHash string) (block *db.BtcBlockData, err e
 	}
 
 	var btcBlock db.BtcBlock
-	if err := s.dbm.GetBtcLightDB().Where("height = ? and status = ?", btcBlockData.BlockHeight, "processed").First(&btcBlock).Error; err != nil {
+	if err := s.dbm.GetBtcLightDB().Where("height = ? and status = ?", btcBlockData.BlockHeight, db.DEPOSIT_STATUS_PROCESSED).First(&btcBlock).Error; err != nil {
 		return nil, err
 	}
 	// TODO check block hash by pkscript

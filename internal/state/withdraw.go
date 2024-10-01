@@ -8,9 +8,16 @@ import (
 	"gorm.io/gorm"
 )
 
-// CreateWithdrawal
-// when a new withdrawal request is detected, save to unconfirmed
-func (s *State) CreateWithdrawal(address string, block, id, maxTxFee, amount uint64) error {
+// CreateWithdrawal, when a new withdrawal request is detected, save to unconfirmed
+//
+// Parameters:
+//
+//	address - to btc p2pkh, p2wpkh address
+//	block - goat block
+//	id - request id
+//	txPrice - user set txPrice for withdraw
+//	amount - user request withdraw amount of btc (unit satoshis)
+func (s *State) CreateWithdrawal(address string, block, id, txPrice, amount uint64) error {
 	s.walletMu.Lock()
 	defer s.walletMu.Unlock()
 
@@ -30,14 +37,26 @@ func (s *State) CreateWithdrawal(address string, block, id, maxTxFee, amount uin
 		From:      "",
 		To:        address,
 		Amount:    amount,
-		MaxTxFee:  maxTxFee,
-		Status:    "create",
+		TxPrice:   txPrice,
+		TxFee:     0,
+		Status:    db.WITHDRAW_STATUS_CREATE,
 		OrderId:   "",
 		UpdatedAt: time.Now(),
 		CreatedAt: time.Now(),
 	}
 
 	return s.saveWithdraw(withdraw)
+}
+
+// CreateSendOrder, create a send order when start withdrawal or consolidation
+func (s *State) CreateSendOrder(order *db.SendOrder, selectedUtxos []*db.Utxo, selectedWithdraws []*db.Withdraw, vins []*db.Vin, vouts []*db.Vout) error {
+	s.walletMu.Lock()
+	defer s.walletMu.Unlock()
+
+	err := s.dbm.GetWalletDB().Transaction(func(tx *gorm.DB) error {
+		return nil
+	})
+	return err
 }
 
 func (s *State) UpdateWithdrawReplace(id, txPrice uint64) error {
@@ -48,13 +67,13 @@ func (s *State) UpdateWithdrawReplace(id, txPrice uint64) error {
 	if err != nil {
 		return err
 	}
-	if withdraw.Status != "create" && withdraw.Status != "aggregating" {
+	if withdraw.Status != db.WITHDRAW_STATUS_CREATE && withdraw.Status != db.WITHDRAW_STATUS_AGGREGATING {
 		// ignore if it is not create status
 		// it is hard to update after start withdraw sig program
 		return nil
 	}
 
-	withdraw.MaxTxFee = txPrice
+	withdraw.TxPrice = txPrice
 	withdraw.UpdatedAt = time.Now()
 
 	// TODO notify stop aggregating if it is aggregating status, set to closed
@@ -70,13 +89,13 @@ func (s *State) UpdateWithdrawCancel(id uint64) error {
 	if err != nil {
 		return err
 	}
-	if withdraw.Status != "create" && withdraw.Status != "aggregating" {
+	if withdraw.Status != db.WITHDRAW_STATUS_CREATE && withdraw.Status != db.WITHDRAW_STATUS_AGGREGATING {
 		// ignore if it is not create status
 		// it is hard to update after start withdraw sig program
 		return nil
 	}
 
-	withdraw.Status = "closed"
+	withdraw.Status = db.WITHDRAW_STATUS_CLOSED
 	withdraw.UpdatedAt = time.Now()
 
 	// TODO notify stop aggregating if it is aggregating status, set to closed
@@ -98,18 +117,18 @@ func (s *State) UpdateSendOrderConfirmed(txid string) error {
 
 		// order found
 		if order != nil && err == nil {
-			if order.Status == "confirmed" || order.Status == "processed" || order.Status == "closed" {
+			if order.Status == db.ORDER_STATUS_CONFIRMED || order.Status == db.ORDER_STATUS_PROCESSED || order.Status == db.ORDER_STATUS_CLOSED {
 				return nil
 			}
 
-			order.Status = "confirmed"
+			order.Status = db.ORDER_STATUS_CONFIRMED
 			order.UpdatedAt = time.Now()
 
 			err = s.saveOrder(tx, order)
 			if err != nil {
 				return err
 			}
-			err = s.updateOtherStatusByOrder(tx, order.OrderId, "confirmed")
+			err = s.updateOtherStatusByOrder(tx, order.OrderId, db.ORDER_STATUS_CONFIRMED)
 			if err != nil {
 				return err
 			}
@@ -118,13 +137,13 @@ func (s *State) UpdateSendOrderConfirmed(txid string) error {
 
 		// order not found, update by txid, it happens in recovery model
 		// should check withdraw[0] when layer2 fast than BTC, if withdraw exists and status processed, update other status to processed
-		otherStatus := "confirmed"
-		found, err := s.hasWithdrawByTxidAndStatus(tx, txid, "processed")
+		otherStatus := db.WITHDRAW_STATUS_CONFIRMED
+		found, err := s.hasWithdrawByTxidAndStatus(tx, txid, db.WITHDRAW_STATUS_PROCESSED)
 		if err != nil {
 			return err
 		}
 		if found {
-			otherStatus = "processed"
+			otherStatus = db.WITHDRAW_STATUS_PROCESSED
 		}
 		err = s.updateOtherStatusByTxid(tx, txid, otherStatus)
 		if err != nil {
@@ -147,18 +166,18 @@ func (s *State) UpdateWithdrawInitialized(txid string) error {
 
 		// order found
 		if order != nil && err == nil {
-			if order.Status != "aggregating" && order.Status != "closed" {
+			if order.Status != db.ORDER_STATUS_AGGREGATING && order.Status != db.ORDER_STATUS_CLOSED {
 				return nil
 			}
 
-			order.Status = "init"
+			order.Status = db.ORDER_STATUS_INIT
 			order.UpdatedAt = time.Now()
 
 			err = s.saveOrder(tx, order)
 			if err != nil {
 				return err
 			}
-			err = s.updateOtherStatusByOrder(tx, order.OrderId, "init")
+			err = s.updateOtherStatusByOrder(tx, order.OrderId, db.ORDER_STATUS_INIT)
 			if err != nil {
 				return err
 			}
@@ -182,18 +201,18 @@ func (s *State) UpdateWithdrawFinalized(txid string) error {
 
 		// order found
 		if order != nil && err == nil {
-			if order.Status == "processed" {
+			if order.Status == db.ORDER_STATUS_PROCESSED {
 				return nil
 			}
 
-			order.Status = "processed"
+			order.Status = db.ORDER_STATUS_PROCESSED
 			order.UpdatedAt = time.Now()
 
 			err = s.saveOrder(tx, order)
 			if err != nil {
 				return err
 			}
-			err = s.updateOtherStatusByOrder(tx, order.OrderId, "processed")
+			err = s.updateOtherStatusByOrder(tx, order.OrderId, db.ORDER_STATUS_PROCESSED)
 			if err != nil {
 				return err
 			}
@@ -201,7 +220,7 @@ func (s *State) UpdateWithdrawFinalized(txid string) error {
 		}
 
 		// not found update by txid
-		err = s.updateOtherStatusByTxid(tx, txid, "processed")
+		err = s.updateOtherStatusByTxid(tx, txid, db.ORDER_STATUS_PROCESSED)
 		if err != nil {
 			return err
 		}
@@ -217,7 +236,7 @@ func (s *State) CleanProcessingWithdraw() error {
 	defer s.walletMu.Unlock()
 
 	err := s.dbm.GetWalletDB().Transaction(func(tx *gorm.DB) error {
-		orders, err := s.getOrderByStatuses(tx, "aggregating")
+		orders, err := s.getOrderByStatuses(tx, db.ORDER_STATUS_AGGREGATING)
 		if err != nil && err != gorm.ErrRecordNotFound {
 			return err
 		}
@@ -225,17 +244,17 @@ func (s *State) CleanProcessingWithdraw() error {
 		// order found
 		if len(orders) > 0 && err == nil {
 			for _, order := range orders {
-				if order.Status != "aggregating" {
+				if order.Status != db.ORDER_STATUS_AGGREGATING {
 					continue
 				}
-				order.Status = "closed"
+				order.Status = db.ORDER_STATUS_CLOSED
 				order.UpdatedAt = time.Now()
 
 				err = s.saveOrder(tx, order)
 				if err != nil {
 					return err
 				}
-				err = s.updateOtherStatusByOrder(tx, order.OrderId, "closed")
+				err = s.updateOtherStatusByOrder(tx, order.OrderId, db.ORDER_STATUS_CLOSED)
 				if err != nil {
 					return err
 				}
@@ -244,13 +263,13 @@ func (s *State) CleanProcessingWithdraw() error {
 		}
 
 		// not found order, do not delete withdraw, just update status to create
-		err = s.updateWithdrawStatusByStatuses(tx, "create", "aggregating")
+		err = s.updateWithdrawStatusByStatuses(tx, db.WITHDRAW_STATUS_CREATE, db.WITHDRAW_STATUS_AGGREGATING)
 		if err != nil {
 			return err
 		}
 
 		// not found order, do not delete vin/vout, just update status to closed
-		err = s.updateOtherStatusByStatuses(tx, "closed", "create", "aggregating")
+		err = s.updateOtherStatusByStatuses(tx, db.WITHDRAW_STATUS_CLOSED, db.WITHDRAW_STATUS_CREATE, db.WITHDRAW_STATUS_AGGREGATING)
 		if err != nil {
 			return err
 		}
@@ -263,7 +282,7 @@ func (s *State) GetWithdrawsCanStart() ([]*db.Withdraw, error) {
 	s.walletMu.RLock()
 	defer s.walletMu.RUnlock()
 
-	withdraws, err := s.getWithdrawByStatuses(nil, "max_tx_fee desc", "create")
+	withdraws, err := s.getWithdrawByStatuses(nil, "tx_price desc", db.WITHDRAW_STATUS_CREATE)
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			return nil, err

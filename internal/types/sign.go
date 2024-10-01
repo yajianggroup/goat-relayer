@@ -40,9 +40,9 @@ type MsgSignDeposit struct {
 type MsgSignSendOrder struct {
 	MsgSign
 
-	SendOrder []byte   `json:"send_order"`
-	Utxos     [][]byte `json:"utxos"`
-	Vins      [][]byte `json:"vins"`
-	Vouts     [][]byte `json:"vouts"`
-	Withdraws [][]byte `json:"withdraws"`
+	SendOrder []byte `json:"send_order"`
+	Utxos     []byte `json:"utxos"`
+	Vins      []byte `json:"vins"`
+	Vouts     []byte `json:"vouts"`
+	Withdraws []byte `json:"withdraws"`
 }

@@ -18,13 +18,13 @@ func (s *State) UpdateUtxoStatusProcessed(txid string, out int) error {
 		return err
 	}
 
-	if utxo.Status == "pending" || utxo.Status == "spent" {
+	if utxo.Status == db.UTXO_STATUS_PENDING || utxo.Status == db.UTXO_STATUS_SPENT {
 		return fmt.Errorf("wallet state UpdateUtxoStatusProcessed failed, utxo %s:%d, status %s", txid, out, utxo.Status)
 	}
-	if utxo.Status == "processed" {
+	if utxo.Status == db.UTXO_STATUS_PROCESSED {
 		return nil
 	}
-	utxo.Status = "processed"
+	utxo.Status = db.UTXO_STATUS_PROCESSED
 	return s.saveUtxo(utxo)
 }
 
@@ -49,7 +49,7 @@ func (s *State) AddUtxo(utxo *db.Utxo) error {
 		utxo.Status = utxoExists.Status
 	}
 
-	if utxo.Status == "confirmed" {
+	if utxo.Status == db.UTXO_STATUS_CONFIRMED {
 		// check deposit table (from layer2)
 		var depositResult db.DepositResult
 		err := s.dbm.GetWalletDB().Where("tx_id=? and tx_out=?", utxo.Txid, utxo.OutIndex).First(&depositResult).Error
@@ -59,8 +59,8 @@ func (s *State) AddUtxo(utxo *db.Utxo) error {
 
 		// if found
 		if err == nil {
-			utxo.Source = "deposit"
-			utxo.Status = "processed"
+			utxo.Source = db.UTXO_SOURCE_DEPOSIT
+			utxo.Status = db.UTXO_STATUS_PROCESSED
 		}
 	}
 
@@ -97,8 +97,8 @@ func (s *State) AddOrUpdateVin(vin *db.Vin) error {
 		return err
 	}
 	// if vinExists is closed, add a new vin
-	if vinExists != nil && vinExists.Status != "closed" {
-		if vinExists.Status == "confirmed" || vinExists.Status == "processed" {
+	if vinExists != nil && vinExists.Status != db.ORDER_STATUS_CLOSED {
+		if vinExists.Status == db.ORDER_STATUS_CONFIRMED || vinExists.Status == db.ORDER_STATUS_PROCESSED {
 			return nil
 		}
 		vin.ID = vinExists.ID
@@ -121,7 +121,7 @@ func (s *State) AddOrUpdateVout(vout *db.Vout) error {
 		return err
 	}
 	if voutExists != nil {
-		if voutExists.Status == "confirmed" || voutExists.Status == "processed" {
+		if voutExists.Status == db.UTXO_STATUS_CONFIRMED || voutExists.Status == db.UTXO_STATUS_PROCESSED {
 			return nil
 		}
 		vout.ID = voutExists.ID
@@ -169,7 +169,7 @@ func (s *State) GetUtxoCanSpend() ([]*db.Utxo, error) {
 	s.walletMu.RLock()
 	defer s.walletMu.RUnlock()
 
-	utxos, err := s.getUtxoByStatuses(nil, "amount desc", "confirmed", "processed")
+	utxos, err := s.getUtxoByStatuses(nil, "amount desc", db.UTXO_STATUS_CONFIRMED, db.UTXO_STATUS_PROCESSED)
 	if err != nil {
 		if err != gorm.ErrRecordNotFound {
 			return nil, err
@@ -255,11 +255,11 @@ func (s *State) updateUtxoStatusSpent(txid string, out int, btcBlock uint64) err
 	if err != nil {
 		return err
 	}
-	if utxo.Status == "spent" {
+	if utxo.Status == db.UTXO_STATUS_SPENT {
 		return nil
 	}
 
-	utxo.Status = "spent"
+	utxo.Status = db.UTXO_STATUS_SPENT
 	utxo.SpentBlock = btcBlock
 	utxo.UpdatedAt = time.Now()
 	return s.saveUtxo(utxo)

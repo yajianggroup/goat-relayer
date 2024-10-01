@@ -107,8 +107,8 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 							OutIndex:  int(vin.PreviousOutPoint.Index),
 							SigScript: vin.SignatureScript,
 							Sender:    sender,
-							Source:    "unknown",
-							Status:    "confirmed",
+							Source:    db.UTXO_SOURCE_UNKNOWN,
+							Status:    db.UTXO_STATUS_CONFIRMED,
 							UpdatedAt: time.Now(),
 						})
 					}
@@ -134,13 +134,13 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 					}
 
 					if receiver == p2pkhAddress.EncodeAddress() {
-						receiverType = types.WALLET_TYPE_P2PKH
+						receiverType = db.WALLET_TYPE_P2PKH
 					} else if receiver == p2wpkhAddress.EncodeAddress() {
-						receiverType = types.WALLET_TYPE_P2WPKH
+						receiverType = db.WALLET_TYPE_P2WPKH
 					} else {
-						receiverType = types.WALLET_TYPE_UNKNOWN
+						receiverType = db.WALLET_TYPE_UNKNOWN
 					}
-					if receiverType == "P2PKH" || receiverType == "P2WPKH" {
+					if receiverType == db.WALLET_TYPE_P2PKH || receiverType == db.WALLET_TYPE_P2WPKH {
 						// should save vout db logic
 						isUtxo = true
 						utxos = append(utxos, &db.Utxo{
@@ -153,9 +153,9 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 							WalletVersion: "1",
 							Sender:        sender,
 							EvmAddr:       evmAddr,
-							Source:        "unknown",
+							Source:        db.UTXO_SOURCE_UNKNOWN,
 							ReceiverType:  receiverType,
-							Status:        "confirmed",
+							Status:        db.UTXO_STATUS_CONFIRMED,
 							ReceiveBlock:  btcBlock.BlockNumber,
 							SpentBlock:    0,
 							UpdatedAt:     time.Now(),
@@ -170,8 +170,8 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 						Amount:     vout.Value,
 						Receiver:   receiver,
 						Sender:     sender,
-						Source:     "unknown",
-						Status:     "confirmed",
+						Source:     db.UTXO_SOURCE_UNKNOWN,
+						Status:     db.UTXO_STATUS_CONFIRMED,
 						UpdatedAt:  time.Now(),
 					})
 				}
@@ -180,11 +180,11 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 					// save utxo db, check if it is deposit from layer2
 					for _, utxo := range utxos {
 						if isDeposit {
-							utxo.Source = "deposit"
+							utxo.Source = db.UTXO_SOURCE_DEPOSIT
 						} else if isConsolidation {
-							utxo.Source = "consolidation"
+							utxo.Source = db.UTXO_SOURCE_CONSOLIDATION
 						} else if isWithdrawl {
-							utxo.Source = "withdrawal"
+							utxo.Source = db.UTXO_SOURCE_WITHDRAWAL
 						}
 						err = w.state.AddUtxo(utxo)
 						if err != nil {
@@ -197,11 +197,11 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 					// save vin, vout db, check if it is withdraw from layer2
 					for _, vin := range vins {
 						if isDeposit {
-							vin.Source = "deposit"
+							vin.Source = db.UTXO_SOURCE_DEPOSIT
 						} else if isConsolidation {
-							vin.Source = "consolidation"
+							vin.Source = db.UTXO_SOURCE_CONSOLIDATION
 						} else if isWithdrawl {
-							vin.Source = "withdrawal"
+							vin.Source = db.UTXO_SOURCE_WITHDRAWAL
 						}
 						err = w.state.AddOrUpdateVin(vin)
 						if err != nil {
@@ -211,11 +211,11 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 					}
 					for _, vout := range vouts {
 						if isDeposit {
-							vout.Source = "deposit"
+							vout.Source = db.UTXO_SOURCE_DEPOSIT
 						} else if isConsolidation {
-							vout.Source = "consolidation"
+							vout.Source = db.UTXO_SOURCE_CONSOLIDATION
 						} else if isWithdrawl {
-							vout.Source = "withdrawal"
+							vout.Source = db.UTXO_SOURCE_WITHDRAWAL
 						}
 						err = w.state.AddOrUpdateVout(vout)
 						if err != nil {

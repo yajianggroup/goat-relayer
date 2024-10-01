@@ -90,10 +90,11 @@ func ConsolidateSmallUTXOs(utxos []*db.Utxo, networkFee, threshold int64, maxVin
 //
 //	selectedUtxos - selected utxos for withdrawal
 //	totalSelectedAmount - total amount of selected utxos
-//	withdrawAmount - total amount to withdraw
+//	withdrawAmount - total amount to withdraw (not minus tx fee yet)
 //	changeAmount - change amount after withdrawal
+//	estimatedFee - estimate fee
 //	error - error if any
-func SelectOptimalUTXOs(utxos []*db.Utxo, withdrawAmount, networkFee int64, withdrawTotal int) ([]*db.Utxo, int64, int64, int64, error) {
+func SelectOptimalUTXOs(utxos []*db.Utxo, withdrawAmount, networkFee int64, withdrawTotal int) ([]*db.Utxo, int64, int64, int64, int64, error) {
 	// sort utxos by amount from large to small
 	sort.Slice(utxos, func(i, j int) bool {
 		return utxos[i].Amount > utxos[j].Amount
@@ -129,7 +130,7 @@ func SelectOptimalUTXOs(utxos []*db.Utxo, withdrawAmount, networkFee int64, with
 		estimatedFee = txSize * networkFee
 
 		// recalculate the total target (withdraw amount + estimated fee)
-		totalTarget = withdrawAmount + estimatedFee
+		totalTarget = withdrawAmount // + estimatedFee
 
 		// limit max vin
 		if len(selectedUTXOs) >= maxVin {
@@ -169,18 +170,18 @@ func SelectOptimalUTXOs(utxos []*db.Utxo, withdrawAmount, networkFee int64, with
 		estimatedFee = txSize * networkFee
 
 		// recalculate the total target (withdraw amount + estimated fee)
-		totalTarget = withdrawAmount + estimatedFee
+		totalTarget = withdrawAmount // + estimatedFee, fee should minus from withdraw txout value
 	}
 
 	// after selecting, check if we have enough UTXO to cover the total target
 	if totalSelectedAmount < totalTarget {
-		return nil, 0, 0, 0, fmt.Errorf("not enough utxos to satisfy the withdrawal amount and network fee, withdraw amount: %d, selected amount: %d, estimated fee: %d", withdrawAmount, totalSelectedAmount, estimatedFee)
+		return nil, 0, 0, 0, 0, fmt.Errorf("not enough utxos to satisfy the withdrawal amount and network fee, withdraw amount: %d, selected amount: %d, estimated fee: %d", withdrawAmount, totalSelectedAmount, estimatedFee)
 	}
 
 	// calculate the change amount
-	changeAmount := totalSelectedAmount - withdrawAmount - estimatedFee
+	changeAmount := totalSelectedAmount - withdrawAmount // - estimatedFee, fee should minus from withdraw txout value
 
-	return selectedUTXOs, totalSelectedAmount, withdrawAmount, changeAmount, nil
+	return selectedUTXOs, totalSelectedAmount, withdrawAmount, changeAmount, estimatedFee, nil
 }
 
 // SelectWithdrawals select optimal withdrawals for withdrawal
@@ -204,7 +205,7 @@ func SelectWithdrawals(withdrawals []*db.Withdraw, networkFee int64, maxVout int
 
 	// sort withdrawals by MaxTxFee in descending order
 	sort.Slice(withdrawals, func(i, j int) bool {
-		return withdrawals[i].MaxTxFee > withdrawals[j].MaxTxFee
+		return withdrawals[i].TxPrice > withdrawals[j].TxPrice
 	})
 
 	// three groups
@@ -215,13 +216,13 @@ func SelectWithdrawals(withdrawals []*db.Withdraw, networkFee int64, maxVout int
 
 	// iterate withdrawals and group by MaxTxFee
 	for _, withdrawal := range withdrawals {
-		// group1: MaxTxFee > 150 and MaxTxFee >= networkFee.FeePerByte
-		if withdrawal.MaxTxFee > 150 && withdrawal.MaxTxFee >= uNetworkFee {
+		// group1: TxPrice > 150 and TxPrice >= networkFee.FeePerByte
+		if withdrawal.TxPrice > 150 && withdrawal.TxPrice >= uNetworkFee {
 			group1 = append(group1, withdrawal)
-		} else if withdrawal.MaxTxFee > 50 && withdrawal.MaxTxFee <= 150 && withdrawal.MaxTxFee >= uNetworkFee {
+		} else if withdrawal.TxPrice > 50 && withdrawal.TxPrice <= 150 && withdrawal.TxPrice >= uNetworkFee {
 			// group2: 50 < MaxTxFee <= 150 and MaxTxFee >= networkFee.FeePerByte
 			group2 = append(group2, withdrawal)
-		} else if withdrawal.MaxTxFee <= 50 && withdrawal.MaxTxFee >= uNetworkFee {
+		} else if withdrawal.TxPrice <= 50 && withdrawal.TxPrice >= uNetworkFee {
 			// group3: MaxTxFee <= 50 and MaxTxFee >= networkFee
 			group3 = append(group3, withdrawal)
 		}
@@ -240,10 +241,10 @@ func SelectWithdrawals(withdrawals []*db.Withdraw, networkFee int64, maxVout int
 
 		withdrawAmount := uint64(0)
 		// calculate the minimum MaxTxFee in the group
-		groupMinFee := group[0].MaxTxFee
+		groupMinFee := group[0].TxPrice
 		for _, withdrawal := range group {
-			if withdrawal.MaxTxFee < groupMinFee {
-				groupMinFee = withdrawal.MaxTxFee
+			if withdrawal.TxPrice < groupMinFee {
+				groupMinFee = withdrawal.TxPrice
 			}
 			withdrawAmount += withdrawal.Amount
 		}
@@ -294,7 +295,7 @@ func SelectWithdrawals(withdrawals []*db.Withdraw, networkFee int64, maxVout int
 //
 //	tx - raw transaction
 //	error - error if any
-func CreateRawTransaction(utxos []*db.Utxo, withdrawals []*db.Withdraw, changeAddress string, changeAmount int64, net *chaincfg.Params) (*wire.MsgTx, error) {
+func CreateRawTransaction(utxos []*db.Utxo, withdrawals []*db.Withdraw, changeAddress string, changeAmount, estimatedFee int64, net *chaincfg.Params) (*wire.MsgTx, error) {
 	tx := wire.NewMsgTx(wire.TxVersion)
 
 	// add utxos as transaction inputs
@@ -307,6 +308,16 @@ func CreateRawTransaction(utxos []*db.Utxo, withdrawals []*db.Withdraw, changeAd
 		tx.AddTxIn(wire.NewTxIn(outPoint, nil, nil))
 	}
 
+	// actual fee for withdraw
+	actualFee := int64(0)
+	if len(withdrawals) > 0 {
+		totalTxout := len(withdrawals)
+		if changeAmount > 0 {
+			totalTxout++
+		}
+		actualFee = estimatedFee / int64(totalTxout)
+	}
+
 	// add outputs (withdrawals)
 	for _, withdrawal := range withdrawals {
 		addr, err := btcutil.DecodeAddress(withdrawal.To, net)
@@ -317,11 +328,17 @@ func CreateRawTransaction(utxos []*db.Utxo, withdrawals []*db.Withdraw, changeAd
 		if err != nil {
 			return nil, err
 		}
-		tx.AddTxOut(wire.NewTxOut(int64(withdrawal.Amount), pkScript))
+		val := int64(withdrawal.Amount) - actualFee
+		if val < 0 {
+			val = 0
+		}
+		// re-set TxFee field
+		withdrawal.TxFee = withdrawal.Amount - uint64(val)
+		tx.AddTxOut(wire.NewTxOut(val, pkScript))
 	}
 
 	// add change output
-	if changeAmount > 0 {
+	if changeAmount-actualFee > 0 {
 		changeAddr, err := btcutil.DecodeAddress(changeAddress, net)
 		if err != nil {
 			return nil, err
@@ -330,7 +347,7 @@ func CreateRawTransaction(utxos []*db.Utxo, withdrawals []*db.Withdraw, changeAd
 		if err != nil {
 			return nil, err
 		}
-		tx.AddTxOut(wire.NewTxOut(changeAmount, changePkScript))
+		tx.AddTxOut(wire.NewTxOut(changeAmount-actualFee, changePkScript))
 	}
 
 	return tx, nil
