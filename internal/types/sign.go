@@ -45,4 +45,6 @@ type MsgSignSendOrder struct {
 	Vins      []byte `json:"vins"`
 	Vouts     []byte `json:"vouts"`
 	Withdraws []byte `json:"withdraws"`
+
+	WithdrawIds []uint64 `json:"withdraw_ids"`
 }

@@ -160,3 +160,34 @@ func TransactionSizeEstimate(numInputs, numOutputs int, utxoTypes []string) int6
 	totalSize += int64(34 * numOutputs)
 	return totalSize
 }
+
+// Deserialize transaction
+func DeserializeTransaction(data []byte) (*wire.MsgTx, error) {
+	var tx wire.MsgTx
+	buf := bytes.NewReader(data)
+	err := tx.Deserialize(buf)
+	if err != nil {
+		return nil, err
+	}
+	return &tx, nil
+}
+
+// Serialize transaction to bytes (with witness data)
+func SerializeTransaction(tx *wire.MsgTx) ([]byte, error) {
+	var buf bytes.Buffer
+	err := tx.Serialize(&buf)
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}
+
+// Serialize transaction to bytes (without witness data)
+func SerializeTransactionNoWitness(tx *wire.MsgTx) ([]byte, error) {
+	var buf bytes.Buffer
+	err := tx.SerializeNoWitness(&buf)
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
+}

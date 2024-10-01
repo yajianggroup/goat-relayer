@@ -50,6 +50,13 @@ func (s *Signer) handleSigStart(ctx context.Context, event interface{}) {
 		if err := s.handleSigStartNewDeposit(ctx, e); err != nil {
 			log.Errorf("Error handleSigStart MsgSignDeposit, %v", err)
 		}
+	case types.MsgSignSendOrder:
+		log.Debugf("Event handleSigStartSendOrder is of type MsgSignSendOrder, request id %s", e.RequestId)
+		if err := s.handleSigStartSendOrder(ctx, e); err != nil {
+			log.Errorf("Error handleSigStart MsgSignSendOrder, %v", err)
+			// feedback SigFailed
+			s.state.EventBus.Publish(state.SigFailed, e)
+		}
 	default:
 		log.Debug("Unknown event handleSigStart type")
 	}
