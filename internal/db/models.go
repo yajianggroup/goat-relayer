@@ -211,6 +211,7 @@ type Deposit struct {
 	BlockHash   string    `gorm:"not null" json:"block_hash"`
 	BlockHeight uint64    `gorm:"not null" json:"block_height"`
 	TxIndex     uint64    `gorm:"not null" json:"tx_index"`
+	OutputIndex int       `gorm:"not null" json:"output_index"`
 	MerkleRoot  string    `gorm:"not null" json:"merkle_root"`
 	Proof       string    `gorm:"not null" json:"proof"`
 	SignVersion uint32    `gorm:"not null" json:"sign_version"`
