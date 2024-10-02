@@ -170,7 +170,7 @@ func (w *WalletServer) initWithdrawSig() {
 	if !startBls {
 		log.Infof("WalletServer initWithdrawSig withdraw not start bls, count: %d, next to check consolidation", wCount)
 
-		selectedUtxos, totalAmount, finalAmount, err := ConsolidateSmallUTXOs(utxos, int64(currNetworkFee), 5*1e7, 50)
+		selectedUtxos, totalAmount, finalAmount, err := ConsolidateSmallUTXOs(utxos, int64(currNetworkFee), 5*1e7, 50, 0)
 		if err != nil {
 			log.Errorf("WalletServer initWithdrawSig ConsolidateSmallUTXOs error: %v", err)
 			return
@@ -364,6 +364,6 @@ func (w *WalletServer) cleanWithdrawProcess() {
 	// unset all status "create", "aggregating"
 	err := w.state.CleanProcessingWithdraw()
 	if err != nil {
-		log.Fatal("WalletServer cleanWithdrawProcess unexpected error %v", err)
+		log.Fatalf("WalletServer cleanWithdrawProcess unexpected error %v", err)
 	}
 }

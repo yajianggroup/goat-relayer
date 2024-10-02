@@ -22,6 +22,7 @@ import (
 //	networkFee - network fee
 //	threshold - threshold for small utxos
 //	maxVin - maximum vin count
+//	trigerNum - minimum small utxo
 //
 // Returns:
 //
@@ -29,11 +30,14 @@ import (
 //	totalAmount - total amount of selected utxos
 //	finalAmount - final amount after consolidation, after deducting the network fee
 //	error - error if any
-func ConsolidateSmallUTXOs(utxos []*db.Utxo, networkFee, threshold int64, maxVin int) ([]*db.Utxo, int64, int64, error) {
+func ConsolidateSmallUTXOs(utxos []*db.Utxo, networkFee, threshold int64, maxVin, trigerNum int) ([]*db.Utxo, int64, int64, error) {
 	if networkFee > 200 {
 		return nil, 0, 0, fmt.Errorf("network fee is too high, cannot consolidate")
 	}
-	if len(utxos) < 500 {
+	if trigerNum < 10 {
+		trigerNum = 500
+	}
+	if len(utxos) < trigerNum {
 		return nil, 0, 0, fmt.Errorf("not enough utxos to consolidate")
 	}
 
@@ -55,7 +59,7 @@ func ConsolidateSmallUTXOs(utxos []*db.Utxo, networkFee, threshold int64, maxVin
 		}
 	}
 
-	if len(smallUTXOs) <= 500 {
+	if len(smallUTXOs) < trigerNum {
 		return nil, 0, 0, fmt.Errorf("not enough small utxos to consolidate")
 	}
 
