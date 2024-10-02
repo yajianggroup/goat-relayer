@@ -1,4 +1,4 @@
-package btc
+package types
 
 import (
 	"bytes"
@@ -58,5 +58,5 @@ func processTransaction(rawTxHex string, txHashes []string) bool {
 	// Verify the generated proof
 	targetTxHash, _ := chainhash.NewHashFromStr(txHashes[txIndex])
 
-	return bitcointypes.VerifyMerkelProof(targetTxHash[:], merkleRoot[:], proofBytes, txIndex)
+	return bitcointypes.VerifyMerkelProof(targetTxHash[:], merkleRoot[:], proofBytes, uint32(txIndex))
 }

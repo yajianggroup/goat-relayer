@@ -32,6 +32,7 @@ var (
 type MsgUtxoDeposit struct {
 	RawTx       string `json:"raw_tx"`
 	TxId        string `json:"tx_id"`
+	OutputIndex int    `json:"output_index"`
 	SignVersion uint32 `json:"sign_version"`
 	EvmAddr     string `json:"evm_addr"`
 	Timestamp   int64  `json:"timestamp"`
@@ -81,7 +82,7 @@ func parseOpReturnGoatMagic(data []byte) (common.Address, error) {
 }
 
 func IsUtxoGoatDepositV1(tx *wire.MsgTx, tssAddress []btcutil.Address, net *chaincfg.Params) (bool, string) {
-	// Ensure there are at least 2 outputs
+	// Ensure there are at least 2 outputs, one of them is OP_RETURN
 	if len(tx.TxOut) < 2 {
 		return false, ""
 	}
@@ -112,31 +113,33 @@ func IsUtxoGoatDepositV1(tx *wire.MsgTx, tssAddress []btcutil.Address, net *chai
 	return false, ""
 }
 
-func IsUtxoGoatDepositV0(tx *wire.MsgTx, evmAddress string, pubKey []byte, net *chaincfg.Params) bool {
-	// Ensure there are at least 2 outputs
-	if len(tx.TxOut) < 2 {
-		return false
+func IsUtxoGoatDepositV0(tx *wire.MsgTx, tssAddress []btcutil.Address, net *chaincfg.Params) (bool, int) {
+	// Ensure there are at least 1 output
+	if len(tx.TxOut) < 1 {
+		return false, -1
 	}
 
 	// Extract addresses from tx.TxOut[0]
-	_, addresses, requireSigs, err := txscript.ExtractPkScriptAddrs(tx.TxOut[0].PkScript, net)
-	if err != nil || addresses == nil || requireSigs > 1 {
-		log.Debugf("Cannot extract PkScript addresses from TxOut[0]: %v", err)
-		return false
+	for idx, txOut := range tx.TxOut {
+
+		if isOpReturn(txOut) {
+			continue
+		}
+
+		_, addresses, requireSigs, err := txscript.ExtractPkScriptAddrs(txOut.PkScript, net)
+		if err != nil || addresses == nil || requireSigs > 1 {
+			log.Debugf("Cannot extract PkScript addresses from TxOut[0]: %v", err)
+			continue
+		}
+
+		for _, address := range tssAddress {
+			if address.EncodeAddress() == addresses[0].EncodeAddress() {
+				return true, idx
+			}
+		}
 	}
 
-	address, err := GenerateV0P2WSHAddress(pubKey, evmAddress, net)
-	if err != nil {
-		log.Errorf("Cannot generate v0 P2WSH address: %v", err)
-		return false
-	}
-
-	// Check if any of the addresses match tssAddress
-	if address.EncodeAddress() == addresses[0].EncodeAddress() {
-		return true
-	}
-
-	return false
+	return false, -1
 }
 
 // TransactionSizeEstimate estimates the size of a transaction in bytes
