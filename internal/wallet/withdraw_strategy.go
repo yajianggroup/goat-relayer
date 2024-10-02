@@ -164,7 +164,7 @@ func SelectOptimalUTXOs(utxos []*db.Utxo, withdrawAmount, networkFee int64, with
 	}
 
 	// append the smallest utxo
-	if smallestUTXO.Amount > 0 {
+	if smallestUTXO != nil && smallestUTXO.Amount > 0 {
 		selectedUTXOs = append(selectedUTXOs, smallestUTXO)
 		totalSelectedAmount += smallestUTXO.Amount
 
@@ -179,7 +179,7 @@ func SelectOptimalUTXOs(utxos []*db.Utxo, withdrawAmount, networkFee int64, with
 
 	// after selecting, check if we have enough UTXO to cover the total target
 	if totalSelectedAmount < totalTarget {
-		return nil, 0, 0, 0, 0, fmt.Errorf("not enough utxos to satisfy the withdrawal amount and network fee, withdraw amount: %d, selected amount: %d, estimated fee: %d", withdrawAmount, totalSelectedAmount, estimatedFee)
+		return nil, 0, 0, 0, estimatedFee, fmt.Errorf("not enough utxos to satisfy the withdrawal amount and network fee, withdraw amount: %d, selected amount: %d, estimated fee: %d", withdrawAmount, totalSelectedAmount, estimatedFee)
 	}
 
 	// calculate the change amount

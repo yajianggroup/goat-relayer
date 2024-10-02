@@ -138,7 +138,7 @@ func (lis *Layer2Listener) processUserCancelWithdrawal(block uint64, attributes 
 			id, _ = strconv.ParseUint(value, 10, 64)
 		}
 	}
-	log.Infof("Abci RequestCancelWithdrawal, block: %d, id: %s", block, id)
+	log.Infof("Abci RequestCancelWithdrawal, block: %d, id: %d", block, id)
 
 	if id == 0 {
 		return nil
