@@ -3,21 +3,20 @@ package wallet
 import (
 	"bytes"
 	"encoding/hex"
+	"strings"
+	"testing"
+
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/stretchr/testify/assert"
-	"strings"
-	"testing"
 )
 
 func TestSpentP2wsh(t *testing.T) {
 	privKeyBytes, _ := hex.DecodeString("e9ccd0ec6bb77c263dc46c0f81962c0b378a67befe089e90ef81e96a4a4c5bc5")
 	privKey, _ := btcec.PrivKeyFromBytes(privKeyBytes)
 	evmAddress := "0x70997970c51812dc3a010c7d01b50e0d17dc79c8"
-	if strings.HasPrefix(evmAddress, "0x") {
-		evmAddress = evmAddress[2:]
-	}
+	evmAddress = strings.TrimPrefix(evmAddress, "0x")
 
 	evmAddress_, _ := hex.DecodeString(evmAddress)
 
