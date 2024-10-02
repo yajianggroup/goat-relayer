@@ -147,14 +147,15 @@ func (s *Signer) handleSigReceiveSendOrder(ctx context.Context, e types.MsgSignS
 			return nil
 		}
 
-		if _, ok := rpcMsg.(bitcointypes.MsgInitializeWithdrawal); ok {
-			err = s.RetrySubmit(ctx, e.RequestId, rpcMsg, config.AppConfig.L2SubmitRetry)
-			if err != nil {
-				log.Errorf("SigReceive send order proposer submit NewBlock to RPC error, request id: %s, err: %v", e.RequestId, err)
-				s.removeSigMap(e.RequestId, false)
-				return err
-			}
+		// if _, ok := rpcMsg.(bitcointypes.MsgInitializeWithdrawal); ok {
+		// withdrawal && consolidation both submit to layer2, this
+		err = s.RetrySubmit(ctx, e.RequestId, rpcMsg, config.AppConfig.L2SubmitRetry)
+		if err != nil {
+			log.Errorf("SigReceive send order proposer submit NewBlock to RPC error, request id: %s, err: %v", e.RequestId, err)
+			s.removeSigMap(e.RequestId, false)
+			return err
 		}
+		// }
 
 		s.removeSigMap(e.RequestId, false)
 

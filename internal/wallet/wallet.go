@@ -18,6 +18,9 @@ type WalletServer struct {
 	sigMu     sync.Mutex
 	sigStatus bool
 
+	// after sig, it can start a new sig 2 blocks later
+	sigFinishHeight uint64
+
 	depositCh chan interface{}
 	blockCh   chan interface{}
 

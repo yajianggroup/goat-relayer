@@ -49,6 +49,9 @@ func (lis *Layer2Listener) processEvent(block uint64, event abcitypes.Event) err
 	case bitcointypes.EventTypeFinalizeWithdrawal:
 		return lis.processWithdrawalFinalized(block, event.Attributes)
 
+	case bitcointypes.EventTypeNewConsolidation:
+		return lis.processNewConsolidation(block, event.Attributes)
+
 	default:
 		// log.Debugf("Unrecognized event type: %s", event.Type)
 		return nil
@@ -241,11 +244,31 @@ func (lis *Layer2Listener) processWithdrawalInitialized(block uint64, attributes
 			txid = value
 		}
 	}
-	log.Infof("Abci NewWithdrawal, block: %d, txid: %s", block, txid)
+	log.Infof("Abci WithdrawalInitialized, block: %d, txid: %s", block, txid)
 
 	if txid == "" {
 		return nil
 	}
+	return lis.state.UpdateWithdrawInitialized(txid)
+}
+
+func (lis *Layer2Listener) processNewConsolidation(block uint64, attributes []abcitypes.EventAttribute) error {
+	var txid string
+	for _, attr := range attributes {
+		key := attr.Key
+		value := attr.Value
+
+		if key == "txid" {
+			// BE hash
+			txid = value
+		}
+	}
+	log.Infof("Abci NewConsolidation, block: %d, txid: %s", block, txid)
+
+	if txid == "" {
+		return nil
+	}
+	// call the same method as withdrawal initialized to update send order
 	return lis.state.UpdateWithdrawInitialized(txid)
 }
 

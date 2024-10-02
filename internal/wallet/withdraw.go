@@ -48,12 +48,41 @@ func (w *WalletServer) withdrawLoop(ctx context.Context) {
 	}
 }
 
-func (w *WalletServer) handleWithdrawSigFailed(sigFail interface{}, reason string) {
-	log.Infof("WalletServer handleWithdrawSigFailed, reason: %s", reason)
+func (w *WalletServer) handleWithdrawSigFailed(event interface{}, reason string) {
+	w.sigMu.Lock()
+	defer w.sigMu.Unlock()
+
+	if !w.sigStatus {
+		log.Debug("Event handleWithdrawSigFailed ignore, sigStatus is false")
+		return
+	}
+
+	switch e := event.(type) {
+	case types.MsgSignSendOrder:
+		log.Infof("Event handleWithdrawSigFailed is of type MsgSignSendOrder, request id %s, reason: %s", e.RequestId, reason)
+		w.sigStatus = false
+	default:
+		log.Debug("WalletServer withdrawLoop ignore unsupport type")
+	}
 }
 
-func (w *WalletServer) handleWithdrawSigFinish(sigFinish interface{}) {
-	log.Info("WalletServer handleWithdrawSigFinish")
+func (w *WalletServer) handleWithdrawSigFinish(event interface{}) {
+	w.sigMu.Lock()
+	defer w.sigMu.Unlock()
+
+	if !w.sigStatus {
+		log.Debug("Event handleWithdrawSigFinish ignore, sigStatus is false")
+		return
+	}
+
+	switch e := event.(type) {
+	case types.MsgSignSendOrder:
+		log.Infof("Event handleWithdrawSigFinish is of type MsgSignSendOrder, request id %s", e.RequestId)
+		w.sigStatus = false
+		w.sigFinishHeight = w.state.GetL2Info().Height
+	default:
+		log.Debug("WalletServer withdrawLoop ignore unsupport type")
+	}
 }
 
 func (w *WalletServer) initWithdrawSig() {
@@ -80,7 +109,8 @@ func (w *WalletServer) initWithdrawSig() {
 
 	epochVoter := w.state.GetEpochVoter()
 	if epochVoter.Proposer != config.AppConfig.RelayerAddress {
-		if w.sigStatus {
+		// do not clean immediately
+		if w.sigStatus && w.state.GetL2Info().Height > epochVoter.Height+1 {
 			w.sigStatus = false
 			// clean process, role changed, remove all status "create", "aggregating"
 			w.cleanWithdrawProcess()
@@ -92,6 +122,10 @@ func (w *WalletServer) initWithdrawSig() {
 	// 2. check if there is a sig in progress
 	if w.sigStatus {
 		log.Debug("WalletServer initWithdrawSig ignore, there is a sig")
+		return
+	}
+	if w.state.GetL2Info().Height <= w.sigFinishHeight+2 {
+		log.Debug("WalletServer initWithdrawSig ignore, last finish sig in 2 blocks")
 		return
 	}
 	// clean process, become proposer again, remove all status "create", "aggregating"
