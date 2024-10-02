@@ -1,9 +1,8 @@
-// handle_deposit.go handle deposit bls sig
 package bls
 
 import (
 	"context"
-	"encoding/json"
+	"fmt"
 
 	"github.com/goatnetwork/goat-relayer/internal/config"
 	"github.com/goatnetwork/goat-relayer/internal/state"
@@ -15,48 +14,55 @@ import (
 
 func (s *Signer) handleSigStartNewDeposit(ctx context.Context, e types.MsgSignDeposit) error {
 	// do not send p2p here, it doesn't need to aggregate sign here
+	canSign := s.CanSign()
 	isProposer := s.IsProposer()
-	if isProposer {
-		log.Info("Proposer submit NewDeposits to consensus")
+	if !canSign || !isProposer {
+		log.Debugf("Ignore SigStart request id %s, canSign: %v, isProposer: %v", e.RequestId, canSign, isProposer)
+		log.Debugf("Current l2 context, catching up: %v, self address: %s, proposer: %s", s.state.GetL2Info().Syncing, s.address, s.state.GetEpochVoter().Proposer)
+		return fmt.Errorf("cannot start sig %s in current l2 context, catching up: %v, is proposer: %v", e.RequestId, !canSign, isProposer)
+	}
 
-		headers := make(map[uint64][]byte)
-		headers[e.BlockNumber] = e.BlockHeader
-		headersBytes, err := json.Marshal(headers)
-		if err != nil {
-			log.Errorf("Failed to marshal headers: %v", err)
-			return err
-		}
+	// request id format: Deposit:VoterAddr:TxHash
+	// check map
+	_, ok := s.sigExists(e.RequestId)
+	if ok {
+		return fmt.Errorf("sig exists: %s", e.RequestId)
+	}
 
-		pubKey := relayertypes.DecodePublicKey(e.RelayerPubkey)
-		deposits := make([]*bitcointypes.Deposit, 1)
-		deposits[0] = &bitcointypes.Deposit{
-			Version:           e.Version,
-			BlockNumber:       e.BlockNumber,
-			TxIndex:           e.TxIndex,
-			NoWitnessTx:       e.NoWitnessTx,
-			OutputIndex:       e.OutputIndex,
-			IntermediateProof: e.IntermediateProof,
-			EvmAddress:        e.EvmAddress,
+	newKey := append([]byte{0}, e.RelayerPubkey...)
+
+	pubKey := relayertypes.DecodePublicKey(newKey)
+	deposits := make([]*bitcointypes.Deposit, len(e.DepositTX))
+
+	for i, tx := range e.DepositTX {
+		deposits[i] = &bitcointypes.Deposit{
+			Version:           tx.Version,
+			BlockNumber:       tx.BlockNumber,
+			TxIndex:           tx.TxIndex,
+			NoWitnessTx:       tx.NoWitnessTx,
+			OutputIndex:       uint32(tx.OutputIndex),
+			IntermediateProof: tx.IntermediateProof,
+			EvmAddress:        tx.EvmAddress,
 			RelayerPubkey:     pubKey,
 		}
-
-		msgDeposits := &bitcointypes.MsgNewDeposits{
-			Proposer:     e.Proposer,
-			BlockHeaders: headersBytes,
-			Deposits:     deposits,
-		}
-
-		err = s.RetrySubmit(ctx, e.RequestId, msgDeposits, config.AppConfig.L2SubmitRetry)
-		if err != nil {
-			log.Errorf("Proposer submit NewDeposit to consensus error, request id: %s, err: %v", e.RequestId, err)
-			// feedback SigFailed, deposit should module subscribe it to save UTXO or mark confirm
-			s.state.EventBus.Publish(state.SigFailed, e)
-			return err
-		}
-
-		// feedback SigFinish, deposit should module subscribe it to save UTXO or mark confirm
-		s.state.EventBus.Publish(state.SigFinish, e)
-		log.Infof("Proposer submit MsgNewDeposit to consensus ok, request id: %s", e.RequestId)
 	}
+
+	rpcMsg := &bitcointypes.MsgNewDeposits{
+		Proposer:     e.Proposer,
+		BlockHeaders: e.BlockHeader,
+		Deposits:     deposits,
+	}
+	err := s.RetrySubmit(ctx, e.RequestId, rpcMsg, config.AppConfig.L2SubmitRetry)
+	if err != nil {
+		log.Errorf("Proposer submit NewDeposit to consensus error, request id: %s, err: %v", e.RequestId, err)
+		// feedback SigFailed, deposit should module subscribe it to save UTXO or mark confirm
+		s.state.EventBus.Publish(state.SigFailed, e)
+		return err
+	}
+	s.removeSigMap(e.RequestId, false)
+
+	// feedback SigFinish, deposit should module subscribe it to save UTXO or mark confirm
+	s.state.EventBus.Publish(state.SigFinish, e)
+	log.Infof("Proposer submit MsgNewDeposit to consensus ok, request id: %s", e.RequestId)
 	return nil
 }

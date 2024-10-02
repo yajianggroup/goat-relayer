@@ -21,6 +21,10 @@ type WalletServer struct {
 	depositCh chan interface{}
 	blockCh   chan interface{}
 
+	depositSigFailChan    chan interface{}
+	depositSigFinishChan  chan interface{}
+	depositSigTimeoutChan chan interface{}
+
 	withdrawSigFailChan    chan interface{}
 	withdrawSigFinishChan  chan interface{}
 	withdrawSigTimeoutChan chan interface{}
@@ -35,6 +39,10 @@ func NewWalletServer(libp2p *p2p.LibP2PService, st *state.State, signer *bls.Sig
 		depositCh: make(chan interface{}, 100),
 		blockCh:   make(chan interface{}, state.BTC_BLOCK_CHAN_LENGTH),
 
+		depositSigFailChan:    make(chan interface{}, 10),
+		depositSigFinishChan:  make(chan interface{}, 10),
+		depositSigTimeoutChan: make(chan interface{}, 10),
+
 		withdrawSigFailChan:    make(chan interface{}, 10),
 		withdrawSigFinishChan:  make(chan interface{}, 10),
 		withdrawSigTimeoutChan: make(chan interface{}, 10),
@@ -46,8 +54,6 @@ func (w *WalletServer) Start(ctx context.Context) {
 
 	go w.blockScanLoop(ctx)
 	go w.depositLoop(ctx)
-	go w.processConfirmedDeposit(ctx)
-
 	go w.withdrawLoop(ctx)
 
 	log.Info("WalletServer started.")

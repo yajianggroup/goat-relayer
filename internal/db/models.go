@@ -208,6 +208,12 @@ type Deposit struct {
 	TxHash      string    `gorm:"not null" json:"tx_hash"`
 	RawTx       string    `gorm:"not null" json:"raw_tx"`
 	EvmAddr     string    `gorm:"not null" json:"evm_addr"`
+	BlockHash   string    `gorm:"not null" json:"block_hash"`
+	BlockHeight uint64    `gorm:"not null" json:"block_height"`
+	TxIndex     uint64    `gorm:"not null" json:"tx_index"`
+	OutputIndex int       `gorm:"not null" json:"output_index"`
+	MerkleRoot  string    `gorm:"not null" json:"merkle_root"`
+	Proof       string    `gorm:"not null" json:"proof"`
 	SignVersion uint32    `gorm:"not null" json:"sign_version"`
 	Status      string    `gorm:"not null" json:"status"` // "unconfirm", "confirmed", "signing", "pending", "processed"
 	UpdatedAt   time.Time `gorm:"not null" json:"updated_at"`
