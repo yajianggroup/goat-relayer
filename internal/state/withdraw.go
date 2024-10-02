@@ -51,7 +51,7 @@ func (s *State) CreateWithdrawal(address string, block, id, txPrice, amount uint
 }
 
 // CreateSendOrder, create a send order when start withdrawal or consolidation
-func (s *State) CreateSendOrder(order *db.SendOrder, selectedUtxos []*db.Utxo, selectedWithdraws []*db.Withdraw, vins []*db.Vin, vouts []*db.Vout) error {
+func (s *State) CreateSendOrder(order *db.SendOrder, selectedUtxos []*db.Utxo, selectedWithdraws []*db.Withdraw, vins []*db.Vin, vouts []*db.Vout, isProposer bool) error {
 	s.walletMu.Lock()
 	defer s.walletMu.Unlock()
 
@@ -71,34 +71,62 @@ func (s *State) CreateSendOrder(order *db.SendOrder, selectedUtxos []*db.Utxo, s
 
 		// update utxo status
 		for _, utxo := range selectedUtxos {
-			var utxoInDb *db.Utxo
-			if err = tx.Where("id = ?", utxo.ID).First(utxoInDb).Error; err != nil {
+			var utxoInDb db.Utxo
+			if err = tx.Where("txid = ? and out_index = ?", utxo.Txid, utxo.OutIndex).Order("id desc").First(&utxoInDb).Error; err != nil {
 				return err
 			}
-			if utxoInDb.Status == db.UTXO_STATUS_UNCONFIRM || utxoInDb.Status == db.UTXO_STATUS_PENDING || utxoInDb.Status == db.UTXO_STATUS_SPENT {
-				return fmt.Errorf("utxo status can not be make withdrawal or consolidation, utxo id: %d, status: %s", utxo.ID, utxoInDb.Status)
-			}
-			err = tx.Model(&db.Utxo{}).Where("id = ?", utxo.ID).Updates(&db.Utxo{Status: db.UTXO_STATUS_PENDING, UpdatedAt: time.Now()}).Error
-			if err != nil {
-				log.Errorf("State CreateSendOrder update utxo records error: %v", err)
-				return err
+			if isProposer {
+				if utxoInDb.Status == db.UTXO_STATUS_UNCONFIRM || utxoInDb.Status == db.UTXO_STATUS_PENDING || utxoInDb.Status == db.UTXO_STATUS_SPENT {
+					return fmt.Errorf("utxo status can not be make withdrawal or consolidation, utxo id: %d, status: %s", utxoInDb.ID, utxoInDb.Status)
+				}
+				err = tx.Model(&db.Utxo{}).Where("id = ?", utxoInDb.ID).Updates(&db.Utxo{Status: db.UTXO_STATUS_PENDING, UpdatedAt: time.Now()}).Error
+				if err != nil {
+					log.Errorf("State CreateSendOrder update utxo records error: %v", err)
+					return err
+				}
+			} else {
+				// voter perhaps receipt multiple orders with the same withdraw
+				if utxoInDb.Status == db.UTXO_STATUS_UNCONFIRM || utxoInDb.Status == db.UTXO_STATUS_SPENT {
+					return fmt.Errorf("utxo status can not be make withdrawal or consolidation, utxo id: %d, status: %s", utxoInDb.ID, utxoInDb.Status)
+				}
+				if utxoInDb.Status != db.UTXO_STATUS_PENDING {
+					err = tx.Model(&db.Utxo{}).Where("id = ?", utxoInDb.ID).Updates(&db.Utxo{Status: db.UTXO_STATUS_PENDING, UpdatedAt: time.Now()}).Error
+					if err != nil {
+						log.Errorf("State CreateSendOrder update utxo records error: %v", err)
+						return err
+					}
+				}
 			}
 		}
 
 		// update withdraw status
 		if order.OrderType == db.ORDER_TYPE_WITHDRAWAL {
-			for _, withdraw := range selectedUtxos {
-				var withdrawInDb *db.Withdraw
-				if err = tx.Where("id = ?", withdraw.ID).First(withdrawInDb).Error; err != nil {
+			for _, withdraw := range selectedWithdraws {
+				var withdrawInDb db.Withdraw
+				if err = tx.Where("request_id = ?", withdraw.RequestId).First(&withdrawInDb).Error; err != nil {
 					return err
 				}
-				if withdrawInDb.Status != db.WITHDRAW_STATUS_CREATE {
-					return fmt.Errorf("withdraw status can not be make withdrawal, id: %d, status: %s", withdraw.ID, withdrawInDb.Status)
-				}
-				err = tx.Model(&db.Withdraw{}).Where("id = ?", withdraw.ID).Updates(&db.Utxo{Status: db.WITHDRAW_STATUS_AGGREGATING, UpdatedAt: time.Now()}).Error
-				if err != nil {
-					log.Errorf("State CreateSendOrder update withdraw records error: %v", err)
-					return err
+				if isProposer {
+					if withdrawInDb.Status != db.WITHDRAW_STATUS_CREATE {
+						return fmt.Errorf("withdraw status can not be make withdrawal, id: %d, status: %s", withdrawInDb.ID, withdrawInDb.Status)
+					}
+					err = tx.Model(&db.Withdraw{}).Where("id = ?", withdrawInDb.ID).Updates(&db.Utxo{Status: db.WITHDRAW_STATUS_AGGREGATING, UpdatedAt: time.Now()}).Error
+					if err != nil {
+						log.Errorf("State CreateSendOrder update withdraw records error: %v", err)
+						return err
+					}
+				} else {
+					// voter perhaps receipt multiple orders with the same withdraw
+					if withdrawInDb.Status != db.WITHDRAW_STATUS_CREATE && withdrawInDb.Status != db.WITHDRAW_STATUS_AGGREGATING {
+						return fmt.Errorf("withdraw status can not be make withdrawal, id: %d, status: %s", withdrawInDb.ID, withdrawInDb.Status)
+					}
+					if withdrawInDb.Status == db.WITHDRAW_STATUS_CREATE {
+						err = tx.Model(&db.Withdraw{}).Where("id = ?", withdrawInDb.ID).Updates(&db.Utxo{Status: db.WITHDRAW_STATUS_AGGREGATING, UpdatedAt: time.Now()}).Error
+						if err != nil {
+							log.Errorf("State CreateSendOrder update withdraw records error: %v", err)
+							return err
+						}
+					}
 				}
 			}
 		}
@@ -309,8 +337,8 @@ func (s *State) CleanProcessingWithdraw() error {
 					return err
 				}
 				for _, vin := range vins {
-					var utxoInDb *db.Utxo
-					if err = tx.Where("txid = ? and out_index", vin.Txid, vin.OutIndex).First(utxoInDb).Error; err != nil {
+					var utxoInDb db.Utxo
+					if err = tx.Where("txid = ? and out_index", vin.Txid, vin.OutIndex).First(&utxoInDb).Error; err != nil {
 						continue
 					}
 					if utxoInDb.Status != db.UTXO_STATUS_PENDING {

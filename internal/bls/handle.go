@@ -66,6 +66,13 @@ func (s *Signer) handleSigReceive(ctx context.Context, event interface{}) {
 			// feedback SigFailed
 			s.state.EventBus.Publish(state.SigFailed, e)
 		}
+	case types.MsgSignSendOrder:
+		log.Debugf("Event handleSigReceive is of type MsgSignSendOrder, request id %s", e.RequestId)
+		if err := s.handleSigReceiveSendOrder(ctx, e); err != nil {
+			log.Errorf("Error handleSigReceive MsgSignSendOrder, %v", err)
+			// feedback SigFailed
+			s.state.EventBus.Publish(state.SigFailed, e)
+		}
 	default:
 		// check e['msg_type'] from libp2p
 		log.Debugf("Unknown event handleSigReceive type, %v", e)

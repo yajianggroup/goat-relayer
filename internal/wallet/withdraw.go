@@ -352,7 +352,7 @@ func (w *WalletServer) createSendOrder(tx *wire.MsgTx, orderType string, selecte
 	}
 
 	// save
-	err = w.state.CreateSendOrder(order, selectedUtxos, selectedWithdraws, vins, vouts)
+	err = w.state.CreateSendOrder(order, selectedUtxos, selectedWithdraws, vins, vouts, true)
 	if err != nil {
 		return nil, err
 	}

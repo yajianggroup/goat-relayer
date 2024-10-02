@@ -158,12 +158,12 @@ func (s *Signer) handleSigReceiveNewBlock(ctx context.Context, e types.MsgSignNe
 		// validate startBlockNumber, hashs local
 		expectStartHeight := l2Info.LatestBtcHeight + 1
 		if expectStartHeight != e.StartBlockNumber {
-			log.Warnf("MsgSignDeposit handleSigReceive StartBlockNumber does not match LatestBtcHeight, request id %s, StartBlockNumber: %d, LatestBtcHeight plus 1: %d", e.RequestId, e.StartBlockNumber, l2Info.LatestBtcHeight+1)
+			log.Warnf("SigReceive MsgSignNewBlock StartBlockNumber does not match LatestBtcHeight, request id %s, StartBlockNumber: %d, LatestBtcHeight plus 1: %d", e.RequestId, e.StartBlockNumber, l2Info.LatestBtcHeight+1)
 			return fmt.Errorf("cannot handle receive sig %s with start block number %d, expect: %d", e.RequestId, e.StartBlockNumber, expectStartHeight)
 		}
 		// validate epoch
 		if e.Epoch != epochVoter.Epoch {
-			log.Warnf("MsgSignDeposit handleSigReceive epoch does not match, request id %s, msg epoch: %d, current epoch: %d", e.RequestId, e.Epoch, epochVoter.Epoch)
+			log.Warnf("SigReceive MsgSignNewBlock epoch does not match, request id %s, msg epoch: %d, current epoch: %d", e.RequestId, e.Epoch, epochVoter.Epoch)
 			return fmt.Errorf("cannot handle receive sig %s with epoch %d, expect: %d", e.RequestId, e.Epoch, epochVoter.Epoch)
 		}
 		// TODO hash comparation
@@ -190,10 +190,10 @@ func (s *Signer) handleSigReceiveNewBlock(ctx context.Context, e types.MsgSignNe
 		}
 
 		if err := p2p.PublishMessage(ctx, p2pMsg); err != nil {
-			log.Errorf("SigReceive public NewBlock to p2p error, request id: %s, err: %v", e.RequestId, err)
+			log.Errorf("SigReceive public MsgSignNewBlock to p2p error, request id: %s, err: %v", e.RequestId, err)
 			return err
 		}
-		log.Infof("SigReceive broadcast ok, request id: %s", e.RequestId)
+		log.Infof("SigReceive broadcast MsgSignNewBlock ok, request id: %s", e.RequestId)
 		return nil
 	}
 }

@@ -109,6 +109,170 @@ func (s *Signer) handleSigStartSendOrder(ctx context.Context, e types.MsgSignSen
 	return nil
 }
 
+// handleSigReceiveSendOrder handle receive send order sig event
+func (s *Signer) handleSigReceiveSendOrder(ctx context.Context, e types.MsgSignSendOrder) error {
+	canSign := s.CanSign()
+	isProposer := s.IsProposer()
+	if !canSign {
+		log.Debugf("Ignore SigReceive SendOrder request id %s, canSign: %v, isProposer: %v", e.RequestId, canSign, isProposer)
+		return fmt.Errorf("cannot handle receive sig %s in current l2 context, catching up: %v, is proposer: %v", e.RequestId, !canSign, isProposer)
+	}
+
+	epochVoter := s.state.GetEpochVoter()
+	if isProposer {
+		// collect voter sig
+		if e.IsProposer {
+			return nil
+		}
+
+		s.sigMu.Lock()
+		voteMap, ok := s.sigMap[e.RequestId]
+		if !ok {
+			s.sigMu.Unlock()
+			return fmt.Errorf("sig receive send order proposer process no sig found, request id: %s", e.RequestId)
+		}
+		_, ok = voteMap[e.VoterAddress]
+		if ok {
+			s.sigMu.Unlock()
+			log.Debugf("SigReceive send order proposer process voter multi receive, request id: %s, voter address: %s", e.RequestId, e.VoterAddress)
+			return nil
+		}
+		voteMap[e.VoterAddress] = e
+		s.sigMu.Unlock()
+
+		// UNCHECK aggregate
+		rpcMsg, err := s.aggSigSendOrder(e.RequestId)
+		if err != nil {
+			log.Warnf("SigReceive send order proposer process aggregate sig, request id: %s, err: %v", e.RequestId, err)
+			return nil
+		}
+
+		if _, ok := rpcMsg.(bitcointypes.MsgInitializeWithdrawal); ok {
+			err = s.RetrySubmit(ctx, e.RequestId, rpcMsg, config.AppConfig.L2SubmitRetry)
+			if err != nil {
+				log.Errorf("SigReceive send order proposer submit NewBlock to RPC error, request id: %s, err: %v", e.RequestId, err)
+				s.removeSigMap(e.RequestId, false)
+				return err
+			}
+		}
+
+		s.removeSigMap(e.RequestId, false)
+
+		// feedback SigFinish
+		s.state.EventBus.Publish(state.SigFinish, e)
+
+		log.Infof("SigReceive send order proposer submit NewBlock to RPC ok, request id: %s", e.RequestId)
+		return nil
+	} else {
+		// only accept proposer msg
+		if !e.IsProposer {
+			return nil
+		}
+
+		// verify proposer sig
+		if len(e.SigData) == 0 {
+			log.Infof("SigReceive MsgSignSendOrder with empty sig data, request id %s", e.RequestId)
+			return nil
+		}
+
+		// validate epoch
+		if e.Epoch != epochVoter.Epoch {
+			log.Warnf("SigReceive MsgSignSendOrder epoch does not match, request id %s, msg epoch: %d, current epoch: %d", e.RequestId, e.Epoch, epochVoter.Epoch)
+			return fmt.Errorf("cannot handle receive sig %s with epoch %d, expect: %d", e.RequestId, e.Epoch, epochVoter.Epoch)
+		}
+
+		// extract order
+		var order db.SendOrder
+		var vins []*db.Vin
+		var vouts []*db.Vout
+		var utxos []*db.Utxo
+		var withdraws []*db.Withdraw
+		var err error
+		if err = json.Unmarshal(e.SendOrder, &order); err != nil {
+			log.Errorf("SigReceive SendOrder request id %s unmarshal order err: %v", e.RequestId, err)
+			return err
+		}
+		if err = json.Unmarshal(e.Vins, &vins); err != nil {
+			log.Errorf("SigReceive SendOrder request id %s unmarshal vins err: %v", e.RequestId, err)
+			return err
+		}
+		if err = json.Unmarshal(e.Vouts, &vouts); err != nil {
+			log.Errorf("SigReceive SendOrder request id %s unmarshal vouts err: %v", e.RequestId, err)
+			return err
+		}
+		if err = json.Unmarshal(e.Utxos, &utxos); err != nil {
+			log.Errorf("SigReceive SendOrder request id %s unmarshal utxos err: %v", e.RequestId, err)
+			return err
+		}
+		if order.OrderType == db.ORDER_TYPE_WITHDRAWAL {
+			err = json.Unmarshal(e.Withdraws, &withdraws)
+			if err != nil {
+				log.Errorf("SigReceive SendOrder request id %s unmarshal withdraws err: %v", e.RequestId, err)
+				return err
+			}
+		}
+
+		// check txid
+		tx, err := types.DeserializeTransaction(order.NoWitnessTx)
+		if err != nil {
+			log.Errorf("SigReceive SendOrder deserialize tx, request id %s, err: %v", e.RequestId, err)
+			return err
+		}
+		if tx.TxID() != order.Txid {
+			return fmt.Errorf("SigReceive SendOrder deserialize txid %s not match order txid %s", tx.TxID(), order.Txid)
+		}
+		// check utxo exists
+		if len(tx.TxIn) != len(vins) {
+			return fmt.Errorf("SigReceive SendOrder deserialize txin len %d not match vins %d", len(tx.TxIn), len(vins))
+		}
+		if len(tx.TxOut) != len(vouts) {
+			return fmt.Errorf("SigReceive SendOrder deserialize txout len %d not match vouts %d", len(tx.TxOut), len(vouts))
+		}
+
+		// save to local db
+		err = s.state.CreateSendOrder(&order, utxos, withdraws, vins, vouts, false)
+		if err != nil {
+			log.Errorf("SigReceive SendOrder save to db, request id %s, err: %v", e.RequestId, err)
+			return err
+		}
+
+		// build sign
+		newSign := &types.MsgSignSendOrder{
+			MsgSign: types.MsgSign{
+				RequestId:    e.RequestId,
+				Sequence:     e.Sequence,
+				Epoch:        e.Epoch,
+				IsProposer:   false,
+				VoterAddress: s.address, // voter address
+				SigData:      s.makeSigSendOrder(order.OrderType, e.WithdrawIds, order.NoWitnessTx, order.TxFee),
+				CreateTime:   time.Now().Unix(),
+			},
+			SendOrder: e.SendOrder,
+			Utxos:     e.Utxos,
+			Vins:      e.Vins,
+			Vouts:     e.Vouts,
+			Withdraws: e.Withdraws,
+
+			WithdrawIds: e.WithdrawIds,
+		}
+
+		// p2p broadcast
+		p2pMsg := p2p.Message{
+			MessageType: p2p.MessageTypeSigResp,
+			RequestId:   newSign.RequestId,
+			DataType:    "MsgSignSendOrder",
+			Data:        *newSign,
+		}
+
+		if err := p2p.PublishMessage(ctx, p2pMsg); err != nil {
+			log.Errorf("SigReceive public SendOrder to p2p error, request id: %s, err: %v", e.RequestId, err)
+			return err
+		}
+		log.Infof("SigReceive broadcast MsgSignSendOrder ok, request id: %s", e.RequestId)
+		return nil
+	}
+}
+
 func (s *Signer) makeSigSendOrder(orderType string, withdrawIds []uint64, noWitnessTx []byte, txFee uint64) []byte {
 	voters := make(bitmap.Bitmap, 5)
 	votes := &relayertypes.Votes{
