@@ -142,11 +142,13 @@ func (w *WalletServer) initDepositSig() {
 	// 4. spv verify
 	blockHashes := make([]string, 0)
 	for _, deposit := range deposits {
-		merkleRoot := []byte(deposit.MerkleRoot)
-		proofBytes := []byte(deposit.Proof)
+		txhash, err := chainhash.NewHashFromStr(deposit.TxHash)
+		if err != nil {
+			log.Errorf("NewHashFromStr TxHash err: %v", err)
+			continue
+		}
 		txIndex := uint32(deposit.TxIndex)
-		txhash := []byte(deposit.TxHash)
-		if bitcointypes.VerifyMerkelProof(txhash, merkleRoot, proofBytes, txIndex) {
+		if bitcointypes.VerifyMerkelProof(txhash[:], deposit.MerkleRoot, deposit.Proof, txIndex) {
 			blockHashes = append(blockHashes, deposit.BlockHash)
 		}
 	}

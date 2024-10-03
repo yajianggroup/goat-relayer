@@ -232,8 +232,8 @@ func (s *State) UpdateConfirmedDepositsByBtcHeight(blockHeight uint64, blockHash
 			deposit.BlockHash = blockHash
 			deposit.BlockHeight = blockHeight
 			deposit.TxIndex = uint64(txIndex)
-			deposit.MerkleRoot = string(merkleRoot)
-			deposit.Proof = string(proofBytes)
+			deposit.MerkleRoot = merkleRoot
+			deposit.Proof = proofBytes
 			deposit.UpdatedAt = time.Now()
 			result := s.dbm.GetBtcCacheDB().Save(deposit)
 			if result.Error != nil {
