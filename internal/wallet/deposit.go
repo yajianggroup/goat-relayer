@@ -2,6 +2,7 @@ package wallet
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -142,11 +143,13 @@ func (w *WalletServer) initDepositSig() {
 	// 4. spv verify
 	blockHashes := make([]string, 0)
 	for _, deposit := range deposits {
-		merkleRoot := []byte(deposit.MerkleRoot)
-		proofBytes := []byte(deposit.Proof)
+		txhash, err := chainhash.NewHashFromStr(deposit.TxHash)
+		if err != nil {
+			log.Errorf("NewHashFromStr TxHash err: %v", err)
+			continue
+		}
 		txIndex := uint32(deposit.TxIndex)
-		txhash := []byte(deposit.TxHash)
-		if bitcointypes.VerifyMerkelProof(txhash, merkleRoot, proofBytes, txIndex) {
+		if bitcointypes.VerifyMerkelProof(txhash[:], deposit.MerkleRoot, deposit.Proof, txIndex) {
 			blockHashes = append(blockHashes, deposit.BlockHash)
 		}
 	}
@@ -157,10 +160,13 @@ func (w *WalletServer) initDepositSig() {
 	}
 
 	// 5. build sign msg
-	pubKey, err := hex.DecodeString(l2Info.DepositKey)
+	pubkey, err := w.state.GetDepositKeyByBtcBlock(0)
 	if err != nil {
-		log.Errorf("DecodeString DepositKey err: %v", err)
-		return
+		log.Fatalf("WalletServer get current deposit key by btc height current err %v", err)
+	}
+	pubkeyBytes, err := base64.StdEncoding.DecodeString(pubkey.PubKey)
+	if err != nil {
+		log.Fatalf("Base64 decode pubkey %s err %v", pubkey.PubKey, err)
 	}
 
 	// 6. get block headers
@@ -181,38 +187,39 @@ func (w *WalletServer) initDepositSig() {
 	}
 
 	requestId := fmt.Sprintf("DEPOSIT:%s:%s", config.AppConfig.RelayerAddress, deposits[0].TxHash)
-	var msgDepositTXs []*types.DepositTX
-	for _, deposit := range deposits {
+	msgDepositTXs := make([]types.DepositTX, len(deposits))
+	for i, deposit := range deposits {
 		txHash, err := chainhash.NewHashFromStr(deposit.TxHash)
 		if err != nil {
 			log.Errorf("NewHashFromStr err: %v", err)
-			continue
+			return
 		}
-
-		// verify merkle proof
-		success := bitcointypes.VerifyMerkelProof(txHash.CloneBytes(), []byte(deposit.MerkleRoot), []byte(deposit.Proof), uint32(deposit.TxIndex))
-		if !success {
-			log.Errorf("VerifyMerkelProof failed, txHash: %s", txHash.String())
-			continue
+		evmAddr, err := hex.DecodeString(deposit.EvmAddr)
+		if err != nil {
+			log.Errorf("DecodeString err: %v", err)
+			return
 		}
-
-		noWitnessTx, err := types.SerializeNoWitnessTx([]byte(deposit.RawTx))
+		rawTx, err := hex.DecodeString(deposit.RawTx)
+		if err != nil {
+			log.Errorf("DecodeString err: %v", err)
+			return
+		}
+		noWitnessTx, err := types.SerializeNoWitnessTx(rawTx)
 		if err != nil {
 			log.Errorf("SerializeNoWitnessTx err: %v", err)
-			continue
+			return
 		}
-		msgDepositTX := types.DepositTX{
+		msgDepositTXs[i] = types.DepositTX{
 			Version:           deposit.SignVersion,
 			BlockNumber:       deposit.BlockHeight,
-			TxHash:            []byte(deposit.TxHash),
+			TxHash:            txHash.CloneBytes(),
 			TxIndex:           uint32(deposit.TxIndex),
 			NoWitnessTx:       noWitnessTx,
-			MerkleRoot:        []byte(deposit.MerkleRoot),
+			MerkleRoot:        deposit.MerkleRoot,
 			OutputIndex:       deposit.OutputIndex,
-			IntermediateProof: []byte(deposit.Proof),
-			EvmAddress:        []byte(deposit.EvmAddr),
+			IntermediateProof: deposit.Proof,
+			EvmAddress:        evmAddr,
 		}
-		msgDepositTXs = append(msgDepositTXs, &msgDepositTX)
 	}
 	msgSignDeposit := types.MsgSignDeposit{
 		MsgSign: types.MsgSign{
@@ -221,7 +228,7 @@ func (w *WalletServer) initDepositSig() {
 		BlockHeader:   headersBytes,
 		DepositTX:     msgDepositTXs,
 		Proposer:      proposer,
-		RelayerPubkey: pubKey,
+		RelayerPubkey: pubkeyBytes,
 	}
 	w.state.EventBus.Publish(state.SigStart, msgSignDeposit)
 	w.sigDepositStatus = true
