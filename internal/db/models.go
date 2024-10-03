@@ -82,7 +82,7 @@ type Utxo struct {
 	Uid           string    `gorm:"not null" json:"uid"`
 	Txid          string    `gorm:"not null;index:unique_txid_out_index,unique" json:"txid"`
 	PkScript      []byte    `json:"pk_script"`
-	RedeemScript  []byte    `json:"redeem_script"` // P2WSH Type
+	SubScript     []byte    `json:"sub_script"` // P2WSH Type
 	OutIndex      int       `gorm:"not null;index:unique_txid_out_index,unique" json:"out_index"`
 	Amount        int64     `gorm:"not null;index:utxo_amount_index" json:"amount"`     // BTC precision up to 8 decimal places
 	Receiver      string    `gorm:"not null;index:utxo_receiver_index" json:"receiver"` // it is MPC p2wpkh address here, or p2wsh (need collect)
@@ -99,12 +99,13 @@ type Utxo struct {
 
 // DepositResult model, it save deposit data from layer2 events
 type DepositResult struct {
-	ID        uint   `gorm:"primaryKey" json:"id"`
-	TxId      string `gorm:"uniqueIndex:idx_tx_id_tx_out" json:"tx_id"`
-	TxOut     uint64 `gorm:"uniqueIndex:idx_tx_id_tx_out" json:"tx_out"`
-	Address   string `gorm:"not null" json:"address"`
-	Amount    uint64 `gorm:"not null" json:"amount"`
-	BlockHash string `gorm:"not null" json:"block_hash"`
+	ID                 uint   `gorm:"primaryKey" json:"id"`
+	Txid               string `gorm:"uniqueIndex:idx_txid_tx_out" json:"txid"`
+	TxOut              uint64 `gorm:"uniqueIndex:idx_txid_tx_out" json:"tx_out"`
+	Address            string `gorm:"not null" json:"address"`
+	Amount             uint64 `gorm:"not null" json:"amount"`
+	BlockHash          string `gorm:"not null" json:"block_hash"`
+	NeedFetchSubScript bool   `gorm:"not null;default:false;index:idx_need_fetch_sub_script" json:"need_fetch_sub_script"`
 }
 
 // Withdraw model (for managing withdrawals)
@@ -149,7 +150,7 @@ type Vin struct {
 	Txid         string    `gorm:"not null;index:vin_txid_index" json:"txid"`
 	OutIndex     int       `gorm:"not null;index:vin_out_index" json:"out_index"`
 	SigScript    []byte    `json:"sig_script"`
-	RedeemScript []byte    `json:"redeem_script"` // P2WSH Type
+	SubScript    []byte    `json:"sub_script"` // P2WSH Type
 	Sender       string    `json:"sender"`
 	ReceiverType string    `gorm:"not null" json:"receiver_type"`                 // P2PKH P2SH P2WSH P2WPKH P2TR
 	Source       string    `gorm:"not null" json:"source"`                        // "withdraw", "unknown"
@@ -205,17 +206,17 @@ type BtcTXOutput struct {
 // Deposit model (for managing deposits)
 type Deposit struct {
 	ID          uint      `gorm:"primaryKey" json:"id"`
-	TxHash      string    `gorm:"not null" json:"tx_hash"`
+	TxHash      string    `gorm:"not null;index:deposit_txhash_index" json:"tx_hash"`
 	RawTx       string    `gorm:"not null" json:"raw_tx"`
 	EvmAddr     string    `gorm:"not null" json:"evm_addr"`
 	BlockHash   string    `gorm:"not null" json:"block_hash"`
 	BlockHeight uint64    `gorm:"not null" json:"block_height"`
 	TxIndex     uint64    `gorm:"not null" json:"tx_index"`
-	OutputIndex int       `gorm:"not null" json:"output_index"`
+	OutputIndex int       `gorm:"not null;index:deposit_output_index" json:"output_index"`
 	MerkleRoot  string    `gorm:"not null" json:"merkle_root"`
 	Proof       string    `gorm:"not null" json:"proof"`
 	SignVersion uint32    `gorm:"not null" json:"sign_version"`
-	Status      string    `gorm:"not null" json:"status"` // "unconfirm", "confirmed", "signing", "pending", "processed"
+	Status      string    `gorm:"not null;index:deposit_status_index" json:"status"` // "unconfirm", "confirmed", "signing", "pending", "processed"
 	UpdatedAt   time.Time `gorm:"not null" json:"updated_at"`
 }
 

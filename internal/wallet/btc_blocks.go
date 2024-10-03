@@ -186,7 +186,7 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 						} else if isWithdrawl {
 							utxo.Source = db.UTXO_SOURCE_WITHDRAWAL
 						}
-						err = w.state.AddUtxo(utxo)
+						err = w.state.AddUtxo(utxo, pubkeyBytes)
 						if err != nil {
 							// TODO if err, update btc height before fatal quit
 							log.Fatalf("Add utxo %v err %v", utxo, err)

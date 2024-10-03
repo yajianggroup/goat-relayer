@@ -89,7 +89,8 @@ func (w *WalletServer) initWithdrawSig() {
 	log.Debug("WalletServer initWithdrawSig")
 
 	// 1. check catching up, self is proposer
-	if w.state.GetL2Info().Syncing {
+	l2Info := w.state.GetL2Info()
+	if l2Info.Syncing {
 		log.Infof("WalletServer initWithdrawSig ignore, layer2 is catching up")
 		return
 	}
@@ -110,7 +111,7 @@ func (w *WalletServer) initWithdrawSig() {
 	epochVoter := w.state.GetEpochVoter()
 	if epochVoter.Proposer != config.AppConfig.RelayerAddress {
 		// do not clean immediately
-		if w.sigStatus && w.state.GetL2Info().Height > epochVoter.Height+1 {
+		if w.sigStatus && l2Info.Height > epochVoter.Height+1 {
 			w.sigStatus = false
 			// clean process, role changed, remove all status "create", "aggregating"
 			w.cleanWithdrawProcess()
@@ -124,7 +125,7 @@ func (w *WalletServer) initWithdrawSig() {
 		log.Debug("WalletServer initWithdrawSig ignore, there is a sig")
 		return
 	}
-	if w.state.GetL2Info().Height <= w.sigFinishHeight+2 {
+	if l2Info.Height <= w.sigFinishHeight+2 {
 		log.Debug("WalletServer initWithdrawSig ignore, last finish sig in 2 blocks")
 		return
 	}
@@ -312,7 +313,7 @@ func (w *WalletServer) createSendOrder(tx *wire.MsgTx, orderType string, selecte
 			Txid:         txIn.PreviousOutPoint.Hash.String(),
 			OutIndex:     int(txIn.PreviousOutPoint.Index),
 			SigScript:    nil,
-			RedeemScript: selectedUtxos[i].RedeemScript,
+			SubScript:    selectedUtxos[i].SubScript,
 			Sender:       "",
 			ReceiverType: selectedUtxos[i].ReceiverType,
 			Source:       orderType,

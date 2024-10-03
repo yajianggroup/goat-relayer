@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/goatnetwork/goat-relayer/internal/db"
+	"github.com/goatnetwork/goat-relayer/internal/types"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
@@ -35,7 +36,7 @@ func (s *State) UpdateUtxoStatusSpent(txid string, out int, btcBlock uint64) err
 	return s.updateUtxoStatusSpent(txid, out, btcBlock)
 }
 
-func (s *State) AddUtxo(utxo *db.Utxo) error {
+func (s *State) AddUtxo(utxo *db.Utxo, pk []byte) error {
 	s.walletMu.Lock()
 	defer s.walletMu.Unlock()
 
@@ -52,7 +53,7 @@ func (s *State) AddUtxo(utxo *db.Utxo) error {
 	if utxo.Status == db.UTXO_STATUS_CONFIRMED {
 		// check deposit table (from layer2)
 		var depositResult db.DepositResult
-		err := s.dbm.GetWalletDB().Where("tx_id=? and tx_out=?", utxo.Txid, utxo.OutIndex).First(&depositResult).Error
+		err := s.dbm.GetWalletDB().Where("txid=? and tx_out=?", utxo.Txid, utxo.OutIndex).First(&depositResult).Error
 		if err != nil && err != gorm.ErrRecordNotFound {
 			return err
 		}
@@ -61,23 +62,96 @@ func (s *State) AddUtxo(utxo *db.Utxo) error {
 		if err == nil {
 			utxo.Source = db.UTXO_SOURCE_DEPOSIT
 			utxo.Status = db.UTXO_STATUS_PROCESSED
+
+			// recover sub script for p2wsh
+			if len(utxo.SubScript) == 0 && utxo.ReceiverType == db.WALLET_TYPE_P2WSH {
+				subScript, err := types.BuildSubScriptForP2WSH(depositResult.Address, pk)
+				if err != nil {
+					return err
+				}
+				utxo.SubScript = subScript
+			}
 		}
 	}
 
 	return s.saveUtxo(utxo)
 }
 
+func (s *State) UpdateUtxoSubScript(txid string, out uint64, evmAddr string, pk []byte) error {
+	s.walletMu.Lock()
+	defer s.walletMu.Unlock()
+
+	subScript, err := types.BuildSubScriptForP2WSH(evmAddr, pk)
+	if err != nil {
+		return err
+	}
+
+	err = s.dbm.GetWalletDB().Transaction(func(tx *gorm.DB) error {
+		err := tx.Model(&db.Utxo{}).Where("txid=? and tx_out=?", txid, out).Update("sub_script", subScript).Error
+		if err != nil && err != gorm.ErrRecordNotFound {
+			return err
+		}
+		err = tx.Model(&db.DepositResult{}).Where("txid=? and tx_out=?", txid, out).Update("need_fetch_sub_script", false).Error
+		if err != nil && err != gorm.ErrRecordNotFound {
+			return err
+		}
+		return nil
+	})
+	return err
+}
+
+// GetDepositResultsNeedFetchSubScript get deposit results need fetch sub script, batch size is 100
+func (s *State) GetDepositResultsNeedFetchSubScript() ([]*db.DepositResult, error) {
+	s.walletMu.RLock()
+	defer s.walletMu.RUnlock()
+
+	var depositResults []*db.DepositResult
+	err := s.dbm.GetWalletDB().Where("need_fetch_sub_script=? ", true).Limit(100).First(&depositResults).Error
+	if err != nil && err != gorm.ErrRecordNotFound {
+		return nil, err
+	}
+	return depositResults, nil
+}
+
 func (s *State) AddDepositResult(txid string, out uint64, address string, amount uint64, blockHash string) error {
 	s.walletMu.Lock()
 	defer s.walletMu.Unlock()
 
-	return s.dbm.GetWalletDB().Create(&db.DepositResult{
-		TxId:      txid,
-		TxOut:     out,
-		Address:   address,
-		Amount:    amount,
-		BlockHash: blockHash,
+	utxo, err := s.getUtxo(txid, int(out))
+	var needFetchSubScript bool
+	if err != nil && err != gorm.ErrRecordNotFound {
+		return err
+	}
+	if err == nil && utxo.ReceiverType == db.WALLET_TYPE_P2WSH && len(utxo.SubScript) == 0 {
+		needFetchSubScript = true
+	}
+
+	var depositResult db.DepositResult
+	err = s.dbm.GetWalletDB().Where("txid=? and tx_out=?", txid, out).First(&depositResult).Error
+	if err != nil && err != gorm.ErrRecordNotFound {
+		return err
+	}
+	if err == nil {
+		if depositResult.NeedFetchSubScript != needFetchSubScript {
+			depositResult.NeedFetchSubScript = needFetchSubScript
+			err = s.dbm.GetWalletDB().Save(&depositResult).Error
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	err = s.dbm.GetWalletDB().Create(&db.DepositResult{
+		Txid:               txid,
+		TxOut:              out,
+		Address:            address,
+		Amount:             amount,
+		BlockHash:          blockHash,
+		NeedFetchSubScript: needFetchSubScript,
 	}).Error
+
+	return err
 }
 
 func (s *State) AddOrUpdateVin(vin *db.Vin) error {

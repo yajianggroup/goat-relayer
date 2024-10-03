@@ -137,30 +137,15 @@ func GenerateP2WPKHAddress(pubKey []byte, net *chaincfg.Params) (*btcutil.Addres
 }
 
 func GenerateV0P2WSHAddress(pubKey []byte, evmAddress string, net *chaincfg.Params) (*btcutil.AddressWitnessScriptHash, error) {
-	posPubkey, err := btcec.ParsePubKey(pubKey)
-	if err != nil {
-		return nil, err
-	}
-	addr, err := hex.DecodeString(evmAddress)
+	subScript, err := BuildSubScriptForP2WSH(evmAddress, pubKey)
 	if err != nil {
 		return nil, err
 	}
 
-	redeemScript, err := txscript.NewScriptBuilder().
-		AddData(addr[:]).
-		AddOp(txscript.OP_DROP).
-		AddData(posPubkey.SerializeCompressed()).
-		AddOp(txscript.OP_CHECKSIG).Script()
-	if err != nil {
-		log.Errorf("build redeem script err: %v", err)
-		return nil, err
-	}
-
-	witnessProg := sha256.Sum256(redeemScript)
+	witnessProg := sha256.Sum256(subScript)
 	p2wsh, err := btcutil.NewAddressWitnessScriptHash(witnessProg[:], net)
 	if err != nil {
-		log.Errorf("build v0 p2wsh err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("failed to create v0 p2wsh address: %v", err)
 	}
 
 	return p2wsh, nil
@@ -231,4 +216,25 @@ func SerializeNoWitnessTx(rawTransaction []byte) ([]byte, error) {
 	}
 
 	return buf.Bytes(), nil
+}
+
+func BuildSubScriptForP2WSH(evmAddress string, pubKey []byte) ([]byte, error) {
+	posPubkey, err := btcec.ParsePubKey(pubKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse public key: %v", err)
+	}
+	addr, err := hex.DecodeString(evmAddress)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode evmAddress: %v", err)
+	}
+
+	subScript, err := txscript.NewScriptBuilder().
+		AddData(addr).
+		AddOp(txscript.OP_DROP).
+		AddData(posPubkey.SerializeCompressed()).
+		AddOp(txscript.OP_CHECKSIG).Script()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build subscript: %v", err)
+	}
+	return subScript, nil
 }

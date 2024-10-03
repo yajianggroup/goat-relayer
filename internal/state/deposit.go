@@ -6,6 +6,7 @@ import (
 
 	"github.com/goatnetwork/goat-relayer/internal/db"
 	"github.com/goatnetwork/goat-relayer/internal/types"
+	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
 
@@ -18,7 +19,7 @@ func (s *State) AddUnconfirmDeposit(txHash string, rawTx string, evmAddr string,
 	defer s.depositMu.Unlock()
 
 	// check if exist, if not save to db
-	_, err := s.queryDepositByTxHash(txHash)
+	_, err := s.queryDepositByTxHash(txHash, outputIndex)
 	if err != nil && err != gorm.ErrRecordNotFound {
 		return err
 	}
@@ -52,18 +53,23 @@ func (s *State) AddUnconfirmDeposit(txHash string, rawTx string, evmAddr string,
 SaveConfirmDeposit
 when utxo scanner detected a new transaction in 6 confirm, save to confirmed
 */
-func (s *State) SaveConfirmDeposit(txHash string, rawTx string, evmAddr string) error {
+func (s *State) SaveConfirmDeposit(txHash string, rawTx string, evmAddr string, signVersion uint32, outputIndex int) error {
 	s.depositMu.Lock()
 	defer s.depositMu.Unlock()
 
-	deposit, err := s.queryDepositByTxHash(txHash)
+	deposit, err := s.queryDepositByTxHash(txHash, outputIndex)
 	status := db.DEPOSIT_STATUS_CONFIRMED
 
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
 			deposit = &db.Deposit{
-				Status:    status,
-				UpdatedAt: time.Now(),
+				Status:      status,
+				UpdatedAt:   time.Now(),
+				TxHash:      txHash,
+				RawTx:       rawTx,
+				EvmAddr:     evmAddr,
+				SignVersion: signVersion,
+				OutputIndex: outputIndex,
 			}
 		} else {
 			// DB error
@@ -75,9 +81,19 @@ func (s *State) SaveConfirmDeposit(txHash string, rawTx string, evmAddr string) 
 		}
 		deposit.UpdatedAt = time.Now()
 	}
-	result := s.dbm.GetBtcCacheDB().Save(deposit)
-	if result.Error != nil {
-		return result.Error
+	if err := s.dbm.GetBtcCacheDB().Save(deposit).Error; err != nil {
+		return err
+	}
+	// remove from unconfirm queue
+	for i, ds := range s.depositState.UnconfirmQueue {
+		if ds.TxHash == txHash && ds.OutputIndex == outputIndex {
+			if i == len(s.depositState.UnconfirmQueue)-1 {
+				s.depositState.UnconfirmQueue = s.depositState.UnconfirmQueue[:i]
+			} else {
+				s.depositState.UnconfirmQueue = append(s.depositState.UnconfirmQueue[:i], s.depositState.UnconfirmQueue[i+1:]...)
+			}
+			break
+		}
 	}
 	return nil
 }
@@ -86,21 +102,24 @@ func (s *State) SaveConfirmDeposit(txHash string, rawTx string, evmAddr string) 
 UpdateProcessedDeposit
 when utxo committer process a deposit to consensus, save to processed
 */
-func (s *State) UpdateProcessedDeposit(txHash string) error {
+func (s *State) UpdateProcessedDeposit(txHash string, txout int) error {
 	s.depositMu.Lock()
 	defer s.depositMu.Unlock()
 
-	// TODO should rewrite this
-	deposit, err := s.queryDepositByTxHash(txHash)
+	deposit, err := s.queryDepositByTxHash(txHash, txout)
+	if err != nil && err != gorm.ErrRecordNotFound {
+		return err
+	}
 	if err != nil {
 		// query db failed, update cache
-		s.depositState.Latest = db.Deposit{
-			TxHash:    deposit.TxHash,
-			RawTx:     deposit.RawTx,
-			EvmAddr:   deposit.EvmAddr,
-			UpdatedAt: time.Now(),
+		deposit = &db.Deposit{
+			TxHash:      txHash,
+			OutputIndex: txout,
+			RawTx:       "",
+			EvmAddr:     "",
+			Status:      db.DEPOSIT_STATUS_PROCESSED,
+			UpdatedAt:   time.Now(),
 		}
-		return err
 	}
 	deposit.Status = db.DEPOSIT_STATUS_PROCESSED
 
@@ -112,7 +131,7 @@ func (s *State) UpdateProcessedDeposit(txHash string) error {
 	s.depositState.Latest = *deposit
 	// remove from unconfirm queue
 	for i, ds := range s.depositState.UnconfirmQueue {
-		if ds.TxHash == txHash {
+		if ds.TxHash == txHash && ds.OutputIndex == txout {
 			if i == len(s.depositState.UnconfirmQueue)-1 {
 				s.depositState.UnconfirmQueue = s.depositState.UnconfirmQueue[:i]
 			} else {
@@ -123,7 +142,7 @@ func (s *State) UpdateProcessedDeposit(txHash string) error {
 	}
 	// remove from sig queue
 	for i, ds := range s.depositState.SigQueue {
-		if ds.TxHash == txHash {
+		if ds.TxHash == txHash && ds.OutputIndex == txout {
 			if i == len(s.depositState.SigQueue)-1 {
 				s.depositState.SigQueue = s.depositState.SigQueue[:i]
 			} else {
@@ -143,10 +162,11 @@ func (s *State) GetDepositForSign(size int) ([]*db.Deposit, error) {
 
 	from := s.depositState.Latest.ID
 	var deposits []*db.Deposit
-	result := s.dbm.GetBtcCacheDB().Where("id > ?", from).Order("id asc").Limit(size).Find(&deposits)
-	if result.Error != nil {
-		return nil, result.Error
+	err := s.dbm.GetBtcCacheDB().Where("id > ? and status = ?", from, "confirmed").Order("id asc").Limit(size).Find(&deposits).Error
+	if err != nil && err != gorm.ErrRecordNotFound {
+		return nil, err
 	}
+	log.Debugf("GetDepositForSign from: %d, deposits found: %d", from, len(deposits))
 	return deposits, nil
 }
 
@@ -158,20 +178,17 @@ func (s *State) GetCurrentDeposit() (db.Deposit, error) {
 	return s.depositState.Latest, nil
 }
 
-func (s *State) queryDepositByTxHash(txHash string) (*db.Deposit, error) {
-	var deposit db.Deposit
-	result := s.dbm.GetBtcCacheDB().Where("tx_hash = ?", txHash).First(&deposit)
-	if result.Error != nil {
-		return nil, result.Error
-	}
-	return &deposit, nil
-}
-
 func (s *State) QueryUnConfirmDeposit() ([]db.Deposit, error) {
+	s.depositMu.RLock()
+	defer s.depositMu.RUnlock()
+
 	var deposit []db.Deposit
-	result := s.dbm.GetBtcCacheDB().Where("status = ?", db.DEPOSIT_STATUS_UNCONFIRM).Find(&deposit)
-	if result.Error != nil {
-		return nil, result.Error
+	err := s.dbm.GetBtcCacheDB().Where("status = ?", db.DEPOSIT_STATUS_UNCONFIRM).Find(&deposit).Error
+	if err != nil && err != gorm.ErrRecordNotFound {
+		return nil, err
+	}
+	if err == gorm.ErrRecordNotFound {
+		return nil, nil
 	}
 	return deposit, nil
 }
@@ -191,7 +208,7 @@ func (s *State) UpdateConfirmedDepositsByBtcHeight(blockHeight uint64, blockHash
 	defer s.depositMu.Unlock()
 
 	var btcBlockData db.BtcBlockData
-	result := s.dbm.GetBtcCacheDB().Where("height = ?", blockHeight).Find(&btcBlockData)
+	result := s.dbm.GetBtcCacheDB().Where("block_height = ?", blockHeight).Find(&btcBlockData)
 	if result.Error != nil {
 		return result.Error
 	}
@@ -226,4 +243,13 @@ func (s *State) UpdateConfirmedDepositsByBtcHeight(blockHeight uint64, blockHash
 	}
 
 	return nil
+}
+
+func (s *State) queryDepositByTxHash(txHash string, outputIndex int) (*db.Deposit, error) {
+	var deposit db.Deposit
+	err := s.dbm.GetBtcCacheDB().Where("tx_hash = ? and output_index = ?", txHash, outputIndex).First(&deposit).Error
+	if err != nil {
+		return nil, err
+	}
+	return &deposit, nil
 }

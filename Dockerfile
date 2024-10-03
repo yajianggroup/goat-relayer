@@ -10,7 +10,7 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=1 GOOS=linux GOARCH=$(go env GOARCH) go build -o /goat-relayer ./cmd
 
-FROM --platform=$TARGETPLATFORM alpine:3.18
+FROM alpine:3.18
 
 WORKDIR /app
 

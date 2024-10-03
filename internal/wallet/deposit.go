@@ -52,19 +52,49 @@ func (w *WalletServer) depositLoop(ctx context.Context) {
 	}
 }
 
-func (w *WalletServer) handleDepositSigFailed(sigFail interface{}, reason string) {
-	log.Infof("WalletServer handleDepositSigFailed, reason: %s", reason)
+func (w *WalletServer) handleDepositSigFailed(event interface{}, reason string) {
+	w.sigDepositMu.Lock()
+	defer w.sigDepositMu.Unlock()
+
+	if !w.sigDepositStatus {
+		log.Debug("Event handleDepositSigFailed ignore, sigDepositStatus is false")
+		return
+	}
+
+	switch e := event.(type) {
+	case types.MsgSignDeposit:
+		log.Infof("Event handleDepositSigFailed is of type MsgSignDeposit, request id %s, reason: %s", e.RequestId, reason)
+		w.sigDepositStatus = false
+	default:
+		log.Debug("WalletServer depositLoop ignore unsupport type")
+	}
 }
 
-func (w *WalletServer) handleDepositSigFinish(sigFinish interface{}) {
-	log.Info("WalletServer handleDepositSigFinish")
+func (w *WalletServer) handleDepositSigFinish(event interface{}) {
+	w.sigDepositMu.Lock()
+	defer w.sigDepositMu.Unlock()
+
+	if !w.sigDepositStatus {
+		log.Debug("Event handleDepositSigFinish ignore, sigDepositStatus is false")
+		return
+	}
+
+	switch e := event.(type) {
+	case types.MsgSignDeposit:
+		log.Infof("Event handleDepositSigFinish is of type MsgSignDeposit, request id %s", e.RequestId)
+		w.sigDepositStatus = false
+		w.sigDepositFinishHeight = w.state.GetL2Info().Height
+	default:
+		log.Debug("WalletServer depositLoop ignore unsupport type")
+	}
 }
 
 func (w *WalletServer) initDepositSig() {
 	log.Debug("WalletServer initDepositSig")
 
 	// 1. check catching up, self is proposer
-	if w.state.GetL2Info().Syncing {
+	l2Info := w.state.GetL2Info()
+	if l2Info.Syncing {
 		log.Debug("WalletServer initDepositSig ignore, layer2 is catching up")
 		return
 	}
@@ -74,13 +104,13 @@ func (w *WalletServer) initDepositSig() {
 		return
 	}
 
-	w.sigMu.Lock()
-	defer w.sigMu.Unlock()
+	w.sigDepositMu.Lock()
+	defer w.sigDepositMu.Unlock()
 
 	epochVoter := w.state.GetEpochVoter()
 	if epochVoter.Proposer != config.AppConfig.RelayerAddress {
-		if w.sigStatus {
-			w.sigStatus = false
+		if w.sigDepositStatus && l2Info.Height > epochVoter.Height+1 {
+			w.sigDepositStatus = false
 			// clean process, role changed, remove all status "create", "aggregating"
 			w.cleanDepositProcess()
 		}
@@ -89,8 +119,12 @@ func (w *WalletServer) initDepositSig() {
 	}
 
 	// 2. check if there is a sig in progress
-	if w.sigStatus {
+	if w.sigDepositStatus {
 		log.Debug("WalletServer initDepositSig ignore, there is a sig")
+		return
+	}
+	if l2Info.Height <= w.sigDepositFinishHeight+2 {
+		log.Debug("WalletServer initDepositSig ignore, last finish sig in 2 blocks")
 		return
 	}
 
@@ -123,7 +157,6 @@ func (w *WalletServer) initDepositSig() {
 	}
 
 	// 5. build sign msg
-	l2Info := w.state.GetL2Info()
 	pubKey, err := hex.DecodeString(l2Info.DepositKey)
 	if err != nil {
 		log.Errorf("DecodeString DepositKey err: %v", err)
@@ -191,7 +224,7 @@ func (w *WalletServer) initDepositSig() {
 		RelayerPubkey: pubKey,
 	}
 	w.state.EventBus.Publish(state.SigStart, msgSignDeposit)
-
+	w.sigDepositStatus = true
 	log.Infof("P2P publish msgSignDeposit success, request id: %s", requestId)
 }
 

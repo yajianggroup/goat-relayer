@@ -420,11 +420,11 @@ func SignTransactionByPrivKey(privKey *btcec.PrivateKey, tx *wire.MsgTx, utxos [
 
 		// P2WSH
 		case types.WALLET_TYPE_P2WSH:
-			// P2WSH needs redeemScript
-			// assume redeemScript is known
+			// P2WSH needs subScript
+			// assume subScript is known
 
 			// generate witness signature
-			witnessSig, err := txscript.RawTxInWitnessSignature(tx, txscript.NewTxSigHashes(tx, nil), i, utxo.Amount, utxo.RedeemScript, txscript.SigHashAll, privKey)
+			witnessSig, err := txscript.RawTxInWitnessSignature(tx, txscript.NewTxSigHashes(tx, nil), i, utxo.Amount, utxo.SubScript, txscript.SigHashAll, privKey)
 			if err != nil {
 				return err
 			}
@@ -433,7 +433,7 @@ func SignTransactionByPrivKey(privKey *btcec.PrivateKey, tx *wire.MsgTx, utxos [
 			tx.TxIn[i].Witness = wire.TxWitness{
 				witnessSig,                             // signature
 				privKey.PubKey().SerializeCompressed(), // public key
-				utxo.RedeemScript,                      // redeem script
+				utxo.SubScript,                         // sub script
 			}
 
 		default:

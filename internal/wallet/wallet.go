@@ -21,6 +21,10 @@ type WalletServer struct {
 	// after sig, it can start a new sig 2 blocks later
 	sigFinishHeight uint64
 
+	sigDepositMu           sync.Mutex
+	sigDepositStatus       bool
+	sigDepositFinishHeight uint64
+
 	depositCh chan interface{}
 	blockCh   chan interface{}
 
@@ -54,6 +58,7 @@ func NewWalletServer(libp2p *p2p.LibP2PService, st *state.State, signer *bls.Sig
 
 func (w *WalletServer) Start(ctx context.Context) {
 	w.state.EventBus.Subscribe(state.BlockScanned, w.blockCh)
+	w.state.EventBus.Subscribe(state.DepositReceive, w.depositCh)
 
 	go w.blockScanLoop(ctx)
 	go w.depositLoop(ctx)

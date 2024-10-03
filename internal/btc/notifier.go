@@ -2,6 +2,7 @@ package btc
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"sync"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/goatnetwork/goat-relayer/internal/types"
 	"gorm.io/gorm"
 
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/goatnetwork/goat-relayer/internal/config"
@@ -69,7 +71,7 @@ func NewBTCNotifier(client *rpcclient.Client, cache *BTCCache, poller *BTCPoller
 
 func (bn *BTCNotifier) Start(ctx context.Context) {
 	bn.cache.Start(ctx)
-	bn.poller.Start(ctx)
+	go bn.poller.Start(ctx)
 	go bn.checkConfirmations(ctx)
 }
 
@@ -98,12 +100,66 @@ func (bn *BTCNotifier) checkConfirmations(ctx context.Context) {
 			bn.catchingMu.Unlock()
 
 			confirmedHeight := bestHeight - bn.confirmations
+			log.Debugf("Btc check block confirmation best height: %d, confirmed height: %d, current height: %d, catching status: %v", bestHeight, confirmedHeight, bn.currentHeight, catchingStatus)
 
 			bn.syncMu.Lock()
 			syncConfirmedHeight := bn.syncStatus.ConfirmedHeight
 			bn.syncMu.Unlock()
 
 			if syncConfirmedHeight >= confirmedHeight {
+				// important: check utxo deposit result need fetch sub script
+				depositResults, err := bn.poller.state.GetDepositResultsNeedFetchSubScript()
+				if err != nil {
+					log.Errorf("Btc check block confirmation get deposit results need fetch sub script error: %v", err)
+					continue
+				}
+				if len(depositResults) > 0 {
+					log.Warnf("Btc check block confirmation found %d deposit results need fetch sub script", len(depositResults))
+					for _, depositResult := range depositResults {
+						log.Infof("Btc check block confirmation deposit result need fetch sub script: %s, %d, %s", depositResult.Txid, depositResult.TxOut, depositResult.Address)
+
+						time.Sleep(catchUpInterval)
+
+						txHash, err := chainhash.NewHashFromStr(depositResult.Txid)
+						if err != nil {
+							log.Errorf("Failed to new chain hash from string %s, %v", depositResult.Txid, err)
+							break
+						}
+						tx, err := bn.client.GetRawTransactionVerbose(txHash)
+						if err != nil {
+							log.Errorf("Failed to fetch transaction details for Txid: %s, error: %v", depositResult.Txid, err)
+							break
+						}
+
+						log.Infof("Transaction %s details: Confirmations: %d, BlockHash: %s, Inputs: %d, Outputs: %d",
+							tx.Txid, tx.Confirmations, tx.BlockHash, len(tx.Vin), len(tx.Vout))
+
+						if len(tx.Vout) > int(depositResult.TxOut) {
+							txBlockNumber := uint64(bestHeight) - tx.Confirmations - 1
+							pubkey, err := bn.poller.state.GetDepositKeyByBtcBlock(txBlockNumber)
+							if err != nil {
+								log.Errorf("Get current deposit key by btc height %d err %v", txBlockNumber, err)
+								break
+							}
+							pubkeyBytes, err := base64.StdEncoding.DecodeString(pubkey.PubKey)
+							if err != nil {
+								log.Errorf("Base64 decode pubkey %s err %v", pubkey.PubKey, err)
+								break
+							}
+							// trust goat layer2 result, just build sub script
+							err = bn.poller.state.UpdateUtxoSubScript(depositResult.Txid, depositResult.TxOut, depositResult.Address, pubkeyBytes)
+							if err != nil {
+								log.Errorf("Failed to update utxo sub script for p2wsh, %v", err)
+								break
+							}
+
+						} else {
+							log.Errorf("Tx vout length not match: %s, tx vout length: %d, expect: %d", depositResult.Txid, len(tx.Vout), depositResult.TxOut+1)
+							break
+						}
+					}
+					continue
+				}
 				bn.poller.state.UpdateBtcSyncing(false)
 				log.Debugf("Btc check block confirmation ignored by up to confirmed height, best height: %d, synced: %d, confirmed: %d", bestHeight, syncConfirmedHeight, confirmedHeight)
 				continue
@@ -117,7 +173,13 @@ func (bn *BTCNotifier) checkConfirmations(ctx context.Context) {
 				log.Errorf("Error estimating smart fee: %v", err)
 				continue
 			}
-			satoshiPerVByte := uint64((*feeEstimate.FeeRate * 1e8) / 1000)
+			var satoshiPerVByte uint64
+			if feeEstimate == nil || feeEstimate.FeeRate == nil {
+				log.Warnf("Fee estimate or fee rate is nil. Using default fee.")
+				satoshiPerVByte = uint64(10)
+			} else {
+				satoshiPerVByte = uint64((*feeEstimate.FeeRate * 1e8) / 1000)
+			}
 			log.Infof("Btc network fee is %d sat/vbyte", satoshiPerVByte)
 			bn.poller.state.UpdateBtcNetworkFee(satoshiPerVByte)
 
