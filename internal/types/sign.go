@@ -21,10 +21,10 @@ type MsgSignNewBlock struct {
 // TODO need more fields
 type MsgSignDeposit struct {
 	MsgSign
-	DepositTX     []*DepositTX `json:"deposit_tx"`
-	BlockHeader   []byte       `json:"block_header"`
-	RelayerPubkey []byte       `json:"relayer_pubkey"`
-	Proposer      string       `json:"proposer"`
+	DepositTX     []DepositTX `json:"deposit_tx"`
+	BlockHeader   []byte      `json:"block_header"`
+	RelayerPubkey []byte      `json:"relayer_pubkey"`
+	Proposer      string      `json:"proposer"`
 }
 
 type DepositTX struct {

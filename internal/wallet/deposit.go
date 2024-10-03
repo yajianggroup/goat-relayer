@@ -3,6 +3,7 @@ package wallet
 import (
 	"context"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 
@@ -186,38 +187,39 @@ func (w *WalletServer) initDepositSig() {
 	}
 
 	requestId := fmt.Sprintf("DEPOSIT:%s:%s", config.AppConfig.RelayerAddress, deposits[0].TxHash)
-	var msgDepositTXs []*types.DepositTX
-	for _, deposit := range deposits {
+	msgDepositTXs := make([]types.DepositTX, len(deposits))
+	for i, deposit := range deposits {
 		txHash, err := chainhash.NewHashFromStr(deposit.TxHash)
 		if err != nil {
 			log.Errorf("NewHashFromStr err: %v", err)
-			continue
+			return
 		}
-
-		// verify merkle proof
-		success := bitcointypes.VerifyMerkelProof(txHash.CloneBytes(), []byte(deposit.MerkleRoot), []byte(deposit.Proof), uint32(deposit.TxIndex))
-		if !success {
-			log.Errorf("VerifyMerkelProof failed, txHash: %s", txHash.String())
-			continue
+		evmAddr, err := hex.DecodeString(deposit.EvmAddr)
+		if err != nil {
+			log.Errorf("DecodeString err: %v", err)
+			return
 		}
-
-		noWitnessTx, err := types.SerializeNoWitnessTx([]byte(deposit.RawTx))
+		rawTx, err := hex.DecodeString(deposit.RawTx)
+		if err != nil {
+			log.Errorf("DecodeString err: %v", err)
+			return
+		}
+		noWitnessTx, err := types.SerializeNoWitnessTx(rawTx)
 		if err != nil {
 			log.Errorf("SerializeNoWitnessTx err: %v", err)
-			continue
+			return
 		}
-		msgDepositTX := types.DepositTX{
+		msgDepositTXs[i] = types.DepositTX{
 			Version:           deposit.SignVersion,
 			BlockNumber:       deposit.BlockHeight,
-			TxHash:            []byte(deposit.TxHash),
+			TxHash:            txHash.CloneBytes(),
 			TxIndex:           uint32(deposit.TxIndex),
 			NoWitnessTx:       noWitnessTx,
-			MerkleRoot:        []byte(deposit.MerkleRoot),
+			MerkleRoot:        deposit.MerkleRoot,
 			OutputIndex:       deposit.OutputIndex,
-			IntermediateProof: []byte(deposit.Proof),
-			EvmAddress:        []byte(deposit.EvmAddr),
+			IntermediateProof: deposit.Proof,
+			EvmAddress:        evmAddr,
 		}
-		msgDepositTXs = append(msgDepositTXs, &msgDepositTX)
 	}
 	msgSignDeposit := types.MsgSignDeposit{
 		MsgSign: types.MsgSign{
