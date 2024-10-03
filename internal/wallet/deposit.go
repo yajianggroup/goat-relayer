@@ -2,7 +2,7 @@ package wallet
 
 import (
 	"context"
-	"encoding/hex"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 
@@ -159,10 +159,13 @@ func (w *WalletServer) initDepositSig() {
 	}
 
 	// 5. build sign msg
-	pubKey, err := hex.DecodeString(l2Info.DepositKey)
+	pubkey, err := w.state.GetDepositKeyByBtcBlock(0)
 	if err != nil {
-		log.Errorf("DecodeString DepositKey err: %v", err)
-		return
+		log.Fatalf("WalletServer get current deposit key by btc height current err %v", err)
+	}
+	pubkeyBytes, err := base64.StdEncoding.DecodeString(pubkey.PubKey)
+	if err != nil {
+		log.Fatalf("Base64 decode pubkey %s err %v", pubkey.PubKey, err)
 	}
 
 	// 6. get block headers
@@ -223,7 +226,7 @@ func (w *WalletServer) initDepositSig() {
 		BlockHeader:   headersBytes,
 		DepositTX:     msgDepositTXs,
 		Proposer:      proposer,
-		RelayerPubkey: pubKey,
+		RelayerPubkey: pubkeyBytes,
 	}
 	w.state.EventBus.Publish(state.SigStart, msgSignDeposit)
 	w.sigDepositStatus = true
