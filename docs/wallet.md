@@ -64,14 +64,14 @@ Withdrawal
 - Vout 1 P2WPKH
 - ==
 - Max Queue 10
-- Max Network Fee qurom 10000 sat/vbyte
+- Max Network Fee qurom 200 sat/vbyte
 
 ## Withdrawal
 - Max Vout 150
 - Max Vin 50
-- NeworkFee <= User MaxTxFee <= 1.25 * NetworkFee
+- NetworkFee <= User TxPrice
 - Single UTXO value <= 50 BTC (sum wallet value)
 - Add a smallest value UTXO
 - ==
 - Max Queue 10
-- Max Network Fee qurom 10000 sat/vbyte
+- Max Network Fee qurom 500 sat/vbyte

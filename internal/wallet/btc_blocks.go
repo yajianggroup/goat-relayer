@@ -30,7 +30,6 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 			pubkey, err := w.state.GetDepositKeyByBtcBlock(btcBlock.BlockNumber)
 			if err != nil {
 				log.Fatalf("Get current deposit key by btc height %d err %v", btcBlock.BlockNumber, err)
-				continue
 			}
 
 			network := types.GetBTCNetwork(config.AppConfig.BTCNetworkType)
@@ -49,6 +48,11 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 			p2wpkhAddress, err := types.GenerateP2WPKHAddress(pubkeyBytes, network)
 			if err != nil {
 				log.Fatalf("Gen P2WPKH address from pubkey %s err %v", pubkey.PubKey, err)
+			}
+
+			blockTxHashs := make([]string, 0)
+			for _, tx := range btcBlock.Transactions {
+				blockTxHashs = append(blockTxHashs, tx.TxID())
 			}
 
 			for _, tx := range btcBlock.Transactions {
@@ -107,9 +111,9 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 							Txid:      vin.PreviousOutPoint.Hash.String(),
 							OutIndex:  int(vin.PreviousOutPoint.Index),
 							SigScript: vin.SignatureScript,
-							Sender:    addresses[0].EncodeAddress(),
-							Source:    "unknown",
-							Status:    "confirmed",
+							Sender:    sender,
+							Source:    db.UTXO_SOURCE_UNKNOWN,
+							Status:    db.UTXO_STATUS_CONFIRMED,
 							UpdatedAt: time.Now(),
 						})
 					}
@@ -135,16 +139,19 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 					}
 
 					if receiver == p2pkhAddress.EncodeAddress() {
-						receiverType = "P2PKH"
+						receiverType = db.WALLET_TYPE_P2PKH
 					} else if receiver == p2wpkhAddress.EncodeAddress() {
-						receiverType = "P2WPKH"
+						receiverType = db.WALLET_TYPE_P2WPKH
+					} else {
+						receiverType = db.WALLET_TYPE_UNKNOWN
 					}
-					if receiverType == "P2PKH" || receiverType == "P2WPKH" {
+					// TODO check if it is p2wsh, and receiver exist in deposit result table with status processed
+					if receiverType == db.WALLET_TYPE_P2PKH || receiverType == db.WALLET_TYPE_P2WPKH {
 						// should save vout db logic
 						isUtxo = true
 						utxos = append(utxos, &db.Utxo{
 							Uid:           "",
-							Txid:          tx.TxHash().String(),
+							Txid:          tx.TxID(),
 							PkScript:      vout.PkScript,
 							OutIndex:      idx,
 							Amount:        vout.Value,
@@ -152,9 +159,9 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 							WalletVersion: "1",
 							Sender:        sender,
 							EvmAddr:       evmAddr,
-							Source:        "unknown",
+							Source:        db.UTXO_SOURCE_UNKNOWN,
 							ReceiverType:  receiverType,
-							Status:        "confirmed",
+							Status:        db.UTXO_STATUS_CONFIRMED,
 							ReceiveBlock:  btcBlock.BlockNumber,
 							SpentBlock:    0,
 							UpdatedAt:     time.Now(),
@@ -163,14 +170,14 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 					vouts = append(vouts, &db.Vout{
 						OrderId:    "",
 						BtcHeight:  btcBlock.BlockNumber,
-						Txid:       tx.TxHash().String(),
+						Txid:       tx.TxID(),
 						OutIndex:   idx,
 						WithdrawId: "",
 						Amount:     vout.Value,
 						Receiver:   receiver,
 						Sender:     sender,
-						Source:     "unknown",
-						Status:     "confirmed",
+						Source:     db.UTXO_SOURCE_UNKNOWN,
+						Status:     db.UTXO_STATUS_CONFIRMED,
 						UpdatedAt:  time.Now(),
 					})
 				}
@@ -179,13 +186,15 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 					// save utxo db, check if it is deposit from layer2
 					for _, utxo := range utxos {
 						if isDeposit {
-							utxo.Source = "deposit"
+							utxo.Source = db.UTXO_SOURCE_DEPOSIT
 						} else if isConsolidation {
-							utxo.Source = "consolidation"
+							utxo.Source = db.UTXO_SOURCE_CONSOLIDATION
 						} else if isWithdrawl {
-							utxo.Source = "withdrawal"
+							utxo.Source = db.UTXO_SOURCE_WITHDRAWAL
 						}
-						err = w.state.AddUtxo(utxo)
+						noWitnessTx, _ := types.SerializeTransactionNoWitness(tx)
+						merkleRoot, proofBytes, txIndex, _ := types.GenerateSPVProof(utxo.Txid, blockTxHashs)
+						err = w.state.AddUtxo(utxo, pubkeyBytes, btcBlock.BlockHash().String(), btcBlock.BlockNumber, noWitnessTx, merkleRoot, proofBytes, txIndex)
 						if err != nil {
 							// TODO if err, update btc height before fatal quit
 							log.Fatalf("Add utxo %v err %v", utxo, err)
@@ -196,11 +205,11 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 					// save vin, vout db, check if it is withdraw from layer2
 					for _, vin := range vins {
 						if isDeposit {
-							vin.Source = "deposit"
+							vin.Source = db.UTXO_SOURCE_DEPOSIT
 						} else if isConsolidation {
-							vin.Source = "consolidation"
+							vin.Source = db.UTXO_SOURCE_CONSOLIDATION
 						} else if isWithdrawl {
-							vin.Source = "withdrawal"
+							vin.Source = db.UTXO_SOURCE_WITHDRAWAL
 						}
 						err = w.state.AddOrUpdateVin(vin)
 						if err != nil {
@@ -210,11 +219,11 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 					}
 					for _, vout := range vouts {
 						if isDeposit {
-							vout.Source = "deposit"
+							vout.Source = db.UTXO_SOURCE_DEPOSIT
 						} else if isConsolidation {
-							vout.Source = "consolidation"
+							vout.Source = db.UTXO_SOURCE_CONSOLIDATION
 						} else if isWithdrawl {
-							vout.Source = "withdrawal"
+							vout.Source = db.UTXO_SOURCE_WITHDRAWAL
 						}
 						err = w.state.AddOrUpdateVout(vout)
 						if err != nil {
@@ -224,7 +233,14 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 					}
 				}
 
-				// Note, if isUtxo && isVin, it is withdrawal|consolidation with change out to self
+				// Note, if isUtxo && isVin, it is withdrawal||consolidation with change out to self
+				if isWithdrawl || isConsolidation {
+					err = w.state.UpdateSendOrderConfirmed(tx.TxID())
+					if err != nil {
+						// this can be ignore, because recovery model order will not exitst
+						log.Debugf("Update send order confirmed %v err %v", tx.TxID(), err)
+					}
+				}
 
 				// Note, vout is P2WSH can not find here, it should query from BTC client in recovery model
 			}

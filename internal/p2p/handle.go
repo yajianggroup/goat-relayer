@@ -150,6 +150,12 @@ func convertMsgData(msg Message) interface{} {
 		_ = json.Unmarshal(jsonBytes, &rawData)
 		return rawData
 	}
+	if msg.DataType == "MsgSignSendOrder" {
+		jsonBytes, _ := json.Marshal(msg.Data)
+		var rawData types.MsgSignSendOrder
+		_ = json.Unmarshal(jsonBytes, &rawData)
+		return rawData
+	}
 	return msg.Data
 }
 

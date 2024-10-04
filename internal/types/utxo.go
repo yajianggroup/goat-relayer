@@ -13,6 +13,16 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const (
+	WALLET_TYPE_P2WPKH = "P2WPKH"
+	WALLET_TYPE_P2PKH  = "P2PKH"
+	WALLET_TYPE_P2SH   = "P2SH"
+	WALLET_TYPE_P2WSH  = "P2WSH"
+	WALLET_TYPE_P2TR   = "P2TR"
+
+	DUST_LIMIT = 550 // 546 satoshis for P2PKH
+)
+
 var (
 	GOAT_MAGIC_BYTES = []byte{0x47, 0x54, 0x54, 0x30} // "GTT0"
 )
@@ -22,6 +32,7 @@ var (
 type MsgUtxoDeposit struct {
 	RawTx       string `json:"raw_tx"`
 	TxId        string `json:"tx_id"`
+	OutputIndex int    `json:"output_index"`
 	SignVersion uint32 `json:"sign_version"`
 	EvmAddr     string `json:"evm_addr"`
 	Timestamp   int64  `json:"timestamp"`
@@ -71,7 +82,7 @@ func parseOpReturnGoatMagic(data []byte) (common.Address, error) {
 }
 
 func IsUtxoGoatDepositV1(tx *wire.MsgTx, tssAddress []btcutil.Address, net *chaincfg.Params) (bool, string) {
-	// Ensure there are at least 2 outputs
+	// Ensure there are at least 2 outputs, one of them is OP_RETURN
 	if len(tx.TxOut) < 2 {
 		return false, ""
 	}
@@ -102,29 +113,84 @@ func IsUtxoGoatDepositV1(tx *wire.MsgTx, tssAddress []btcutil.Address, net *chai
 	return false, ""
 }
 
-func IsUtxoGoatDepositV0(tx *wire.MsgTx, evmAddress string, pubKey []byte, net *chaincfg.Params) bool {
-	// Ensure there are at least 2 outputs
-	if len(tx.TxOut) < 2 {
-		return false
+func IsUtxoGoatDepositV0(tx *wire.MsgTx, tssAddress []btcutil.Address, net *chaincfg.Params) (bool, int) {
+	// Ensure there are at least 1 output
+	if len(tx.TxOut) < 1 {
+		return false, -1
 	}
 
 	// Extract addresses from tx.TxOut[0]
-	_, addresses, requireSigs, err := txscript.ExtractPkScriptAddrs(tx.TxOut[0].PkScript, net)
-	if err != nil || addresses == nil || requireSigs > 1 {
-		log.Debugf("Cannot extract PkScript addresses from TxOut[0]: %v", err)
-		return false
+	for idx, txOut := range tx.TxOut {
+
+		if isOpReturn(txOut) {
+			continue
+		}
+
+		_, addresses, requireSigs, err := txscript.ExtractPkScriptAddrs(txOut.PkScript, net)
+		if err != nil || addresses == nil || requireSigs > 1 {
+			log.Debugf("Cannot extract PkScript addresses from TxOut[0]: %v", err)
+			continue
+		}
+
+		for _, address := range tssAddress {
+			if address.EncodeAddress() == addresses[0].EncodeAddress() {
+				return true, idx
+			}
+		}
 	}
 
-	address, err := GenerateV0P2WSHAddress(pubKey, evmAddress, net)
+	return false, -1
+}
+
+// TransactionSizeEstimate estimates the size of a transaction in bytes
+func TransactionSizeEstimate(numInputs, numOutputs int, utxoTypes []string) int64 {
+	var totalSize int64 = 10 // Base transaction size (version, locktime, etc.)
+	for _, utxoType := range utxoTypes {
+		switch utxoType {
+		case WALLET_TYPE_P2WPKH:
+			totalSize += 68 // P2WPKH input size
+		case WALLET_TYPE_P2PKH:
+			totalSize += 148 // P2PKH input size
+		case WALLET_TYPE_P2WSH:
+			totalSize += 170 // P2WSH input size
+		case WALLET_TYPE_P2SH:
+			totalSize += 296 // P2SH input size
+		case WALLET_TYPE_P2TR:
+			totalSize += 57 // P2TR input size
+		}
+	}
+	// Each output (for both P2PKH, P2WPKH, P2SH, and P2TR) is around 34 bytes, except P2SH which is 32 bytes
+	totalSize += int64(34 * numOutputs)
+	return totalSize
+}
+
+// Deserialize transaction
+func DeserializeTransaction(data []byte) (*wire.MsgTx, error) {
+	var tx wire.MsgTx
+	buf := bytes.NewReader(data)
+	err := tx.Deserialize(buf)
 	if err != nil {
-		log.Errorf("Cannot generate v0 P2WSH address: %v", err)
-		return false
+		return nil, err
 	}
+	return &tx, nil
+}
 
-	// Check if any of the addresses match tssAddress
-	if address.EncodeAddress() == addresses[0].EncodeAddress() {
-		return true
+// Serialize transaction to bytes (with witness data)
+func SerializeTransaction(tx *wire.MsgTx) ([]byte, error) {
+	var buf bytes.Buffer
+	err := tx.Serialize(&buf)
+	if err != nil {
+		return nil, err
 	}
+	return buf.Bytes(), nil
+}
 
-	return false
+// Serialize transaction to bytes (without witness data)
+func SerializeTransactionNoWitness(tx *wire.MsgTx) ([]byte, error) {
+	var buf bytes.Buffer
+	err := tx.SerializeNoWitness(&buf)
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }

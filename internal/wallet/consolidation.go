@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
@@ -47,16 +48,16 @@ func SpentP2wsh(netwk *chaincfg.Params, tssGroupKey *btcec.PrivateKey, evmAddres
 	}
 
 	for i, evmAddress := range evmAddresses {
-		redeemScript, err := txscript.NewScriptBuilder().
+		subScript, err := txscript.NewScriptBuilder().
 			AddData(evmAddress).
 			AddOp(txscript.OP_DROP).
 			AddData(tssGroupKey.PubKey().SerializeCompressed()).
 			AddOp(txscript.OP_CHECKSIG).Script()
 		if err != nil {
-			return "", fmt.Errorf("failed to build redeemScript: %v", err)
+			return "", fmt.Errorf("failed to build subScript: %v", err)
 		}
 
-		witnessProg := sha256.Sum256(redeemScript)
+		witnessProg := sha256.Sum256(subScript)
 
 		prevPkScript, err := txscript.NewScriptBuilder().AddOp(txscript.OP_0).AddData(witnessProg[:]).Script()
 		if err != nil {
@@ -67,13 +68,13 @@ func SpentP2wsh(netwk *chaincfg.Params, tssGroupKey *btcec.PrivateKey, evmAddres
 
 		witSig, err := txscript.RawTxInWitnessSignature(
 			newtx, sigHashes, i,
-			amounts[i], redeemScript,
+			amounts[i], subScript,
 			txscript.SigHashAll, tssGroupKey,
 		)
 		if err != nil {
 			return "", fmt.Errorf("failed to build witSig: %v", err)
 		}
-		newtx.TxIn[i].Witness = wire.TxWitness{witSig, redeemScript}
+		newtx.TxIn[i].Witness = wire.TxWitness{witSig, subScript}
 	}
 
 	txbuf := bytes.NewBuffer(nil)

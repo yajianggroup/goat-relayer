@@ -49,6 +49,7 @@ type BTCPoller struct {
 
 	sigHashQueue *SigHashQueue
 	sigHashMu    sync.Mutex
+	once         sync.Once
 }
 
 func NewBTCPoller(state *state.State, db *gorm.DB) *BTCPoller {
@@ -70,9 +71,19 @@ func NewBTCPoller(state *state.State, db *gorm.DB) *BTCPoller {
 func (p *BTCPoller) Start(ctx context.Context) {
 	go p.pollLoop(ctx)
 	go p.signLoop(ctx)
+
+	<-ctx.Done()
+	log.Info("BTCPoller is stopping...")
+	p.Stop()
 }
 
 func (p *BTCPoller) Stop() {
+	p.once.Do(func() {
+		close(p.sigFailChan)
+		close(p.sigFinishChan)
+		close(p.sigTimeoutChan)
+		close(p.confirmChan)
+	})
 }
 
 func (p *BTCPoller) pollLoop(ctx context.Context) {
@@ -260,12 +271,12 @@ func (p *BTCPoller) initSig() {
 		log.Infof("BTCPoller initSig waiting for layer2 block hash update, sign hash queue start: %d, but get first block height: %d", p.sigHashQueue.Start, blocks[0].Height)
 		return
 	}
+
 	if !p.isHeightContinuous(blocks) {
 		log.Errorf("BTCPoller initSig pull btc block for sign not continuity, please check DB and btc client, start height: %d, result count: %d", blocks[0].Height, len(blocks))
 		return
 	}
 
-	// 4. build sig msg
 	if blocks[0].Height <= p.lastStartHeight {
 		log.Debugf("BTCPoller initSig ignore, btc block height %d smaller than last sig queue start height %d", blocks[0].Height, p.lastStartHeight)
 		return
@@ -274,6 +285,7 @@ func (p *BTCPoller) initSig() {
 	p.lastStartHeight = blocks[0].Height
 	p.lastStartHeightMu.Unlock()
 
+	// 4. build sig msg
 	requestId := fmt.Sprintf("BTCHEAD:%s:%d", config.AppConfig.RelayerAddress, blocks[0].Height)
 	hashBytes := make([][]byte, len(blocks))
 	for i, block := range blocks {

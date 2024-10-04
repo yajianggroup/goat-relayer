@@ -28,6 +28,7 @@ func InitConfig() {
 	viper.SetDefault("BTC_RPC", "http://localhost:8332")
 	viper.SetDefault("BTC_RPC_USER", "")
 	viper.SetDefault("BTC_RPC_PASS", "")
+	viper.SetDefault("BTC_CONFIRMATIONS", 6)
 	viper.SetDefault("BTC_START_HEIGHT", 0)
 	viper.SetDefault("BTC_NETWORK_TYPE", "")
 	viper.SetDefault("L2_RPC", "http://localhost:8545")
@@ -85,6 +86,7 @@ func InitConfig() {
 		BTCRPC_USER:            viper.GetString("BTC_RPC_USER"),
 		BTCRPC_PASS:            viper.GetString("BTC_RPC_PASS"),
 		BTCStartHeight:         viper.GetInt("BTC_START_HEIGHT"),
+		BTCConfirmations:       viper.GetInt("BTC_CONFIRMATIONS"),
 		BTCNetworkType:         viper.GetString("BTC_NETWORK_TYPE"),
 		L2RPC:                  viper.GetString("L2_RPC"),
 		L2JwtSecret:            viper.GetString("L2_JWT_SECRET"),
@@ -114,6 +116,11 @@ func InitConfig() {
 		BlsSigTimeout:          viper.GetDuration("BLS_SIG_TIMEOUT"),
 	}
 
+	if (AppConfig.BTCNetworkType == "" || AppConfig.BTCNetworkType == "mainnet") && AppConfig.BTCConfirmations < 6 {
+		logrus.Warnf("BTC mainnet confirmations is too low, set to 6")
+		AppConfig.BTCConfirmations = 6
+	}
+
 	logrus.Infof("Init config, BlsSigTimeout %v, L2RequestInterval %v, RelayerAddress %s",
 		AppConfig.BlsSigTimeout, AppConfig.L2RequestInterval, AppConfig.RelayerAddress)
 
@@ -131,6 +138,7 @@ type Config struct {
 	BTCRPC_USER            string
 	BTCRPC_PASS            string
 	BTCStartHeight         int
+	BTCConfirmations       int
 	BTCNetworkType         string
 	L2RPC                  string
 	L2JwtSecret            string

@@ -14,6 +14,8 @@ type Layer2State struct {
 // BtcHeadState to manage BTC head
 type BtcHeadState struct {
 	Latest         db.BtcBlock
+	Syncing        bool
+	NetworkFee     uint64         // network fee in sat/vbyte
 	UnconfirmQueue []*db.BtcBlock // status in 'unconfirm', 'confirmed'
 	SigQueue       []*db.BtcBlock // status in 'signing', 'pending'
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/goatnetwork/goat-relayer/internal/types"
@@ -66,13 +67,15 @@ func (s *UtxoServer) NewTransaction(ctx context.Context, req *pb.NewTransactionR
 		return nil, err
 	}
 
-	isTrue, signVersion, err := s.VerifyDeposit(tx, req.EvmAddress)
-	if err != nil || !isTrue {
+	evmAddr := strings.TrimPrefix(req.EvmAddress, "0x")
+
+	isTrue, signVersion, outputIndex, err := s.VerifyDeposit(tx, evmAddr)
+	if err != nil || !isTrue || outputIndex == -1 {
 		log.Errorf("Failed to verify deposit: %v", err)
 		return nil, err
 	}
 
-	err = s.state.AddUnconfirmDeposit(req.TransactionId, req.RawTransaction, req.EvmAddress, signVersion)
+	err = s.state.AddUnconfirmDeposit(req.TransactionId, req.RawTransaction, evmAddr, signVersion, outputIndex)
 	if err != nil {
 		log.Errorf("Failed to add unconfirmed deposit: %v", err)
 		return nil, err
@@ -81,8 +84,9 @@ func (s *UtxoServer) NewTransaction(ctx context.Context, req *pb.NewTransactionR
 	deposit := types.MsgUtxoDeposit{
 		RawTx:       req.RawTransaction,
 		TxId:        req.TransactionId,
-		EvmAddr:     req.EvmAddress,
+		EvmAddr:     evmAddr,
 		SignVersion: signVersion,
+		OutputIndex: outputIndex,
 		Timestamp:   time.Now().Unix(),
 	}
 

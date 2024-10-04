@@ -21,17 +21,33 @@ type MsgSignNewBlock struct {
 // TODO need more fields
 type MsgSignDeposit struct {
 	MsgSign
+	DepositTX     []DepositTX `json:"deposit_tx"`
+	BlockHeader   []byte      `json:"block_header"`
+	RelayerPubkey []byte      `json:"relayer_pubkey"`
+	Proposer      string      `json:"proposer"`
+}
 
-	BlockHeader       []byte `json:"block_header"`
-	BlockNumber       uint64 `json:"block_number"`
+type DepositTX struct {
 	Version           uint32 `json:"version,omitempty"`
+	BlockNumber       uint64 `json:"block_number"`
 	TxHash            []byte `json:"tx_hash"`
 	TxIndex           uint32 `json:"tx_index"`
 	IntermediateProof []byte `json:"intermediate_proof"`
 	MerkleRoot        []byte `json:"merkle_root"`
 	NoWitnessTx       []byte `json:"no_witness_tx,omitempty"`
-	OutputIndex       uint32 `json:"output_index"`
+	OutputIndex       int    `json:"output_index"`
 	EvmAddress        []byte `json:"evm_address"`
-	RelayerPubkey     []byte `json:"relayer_pubkey"`
-	Proposer          string `json:"proposer"`
+}
+
+// MsgSignSendOrder is used to sign send order, contains withdraw and consolidation
+type MsgSignSendOrder struct {
+	MsgSign
+
+	SendOrder []byte `json:"send_order"`
+	Utxos     []byte `json:"utxos"`
+	Vins      []byte `json:"vins"`
+	Vouts     []byte `json:"vouts"`
+	Withdraws []byte `json:"withdraws"`
+
+	WithdrawIds []uint64 `json:"withdraw_ids"`
 }

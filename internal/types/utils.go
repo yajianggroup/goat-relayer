@@ -1,11 +1,16 @@
 package types
 
 import (
+	"bytes"
 	"encoding/hex"
+	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/btcsuite/btcd/btcec/v2"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/txscript"
+	"github.com/btcsuite/btcd/wire"
 
 	"crypto/sha256"
 
@@ -133,31 +138,105 @@ func GenerateP2WPKHAddress(pubKey []byte, net *chaincfg.Params) (*btcutil.Addres
 }
 
 func GenerateV0P2WSHAddress(pubKey []byte, evmAddress string, net *chaincfg.Params) (*btcutil.AddressWitnessScriptHash, error) {
-	posPubkey, err := btcec.ParsePubKey(pubKey)
-	if err != nil {
-		return nil, err
-	}
-	addr, err := hex.DecodeString(evmAddress)
+	subScript, err := BuildSubScriptForP2WSH(evmAddress, pubKey)
 	if err != nil {
 		return nil, err
 	}
 
-	redeemScript, err := txscript.NewScriptBuilder().
-		AddData(addr[:]).
+	witnessProg := sha256.Sum256(subScript)
+	p2wsh, err := btcutil.NewAddressWitnessScriptHash(witnessProg[:], net)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create v0 p2wsh address: %v", err)
+	}
+
+	return p2wsh, nil
+}
+
+func GenerateSPVProof(txHash string, txHashes []string) ([]byte, []byte, int, error) {
+	// Find the transaction's position in the block
+	txIndex := -1
+	for i, hash := range txHashes {
+		if hash == txHash {
+			txIndex = i
+			break
+		}
+	}
+
+	// Generate merkle root and proof
+	txHashesPtrs := make([]*chainhash.Hash, len(txHashes))
+	for i, hashStr := range txHashes {
+		hash, err := chainhash.NewHashFromStr(hashStr)
+		if err != nil {
+			return nil, nil, -1, fmt.Errorf("failed to parse transaction hash: %v", err)
+		}
+		txHashesPtrs[i] = hash
+	}
+	var proof []*chainhash.Hash
+	merkleRoot := ComputeMerkleRootAndProof(txHashesPtrs, txIndex, &proof)
+
+	// Serialize immediate proof
+	var buf bytes.Buffer
+	for _, p := range proof {
+		buf.Write(p[:])
+	}
+
+	return merkleRoot.CloneBytes(), buf.Bytes(), txIndex, nil
+}
+
+func SerializeNoWitnessTx(rawTransaction []byte) ([]byte, error) {
+	// Parse the raw transaction
+	rawTx := wire.NewMsgTx(wire.TxVersion)
+	err := rawTx.Deserialize(bytes.NewReader(rawTransaction))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse raw transaction: %v", err)
+	}
+
+	// Create a new transaction without witness data
+	noWitnessTx := wire.NewMsgTx(rawTx.Version)
+
+	// Copy transaction inputs, excluding witness data
+	for _, txIn := range rawTx.TxIn {
+		newTxIn := wire.NewTxIn(&txIn.PreviousOutPoint, nil, nil)
+		newTxIn.Sequence = txIn.Sequence
+		noWitnessTx.AddTxIn(newTxIn)
+	}
+
+	// Copy transaction outputs
+	for _, txOut := range rawTx.TxOut {
+		noWitnessTx.AddTxOut(txOut)
+	}
+
+	// Set lock time
+	noWitnessTx.LockTime = rawTx.LockTime
+
+	// Serialize the transaction without witness data
+	var buf bytes.Buffer
+	err = noWitnessTx.Serialize(&buf)
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize transaction without witness data: %v", err)
+	}
+
+	return buf.Bytes(), nil
+}
+
+func BuildSubScriptForP2WSH(evmAddress string, pubKey []byte) ([]byte, error) {
+	posPubkey, err := btcec.ParsePubKey(pubKey)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse public key: %v", err)
+	}
+	evmAddress = strings.TrimPrefix(evmAddress, "0x")
+	addr, err := hex.DecodeString(evmAddress)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode evmAddress: %v", err)
+	}
+
+	subScript, err := txscript.NewScriptBuilder().
+		AddData(addr).
 		AddOp(txscript.OP_DROP).
 		AddData(posPubkey.SerializeCompressed()).
 		AddOp(txscript.OP_CHECKSIG).Script()
 	if err != nil {
-		log.Errorf("build redeem script err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("failed to build subscript: %v", err)
 	}
-
-	witnessProg := sha256.Sum256(redeemScript)
-	p2wsh, err := btcutil.NewAddressWitnessScriptHash(witnessProg[:], net)
-	if err != nil {
-		log.Errorf("build v0 p2wsh err: %v", err)
-		return nil, err
-	}
-
-	return p2wsh, nil
+	return subScript, nil
 }

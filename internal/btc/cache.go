@@ -97,7 +97,7 @@ func (bc *BTCCache) cacheBlockData(blockWithHeight BlockWithHeight) {
 		for _, txOut := range tx.TxOut {
 			txOutput := db.BtcTXOutput{
 				BlockID:  blockData.ID,
-				TxHash:   tx.TxHash().String(),
+				TxHash:   tx.TxID(),
 				Value:    uint64(txOut.Value),
 				PkScript: txOut.PkScript,
 			}

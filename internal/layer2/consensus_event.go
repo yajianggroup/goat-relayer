@@ -49,6 +49,9 @@ func (lis *Layer2Listener) processEvent(block uint64, event abcitypes.Event) err
 	case bitcointypes.EventTypeFinalizeWithdrawal:
 		return lis.processWithdrawalFinalized(block, event.Attributes)
 
+	case bitcointypes.EventTypeNewConsolidation:
+		return lis.processNewConsolidation(block, event.Attributes)
+
 	default:
 		// log.Debugf("Unrecognized event type: %s", event.Type)
 		return nil
@@ -135,7 +138,7 @@ func (lis *Layer2Listener) processUserCancelWithdrawal(block uint64, attributes 
 			id, _ = strconv.ParseUint(value, 10, 64)
 		}
 	}
-	log.Infof("Abci RequestCancelWithdrawal, block: %d, id: %s", block, id)
+	log.Infof("Abci RequestCancelWithdrawal, block: %d, id: %d", block, id)
 
 	if id == 0 {
 		return nil
@@ -241,11 +244,31 @@ func (lis *Layer2Listener) processWithdrawalInitialized(block uint64, attributes
 			txid = value
 		}
 	}
-	log.Infof("Abci NewWithdrawal, block: %d, txid: %s", block, txid)
+	log.Infof("Abci WithdrawalInitialized, block: %d, txid: %s", block, txid)
 
 	if txid == "" {
 		return nil
 	}
+	return lis.state.UpdateWithdrawInitialized(txid)
+}
+
+func (lis *Layer2Listener) processNewConsolidation(block uint64, attributes []abcitypes.EventAttribute) error {
+	var txid string
+	for _, attr := range attributes {
+		key := attr.Key
+		value := attr.Value
+
+		if key == "txid" {
+			// BE hash
+			txid = value
+		}
+	}
+	log.Infof("Abci NewConsolidation, block: %d, txid: %s", block, txid)
+
+	if txid == "" {
+		return nil
+	}
+	// call the same method as withdrawal initialized to update send order
 	return lis.state.UpdateWithdrawInitialized(txid)
 }
 
@@ -277,12 +300,19 @@ func (lis *Layer2Listener) processNewDeposit(block uint64, attributes []abcitype
 		// }
 	}
 
-	// TODO should throw error if error occured
-	lis.state.UpdateProcessedDeposit(txid)
-	lis.state.AddDepositResult(txid, txout, address.Hex(), amount, "")
+	// NOTE: DB operate: insert if not exist, if P2WSH, should query from BTC client,
+	// if P2WPKH, not need to query, just keep pk_script nil, it should update by BTC Scan
+	// throw error if error occured
+	if err := lis.state.UpdateProcessedDeposit(txid, int(txout), address.Hex()); err != nil {
+		log.Errorf("Abci NewDeposit, update processed deposit error: %v", err)
+		return err
+	}
+	if err := lis.state.AddDepositResult(txid, txout, address.Hex(), amount, ""); err != nil {
+		log.Errorf("Abci NewDeposit, add deposit result error: %v", err)
+		return err
+	}
 	log.Infof("Abci NewDeposit, block: %d, txid: %s, txout: %d, address: %v, amount: %d", block, txid, txout, address, amount)
 
-	// TODO
 	return nil
 }
 
@@ -337,7 +367,17 @@ func (lis *Layer2Listener) processNewBtcBlockHash(block uint64, attributes []abc
 		}
 
 		// manage BtcHeadState queue
-		return lis.state.UpdateProcessedBtcBlock(block, u64, hash)
+		err = lis.state.UpdateProcessedBtcBlock(block, u64, hash)
+		if err != nil {
+			return err
+		}
+
+		// update deposit state
+		err = lis.state.UpdateConfirmedDepositsByBtcHeight(u64, hash)
+		if err != nil {
+			return err
+		}
+		return nil
 	}
 	return nil
 }
