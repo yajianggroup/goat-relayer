@@ -1,6 +1,7 @@
 package state
 
 import (
+	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -36,7 +37,7 @@ func (s *State) UpdateUtxoStatusSpent(txid string, out int, btcBlock uint64) err
 	return s.updateUtxoStatusSpent(txid, out, btcBlock)
 }
 
-func (s *State) AddUtxo(utxo *db.Utxo, pk []byte) error {
+func (s *State) AddUtxo(utxo *db.Utxo, pk []byte, blockHash string, noWitnessTx []byte) error {
 	s.walletMu.Lock()
 	defer s.walletMu.Unlock()
 
@@ -70,6 +71,12 @@ func (s *State) AddUtxo(utxo *db.Utxo, pk []byte) error {
 					return err
 				}
 				utxo.SubScript = subScript
+			}
+		} else if len(noWitnessTx) > 0 {
+			// check deposit cache table, if it not exist, save deposit cache table
+			err = s.SaveConfirmDeposit(utxo.Txid, hex.EncodeToString(noWitnessTx), utxo.EvmAddr, 1, utxo.OutIndex)
+			if err != nil {
+				log.Errorf("State AddUtxo SaveConfirmDeposit error: %v", err)
 			}
 		}
 	}

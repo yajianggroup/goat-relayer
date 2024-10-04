@@ -102,7 +102,7 @@ func (s *State) SaveConfirmDeposit(txHash string, rawTx string, evmAddr string, 
 UpdateProcessedDeposit
 when utxo committer process a deposit to consensus, save to processed
 */
-func (s *State) UpdateProcessedDeposit(txHash string, txout int) error {
+func (s *State) UpdateProcessedDeposit(txHash string, txout int, evmAddr string) error {
 	s.depositMu.Lock()
 	defer s.depositMu.Unlock()
 
@@ -116,7 +116,7 @@ func (s *State) UpdateProcessedDeposit(txHash string, txout int) error {
 			TxHash:      txHash,
 			OutputIndex: txout,
 			RawTx:       "",
-			EvmAddr:     "",
+			EvmAddr:     evmAddr,
 			Status:      db.DEPOSIT_STATUS_PROCESSED,
 			UpdatedAt:   time.Now(),
 		}

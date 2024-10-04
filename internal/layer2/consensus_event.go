@@ -303,7 +303,7 @@ func (lis *Layer2Listener) processNewDeposit(block uint64, attributes []abcitype
 	// NOTE: DB operate: insert if not exist, if P2WSH, should query from BTC client,
 	// if P2WPKH, not need to query, just keep pk_script nil, it should update by BTC Scan
 	// throw error if error occured
-	if err := lis.state.UpdateProcessedDeposit(txid, int(txout)); err != nil {
+	if err := lis.state.UpdateProcessedDeposit(txid, int(txout), address.Hex()); err != nil {
 		log.Errorf("Abci NewDeposit, update processed deposit error: %v", err)
 		return err
 	}

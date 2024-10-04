@@ -60,7 +60,7 @@ func NewBTCNotifier(client *rpcclient.Client, cache *BTCCache, poller *BTCPoller
 
 	return &BTCNotifier{
 		client:         client,
-		confirmations:  int64(6),
+		confirmations:  int64(config.AppConfig.BTCConfirmations),
 		currentHeight:  uint64(maxBlockHeight + 1),
 		catchingStatus: true,
 		syncStatus:     &syncStatus,

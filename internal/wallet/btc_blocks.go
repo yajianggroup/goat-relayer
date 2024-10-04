@@ -140,6 +140,7 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 					} else {
 						receiverType = db.WALLET_TYPE_UNKNOWN
 					}
+					// TODO check if it is p2wsh, and receiver exist in deposit result table with status processed
 					if receiverType == db.WALLET_TYPE_P2PKH || receiverType == db.WALLET_TYPE_P2WPKH {
 						// should save vout db logic
 						isUtxo = true
@@ -186,7 +187,8 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 						} else if isWithdrawl {
 							utxo.Source = db.UTXO_SOURCE_WITHDRAWAL
 						}
-						err = w.state.AddUtxo(utxo, pubkeyBytes)
+						noWitnessTx, _ := types.SerializeTransactionNoWitness(tx)
+						err = w.state.AddUtxo(utxo, pubkeyBytes, btcBlock.BlockHash().String(), noWitnessTx)
 						if err != nil {
 							// TODO if err, update btc height before fatal quit
 							log.Fatalf("Add utxo %v err %v", utxo, err)
