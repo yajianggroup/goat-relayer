@@ -53,7 +53,7 @@ func (s *State) AddUnconfirmDeposit(txHash string, rawTx string, evmAddr string,
 SaveConfirmDeposit
 when utxo scanner detected a new transaction in 6 confirm, save to confirmed
 */
-func (s *State) SaveConfirmDeposit(txHash string, rawTx string, evmAddr string, signVersion uint32, outputIndex int) error {
+func (s *State) SaveConfirmDeposit(txHash string, rawTx string, evmAddr string, signVersion uint32, outputIndex int, blockHash string, blockHeight uint64, merkleRoot []byte, proofBytes []byte, txIndex int) error {
 	s.depositMu.Lock()
 	defer s.depositMu.Unlock()
 
@@ -65,11 +65,16 @@ func (s *State) SaveConfirmDeposit(txHash string, rawTx string, evmAddr string, 
 			deposit = &db.Deposit{
 				Status:      status,
 				UpdatedAt:   time.Now(),
+				BlockHash:   blockHash,
+				BlockHeight: blockHeight,
 				TxHash:      txHash,
 				RawTx:       rawTx,
 				EvmAddr:     evmAddr,
 				SignVersion: signVersion,
 				OutputIndex: outputIndex,
+				MerkleRoot:  merkleRoot,
+				Proof:       proofBytes,
+				TxIndex:     uint64(txIndex),
 			}
 		} else {
 			// DB error

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/goatnetwork/goat-relayer/internal/config"
 	"github.com/goatnetwork/goat-relayer/internal/types"
@@ -194,7 +195,7 @@ func (w *WalletServer) initDepositSig() {
 			log.Errorf("NewHashFromStr err: %v", err)
 			return
 		}
-		evmAddr, err := hex.DecodeString(deposit.EvmAddr)
+		evmAddr, err := hex.DecodeString(strings.TrimPrefix(deposit.EvmAddr, "0x"))
 		if err != nil {
 			log.Errorf("DecodeString err: %v", err)
 			return

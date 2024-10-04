@@ -37,7 +37,7 @@ func (s *State) UpdateUtxoStatusSpent(txid string, out int, btcBlock uint64) err
 	return s.updateUtxoStatusSpent(txid, out, btcBlock)
 }
 
-func (s *State) AddUtxo(utxo *db.Utxo, pk []byte, blockHash string, noWitnessTx []byte) error {
+func (s *State) AddUtxo(utxo *db.Utxo, pk []byte, blockHash string, blockHeight uint64, noWitnessTx []byte, merkleRoot []byte, proofBytes []byte, txIndex int) error {
 	s.walletMu.Lock()
 	defer s.walletMu.Unlock()
 
@@ -74,7 +74,7 @@ func (s *State) AddUtxo(utxo *db.Utxo, pk []byte, blockHash string, noWitnessTx 
 			}
 		} else if len(noWitnessTx) > 0 {
 			// check deposit cache table, if it not exist, save deposit cache table
-			err = s.SaveConfirmDeposit(utxo.Txid, hex.EncodeToString(noWitnessTx), utxo.EvmAddr, 1, utxo.OutIndex)
+			err = s.SaveConfirmDeposit(utxo.Txid, hex.EncodeToString(noWitnessTx), utxo.EvmAddr, 1, utxo.OutIndex, blockHash, blockHeight, merkleRoot, proofBytes, txIndex)
 			if err != nil {
 				log.Errorf("State AddUtxo SaveConfirmDeposit error: %v", err)
 			}
@@ -131,6 +131,14 @@ func (s *State) AddDepositResult(txid string, out uint64, address string, amount
 	}
 	if err == nil && utxo.ReceiverType == db.WALLET_TYPE_P2WSH && len(utxo.SubScript) == 0 {
 		needFetchSubScript = true
+	}
+	if err == nil && (utxo.Status == db.UTXO_STATUS_CONFIRMED || utxo.Status == db.UTXO_STATUS_UNCONFIRM) {
+		utxo.Status = db.UTXO_STATUS_PROCESSED
+		utxo.UpdatedAt = time.Now()
+		err = s.saveUtxo(utxo)
+		if err != nil {
+			return err
+		}
 	}
 
 	var depositResult db.DepositResult

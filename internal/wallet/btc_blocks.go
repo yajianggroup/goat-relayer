@@ -50,6 +50,11 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 				log.Fatalf("Gen P2WPKH address from pubkey %s err %v", pubkey.PubKey, err)
 			}
 
+			blockTxHashs := make([]string, 0)
+			for _, tx := range btcBlock.Transactions {
+				blockTxHashs = append(blockTxHashs, tx.TxID())
+			}
+
 			for _, tx := range btcBlock.Transactions {
 				var utxos []*db.Utxo
 				var vins []*db.Vin
@@ -146,7 +151,7 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 						isUtxo = true
 						utxos = append(utxos, &db.Utxo{
 							Uid:           "",
-							Txid:          tx.TxHash().String(),
+							Txid:          tx.TxID(),
 							PkScript:      vout.PkScript,
 							OutIndex:      idx,
 							Amount:        vout.Value,
@@ -165,7 +170,7 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 					vouts = append(vouts, &db.Vout{
 						OrderId:    "",
 						BtcHeight:  btcBlock.BlockNumber,
-						Txid:       tx.TxHash().String(),
+						Txid:       tx.TxID(),
 						OutIndex:   idx,
 						WithdrawId: "",
 						Amount:     vout.Value,
@@ -188,7 +193,8 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 							utxo.Source = db.UTXO_SOURCE_WITHDRAWAL
 						}
 						noWitnessTx, _ := types.SerializeTransactionNoWitness(tx)
-						err = w.state.AddUtxo(utxo, pubkeyBytes, btcBlock.BlockHash().String(), noWitnessTx)
+						merkleRoot, proofBytes, txIndex, _ := types.GenerateSPVProof(utxo.Txid, blockTxHashs)
+						err = w.state.AddUtxo(utxo, pubkeyBytes, btcBlock.BlockHash().String(), btcBlock.BlockNumber, noWitnessTx, merkleRoot, proofBytes, txIndex)
 						if err != nil {
 							// TODO if err, update btc height before fatal quit
 							log.Fatalf("Add utxo %v err %v", utxo, err)
@@ -229,10 +235,10 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 
 				// Note, if isUtxo && isVin, it is withdrawal||consolidation with change out to self
 				if isWithdrawl || isConsolidation {
-					err = w.state.UpdateSendOrderConfirmed(tx.TxHash().String())
+					err = w.state.UpdateSendOrderConfirmed(tx.TxID())
 					if err != nil {
 						// this can be ignore, because recovery model order will not exitst
-						log.Debugf("Update send order confirmed %v err %v", tx.TxHash().String(), err)
+						log.Debugf("Update send order confirmed %v err %v", tx.TxID(), err)
 					}
 				}
 

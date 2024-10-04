@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
@@ -223,6 +224,7 @@ func BuildSubScriptForP2WSH(evmAddress string, pubKey []byte) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse public key: %v", err)
 	}
+	evmAddress = strings.TrimPrefix(evmAddress, "0x")
 	addr, err := hex.DecodeString(evmAddress)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode evmAddress: %v", err)

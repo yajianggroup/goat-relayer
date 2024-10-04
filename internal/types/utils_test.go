@@ -50,7 +50,7 @@ func processTransaction(rawTxHex string, txHashes []string) bool {
 		return false
 	}
 
-	merkleRoot, proofBytes, txIndex, err := GenerateSPVProof(tx.TxHash().String(), txHashes)
+	merkleRoot, proofBytes, txIndex, err := GenerateSPVProof(tx.TxID(), txHashes)
 	if err != nil {
 		return false
 	}
