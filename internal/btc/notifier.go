@@ -168,7 +168,7 @@ func (bn *BTCNotifier) checkConfirmations(ctx context.Context) {
 			bn.poller.state.UpdateBtcSyncing(true)
 
 			// get network fee
-			feeEstimate, err := bn.client.EstimateSmartFee(bn.confirmations, nil)
+			feeEstimate, err := bn.client.EstimateSmartFee(1, nil)
 			if err != nil {
 				log.Errorf("Error estimating smart fee: %v", err)
 				continue
@@ -176,7 +176,7 @@ func (bn *BTCNotifier) checkConfirmations(ctx context.Context) {
 			var satoshiPerVByte uint64
 			if feeEstimate == nil || feeEstimate.FeeRate == nil {
 				log.Warnf("Fee estimate or fee rate is nil. Using default fee.")
-				satoshiPerVByte = uint64(10)
+				satoshiPerVByte = uint64(3) // use 3 sat/vbyte as default fee
 			} else {
 				satoshiPerVByte = uint64((*feeEstimate.FeeRate * 1e8) / 1000)
 			}

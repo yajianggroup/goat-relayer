@@ -338,7 +338,7 @@ func (s *State) CleanProcessingWithdraw() error {
 				}
 				for _, vin := range vins {
 					var utxoInDb db.Utxo
-					if err = tx.Where("txid = ? and out_index", vin.Txid, vin.OutIndex).First(&utxoInDb).Error; err != nil {
+					if err = tx.Where("txid = ? and out_index = ?", vin.Txid, vin.OutIndex).First(&utxoInDb).Error; err != nil {
 						continue
 					}
 					if utxoInDb.Status != db.UTXO_STATUS_PENDING {

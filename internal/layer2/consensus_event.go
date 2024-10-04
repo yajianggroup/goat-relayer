@@ -188,10 +188,6 @@ func (lis *Layer2Listener) processUserRequestWithdrawal(block uint64, attributes
 		}
 	}
 	log.Infof("Abci RequestWithdrawal, address: %s, block: %d, id: %d, txPrice: %d, amount: %d", address, block, id, txPrice, amount)
-
-	if id == 0 {
-		return nil
-	}
 	return lis.state.CreateWithdrawal(address, block, id, txPrice, amount)
 }
 

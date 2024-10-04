@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
@@ -42,6 +43,16 @@ func GetBTCNetwork(networkType string) *chaincfg.Params {
 		return &chaincfg.TestNet3Params
 	default:
 		return &chaincfg.MainNetParams
+	}
+}
+
+// WithdrawalWaitTime returns the time duration for the first withdraw and the time duration for the second withdraw
+func WithdrawalWaitTime(networkType string) (time.Duration, time.Duration) {
+	switch networkType {
+	case "regtest":
+		return 5 * time.Minute, 10 * time.Minute
+	default:
+		return 2 * time.Hour, 6 * time.Hour
 	}
 }
 
