@@ -173,6 +173,10 @@ func GenerateSPVProof(txHash string, txHashes []string) ([]byte, []byte, int, er
 		}
 	}
 
+	if txIndex == -1 {
+		return nil, nil, -1, fmt.Errorf("transaction hash not found in block, expected txid: %s, found txhashes: %s", txHash, txHashes)
+	}
+
 	// Generate merkle root and proof
 	txHashesPtrs := make([]*chainhash.Hash, len(txHashes))
 	for i, hashStr := range txHashes {
