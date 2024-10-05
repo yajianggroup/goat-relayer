@@ -15,7 +15,7 @@ import (
 AddUnconfirmDeposit
 when utxo scanner detected a new transaction in 1 confirm, save to unconfirmed,
 */
-func (s *State) AddUnconfirmDeposit(txHash string, rawTx string, evmAddr string, signVersion uint32, outputIndex int) error {
+func (s *State) AddUnconfirmDeposit(txHash string, rawTx string, evmAddr string, signVersion uint32, outputIndex int, amount int64) error {
 	s.depositMu.Lock()
 	defer s.depositMu.Unlock()
 
@@ -33,6 +33,7 @@ func (s *State) AddUnconfirmDeposit(txHash string, rawTx string, evmAddr string,
 
 	deposit := &db.Deposit{
 		Status:      status,
+		Amount:      amount,
 		UpdatedAt:   time.Now(),
 		TxHash:      txHash,
 		RawTx:       rawTx,

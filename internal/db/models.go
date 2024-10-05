@@ -207,6 +207,7 @@ type BtcTXOutput struct {
 type Deposit struct {
 	ID          uint      `gorm:"primaryKey" json:"id"`
 	TxHash      string    `gorm:"not null;index:deposit_txhash_index" json:"tx_hash"`
+	Amount      int64     `gorm:"not null" json:"amount"`
 	RawTx       string    `gorm:"not null" json:"raw_tx"`
 	EvmAddr     string    `gorm:"not null" json:"evm_addr"`
 	BlockHash   string    `gorm:"not null" json:"block_hash"`
