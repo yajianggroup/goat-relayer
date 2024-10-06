@@ -78,7 +78,7 @@ func (lis *Layer2Listener) SubmitToConsensus(ctx context.Context, msg interface{
 	txConfig := txtypes.NewTxConfig(protoCodec, txtypes.DefaultSignModes)
 	txBuilder := txConfig.NewTxBuilder()
 
-	if msgNewDeposits, msgNewBlockHashes, err := lis.convertToTypes(msg); err != nil {
+	if msgNewDeposits, msgNewBlockHashes, msgInitializeWithdrawal, err := lis.convertToTypes(msg); err != nil {
 		log.Errorf("convert to types failed: %v", err)
 		return nil, err
 	} else if msgNewDeposits != nil {
@@ -91,6 +91,12 @@ func (lis *Layer2Listener) SubmitToConsensus(ctx context.Context, msg interface{
 		err = txBuilder.SetMsgs(msgNewBlockHashes)
 		if err != nil {
 			log.Errorf("set msgNewBlockHashes failed: %v", err)
+			return nil, err
+		}
+	} else if msgInitializeWithdrawal != nil {
+		err = txBuilder.SetMsgs(msgInitializeWithdrawal)
+		if err != nil {
+			log.Errorf("set msgInitializeWithdrawal failed: %v", err)
 			return nil, err
 		}
 	}
@@ -180,12 +186,15 @@ func (lis *Layer2Listener) SubmitToConsensus(ctx context.Context, msg interface{
 	return resultTx, nil
 }
 
-func (lis *Layer2Listener) convertToTypes(msg interface{}) (*bitcointypes.MsgNewDeposits, *bitcointypes.MsgNewBlockHashes, error) {
+func (lis *Layer2Listener) convertToTypes(msg interface{}) (*bitcointypes.MsgNewDeposits, *bitcointypes.MsgNewBlockHashes, *bitcointypes.MsgInitializeWithdrawal, error) {
 	if msgNewDeposits, ok := msg.(*bitcointypes.MsgNewDeposits); ok {
-		return msgNewDeposits, nil, nil
+		return msgNewDeposits, nil, nil, nil
 	}
 	if msgNewBlockHashes, ok := msg.(*bitcointypes.MsgNewBlockHashes); ok {
-		return nil, msgNewBlockHashes, nil
+		return nil, msgNewBlockHashes, nil, nil
 	}
-	return nil, nil, errors.New("type assertion failed: not type MsgNewDeposits or MsgNewBlockHashes")
+	if msgInitializeWithdrawal, ok := msg.(*bitcointypes.MsgInitializeWithdrawal); ok {
+		return nil, nil, msgInitializeWithdrawal, nil
+	}
+	return nil, nil, nil, errors.New("type assertion failed: not type MsgNewDeposits or MsgNewBlockHashes or MsgInitializeWithdrawal")
 }

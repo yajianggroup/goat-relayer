@@ -35,6 +35,7 @@ type MsgUtxoDeposit struct {
 	OutputIndex int    `json:"output_index"`
 	SignVersion uint32 `json:"sign_version"`
 	EvmAddr     string `json:"evm_addr"`
+	Amount      int64  `json:"amount"`
 	Timestamp   int64  `json:"timestamp"`
 }
 
@@ -81,20 +82,20 @@ func parseOpReturnGoatMagic(data []byte) (common.Address, error) {
 	return evmAddr, nil
 }
 
-func IsUtxoGoatDepositV1(tx *wire.MsgTx, tssAddress []btcutil.Address, net *chaincfg.Params) (bool, string) {
+func IsUtxoGoatDepositV1(tx *wire.MsgTx, tssAddress []btcutil.Address, net *chaincfg.Params) (bool, string, int64) {
 	// Ensure there are at least 2 outputs, one of them is OP_RETURN
 	if len(tx.TxOut) < 2 {
-		return false, ""
+		return false, "", 0
 	}
 	// Check if tx.TxOut[1] is OP_RETURN and tx.TxOut[0] is not OP_RETURN
 	if !isOpReturn(tx.TxOut[1]) || isOpReturn(tx.TxOut[0]) {
-		return false, ""
+		return false, "", 0
 	}
 	// Extract addresses from tx.TxOut[0]
 	_, addresses, requireSigs, err := txscript.ExtractPkScriptAddrs(tx.TxOut[0].PkScript, net)
 	if err != nil || addresses == nil || requireSigs > 1 {
 		log.Debugf("Cannot extract PkScript addresses from TxOut[0]: %v", err)
-		return false, ""
+		return false, "", 0
 	}
 	// Check if any of the addresses match tssAddress
 	for _, address := range tssAddress {
@@ -105,18 +106,18 @@ func IsUtxoGoatDepositV1(tx *wire.MsgTx, tssAddress []btcutil.Address, net *chai
 			evmAddr, err := parseOpReturnGoatMagic(data)
 			if err != nil {
 				log.Debugf("Cannot parse OP_RETURN in TxOut[1]: %v", err)
-				return false, ""
+				return false, "", 0
 			}
-			return true, evmAddr.Hex()
+			return true, evmAddr.Hex(), tx.TxOut[0].Value
 		}
 	}
-	return false, ""
+	return false, "", 0
 }
 
-func IsUtxoGoatDepositV0(tx *wire.MsgTx, tssAddress []btcutil.Address, net *chaincfg.Params) (bool, int) {
+func IsUtxoGoatDepositV0(tx *wire.MsgTx, tssAddress []btcutil.Address, net *chaincfg.Params) (bool, int, int64) {
 	// Ensure there are at least 1 output
 	if len(tx.TxOut) < 1 {
-		return false, -1
+		return false, -1, 0
 	}
 
 	// Extract addresses from tx.TxOut[0]
@@ -134,12 +135,12 @@ func IsUtxoGoatDepositV0(tx *wire.MsgTx, tssAddress []btcutil.Address, net *chai
 
 		for _, address := range tssAddress {
 			if address.EncodeAddress() == addresses[0].EncodeAddress() {
-				return true, idx
+				return true, idx, txOut.Value
 			}
 		}
 	}
 
-	return false, -1
+	return false, -1, 0
 }
 
 // TransactionSizeEstimate estimates the size of a transaction in bytes

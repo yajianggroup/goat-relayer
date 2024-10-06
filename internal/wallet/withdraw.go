@@ -150,32 +150,39 @@ func (w *WalletServer) initWithdrawSig() {
 		log.Infof("WalletServer initWithdrawSig no withdraw from db can start, count: %d", len(withdraws))
 		return
 	}
-	selectedWithdraws, withdrawAmount, actualFee, err := SelectWithdrawals(withdraws, int64(btcState.NetworkFee), 150)
+	selectedWithdraws, withdrawAmount, actualPrice, err := SelectWithdrawals(withdraws, int64(btcState.NetworkFee), 150)
 	if err != nil {
 		log.Warnf("WalletServer initWithdrawSig SelectWithdrawals error: %v", err)
 		return
 	}
-	if len(selectedWithdraws) == 0 {
-		log.Infof("WalletServer initWithdrawSig no withdraw after filter can start, count: %d", len(selectedWithdraws))
-		return
-	}
-	log.Infof("WalletServer initWithdrawSig SelectWithdrawals, withdrawAmount: %d, actualFee: %d, selectedWithdraws: %d", withdrawAmount, actualFee, len(selectedWithdraws))
 
+	// check if need start bls
 	startBls := false
 	wCount := len(selectedWithdraws)
-	if wCount == 150 {
-		startBls = true
+	if wCount == 0 {
+		log.Infof("WalletServer initWithdrawSig no withdraw after filter can start, count: %d", len(selectedWithdraws))
 	} else {
-		sort.Slice(selectedWithdraws, func(i, j int) bool {
-			return selectedWithdraws[i].CreatedAt.Unix() < selectedWithdraws[j].CreatedAt.Unix()
-		})
-		oldestWithdraw := selectedWithdraws[0]
-		if wCount >= 50 && time.Since(oldestWithdraw.CreatedAt) > 2*time.Hour {
+		log.Infof("WalletServer initWithdrawSig SelectWithdrawals, withdrawAmount: %d, actualPrice: %d, selectedWithdraws: %d", withdrawAmount, actualPrice, len(selectedWithdraws))
+		if wCount >= 150 {
 			startBls = true
-		} else if time.Since(oldestWithdraw.CreatedAt) > 6*time.Hour {
-			startBls = true
+			log.Debugf("WalletServer initWithdrawSig set start bls to true, count: %d", wCount)
+		} else {
+			sort.Slice(selectedWithdraws, func(i, j int) bool {
+				return selectedWithdraws[i].CreatedAt.Unix() < selectedWithdraws[j].CreatedAt.Unix()
+			})
+			waitTime1, waitTime2 := types.WithdrawalWaitTime(config.AppConfig.BTCNetworkType)
+			log.Debugf("WalletServer initWithdrawSig waitTime1: %s, waitTime2: %s", waitTime1, waitTime2)
+			oldestWithdraw := selectedWithdraws[0]
+			if wCount >= 50 && time.Since(oldestWithdraw.CreatedAt) > waitTime1 {
+				startBls = true
+				log.Debugf("WalletServer initWithdrawSig set start bls to true, count: %d, waitTime1: %s", wCount, waitTime1)
+			} else if time.Since(oldestWithdraw.CreatedAt) > waitTime2 {
+				startBls = true
+				log.Debugf("WalletServer initWithdrawSig set start bls to true, count: %d, waitTime2: %s", wCount, waitTime2)
+			}
 		}
 	}
+
 	// get pubkey
 	pubkey, err := w.state.GetDepositKeyByBtcBlock(0)
 	if err != nil {
@@ -229,7 +236,7 @@ func (w *WalletServer) initWithdrawSig() {
 		}
 	} else {
 		// create SendOrder for selectedWithdraws
-		selectOptimalUTXOs, totalSelectedAmount, _, changeAmount, estimateFee, err := SelectOptimalUTXOs(utxos, withdrawAmount, int64(currNetworkFee), len(selectedWithdraws))
+		selectOptimalUTXOs, totalSelectedAmount, _, changeAmount, estimateFee, err := SelectOptimalUTXOs(utxos, withdrawAmount, actualPrice, len(selectedWithdraws))
 		if err != nil {
 			log.Errorf("WalletServer initWithdrawSig SelectOptimalUTXOs error: %v", err)
 			return
@@ -250,9 +257,9 @@ func (w *WalletServer) initWithdrawSig() {
 			}
 			return
 		}
-		log.Infof("WalletServer initWithdrawSig CreateRawTransaction for withdraw, tx: %s", tx.TxID())
+		log.Infof("WalletServer initWithdrawSig CreateRawTransaction for withdraw, tx: %s, network fee rate: %d", tx.TxID(), currNetworkFee)
 
-		msgSignSendOrder, err = w.createSendOrder(tx, db.ORDER_TYPE_WITHDRAWAL, selectOptimalUTXOs, selectedWithdraws, totalSelectedAmount, withdrawAmount, changeAmount, uint64(estimateFee), currNetworkFee, epochVoter, network)
+		msgSignSendOrder, err = w.createSendOrder(tx, db.ORDER_TYPE_WITHDRAWAL, selectOptimalUTXOs, selectedWithdraws, totalSelectedAmount, withdrawAmount, changeAmount, uint64(estimateFee), uint64(actualPrice), epochVoter, network)
 		if err != nil {
 			log.Errorf("WalletServer initWithdrawSig createSendOrder for withdraw error: %v", err)
 			return
@@ -264,7 +271,7 @@ func (w *WalletServer) initWithdrawSig() {
 		w.sigStatus = true
 
 		// send msg to bus
-		w.state.EventBus.Publish(state.SigStart, msgSignSendOrder)
+		w.state.EventBus.Publish(state.SigStart, *msgSignSendOrder)
 		log.Infof("WalletServer initWithdrawSig send MsgSignSendOrder to bus, requestId: %s", msgSignSendOrder.MsgSign.RequestId)
 	}
 }
@@ -295,7 +302,6 @@ func (w *WalletServer) createSendOrder(tx *wire.MsgTx, orderType string, selecte
 	var withdrawIds []uint64
 	var withdrawBytes []byte
 	if len(selectedWithdraws) > 0 {
-		order.TxPrice = selectedWithdraws[len(selectedWithdraws)-1].TxPrice
 		withdrawBytes, err = json.Marshal(selectedWithdraws)
 		if err != nil {
 			return nil, err

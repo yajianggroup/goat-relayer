@@ -10,7 +10,10 @@ import (
 
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
+	"github.com/cosmos/cosmos-sdk/std"
+	sdktypes "github.com/cosmos/cosmos-sdk/types"
 	bitcointypes "github.com/goatnetwork/goat/x/bitcoin/types"
+	lockingtypes "github.com/goatnetwork/goat/x/locking/types"
 	relayertypes "github.com/goatnetwork/goat/x/relayer/types"
 
 	"github.com/go-errors/errors"
@@ -31,8 +34,32 @@ import (
 	"gorm.io/gorm"
 
 	rpchttp "github.com/cometbft/cometbft/rpc/client/http"
+	sdkclient "github.com/cosmos/cosmos-sdk/client"
+	authtx "github.com/cosmos/cosmos-sdk/x/auth/tx"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 )
+
+func makeEncodingConfig() EncodingConfig {
+	interfaceRegistry := codectypes.NewInterfaceRegistry()
+	authtypes.RegisterInterfaces(interfaceRegistry)
+	std.RegisterInterfaces(interfaceRegistry)
+	relayertypes.RegisterInterfaces(interfaceRegistry)
+	bitcointypes.RegisterInterfaces(interfaceRegistry)
+	lockingtypes.RegisterInterfaces(interfaceRegistry)
+	marshaler := codec.NewProtoCodec(interfaceRegistry)
+
+	return EncodingConfig{
+		InterfaceRegistry: interfaceRegistry,
+		Codec:             marshaler,
+		TxConfig:          authtx.NewTxConfig(marshaler, authtx.DefaultSignModes),
+	}
+}
+
+type EncodingConfig struct {
+	InterfaceRegistry codectypes.InterfaceRegistry
+	Codec             codec.Codec
+	TxConfig          sdkclient.TxConfig
+}
 
 // cosmos client
 type Layer2Listener struct {
@@ -49,6 +76,7 @@ type Layer2Listener struct {
 	goatGrpcConn    *grpc.ClientConn
 	goatQueryClient authtypes.QueryClient
 	goatSdkOnce     sync.Once
+	txDecoder       sdktypes.TxDecoder
 
 	sigFinishChan chan interface{}
 }
@@ -77,6 +105,9 @@ func NewLayer2Listener(libp2p *p2p.LibP2PService, state *state.State, db *db.Dat
 		log.Fatalf("Error creating Layer2 Cosmos RPC client: %v", err)
 	}
 
+	encodingConfig := makeEncodingConfig()
+	txDecoder := encodingConfig.TxConfig.TxDecoder()
+
 	return &Layer2Listener{
 		libp2p:    libp2p,
 		db:        db,
@@ -90,6 +121,7 @@ func NewLayer2Listener(libp2p *p2p.LibP2PService, state *state.State, db *db.Dat
 		goatRpcClient:   goatRpcClient,
 		goatGrpcConn:    goatGrpcConn,
 		goatQueryClient: goatQueryCLient,
+		txDecoder:       txDecoder,
 
 		sigFinishChan: make(chan interface{}, 256),
 	}
@@ -335,18 +367,39 @@ func (lis *Layer2Listener) getGoatBlock(ctx context.Context, height uint64) erro
 		return fmt.Errorf("failed to get block results: %w", err)
 	}
 
+	blockData, err := lis.goatRpcClient.Block(ctx, &block)
+	if err != nil {
+		return fmt.Errorf("failed to get block data: %w", err)
+	}
+
 	// Process events and handle logic
-	for _, txResult := range blockResults.TxsResults {
+	for i, txResult := range blockResults.TxsResults {
+		if txResult.Code == 0 && len(txResult.Data) > 0 {
+			// only process success tx
+			decodedTx, err := lis.txDecoder(blockData.Block.Data.Txs[i])
+			if err == nil {
+				log.Debugf("Success to decode transaction: %v", decodedTx.GetMsgs())
+				for _, msg := range decodedTx.GetMsgs() {
+					switch msg := msg.(type) {
+					case *bitcointypes.MsgInitializeWithdrawal:
+						if err := lis.processMsgInitializeWithdrawal(msg); err != nil {
+							return fmt.Errorf("failed to process msg InitializeWithdrawal: %v", err)
+						}
+					}
+				}
+			}
+		}
+
 		for _, event := range txResult.Events {
 			if err := lis.processEvent(height, event); err != nil {
-				return fmt.Errorf("failed to process tx event: %w", err)
+				return fmt.Errorf("failed to process tx event %s: %w", event.Type, err)
 			}
 		}
 	}
 
 	for _, event := range blockResults.FinalizeBlockEvents {
 		if err := lis.processEvent(height, event); err != nil {
-			return fmt.Errorf("failed to process EndBlock event: %w", err)
+			return fmt.Errorf("failed to process EndBlock event %s: %w", event.Type, err)
 		}
 	}
 

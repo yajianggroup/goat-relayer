@@ -37,7 +37,7 @@ func (w *WalletServer) depositLoop(ctx context.Context) {
 				log.Errorf("Invalid deposit data type")
 				continue
 			}
-			err := w.state.AddUnconfirmDeposit(depositData.TxId, depositData.RawTx, depositData.EvmAddr, depositData.SignVersion, depositData.OutputIndex)
+			err := w.state.AddUnconfirmDeposit(depositData.TxId, depositData.RawTx, depositData.EvmAddr, depositData.SignVersion, depositData.OutputIndex, depositData.Amount)
 			if err != nil {
 				log.Errorf("Failed to add unconfirmed deposit: %v", err)
 				continue
@@ -179,6 +179,7 @@ func (w *WalletServer) initDepositSig() {
 	blockHeaders := make(map[uint64][]byte)
 	for _, blockData := range blockData {
 		blockHeaders[blockData.BlockHeight] = blockData.Header
+		log.Debugf("WalletServer initDepositSig blockHeaders[%d] %d", blockData.BlockHeight, len(blockData.Header))
 	}
 	proposer := w.state.GetEpochVoter().Proposer
 	headersBytes, err := json.Marshal(blockHeaders)

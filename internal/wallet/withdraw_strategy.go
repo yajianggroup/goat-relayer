@@ -199,7 +199,7 @@ func SelectOptimalUTXOs(utxos []*db.Utxo, withdrawAmount, networkFee int64, with
 // Returns:
 //
 //	selectedWithdrawals - selected withdrawals
-//	minTxFee - minimum transaction fee
+//	minTxPrice - minimum transaction price
 //	error - error if any
 func SelectWithdrawals(withdrawals []*db.Withdraw, networkFee int64, maxVout int) ([]*db.Withdraw, int64, int64, error) {
 	// if network fee is too high, do not perform withdrawal
@@ -245,40 +245,40 @@ func SelectWithdrawals(withdrawals []*db.Withdraw, networkFee int64, maxVout int
 
 		withdrawAmount := uint64(0)
 		// calculate the minimum MaxTxFee in the group
-		groupMinFee := group[0].TxPrice
+		groupMinPrice := group[0].TxPrice
 		for _, withdrawal := range group {
-			if withdrawal.TxPrice < groupMinFee {
-				groupMinFee = withdrawal.TxPrice
+			if withdrawal.TxPrice < groupMinPrice {
+				groupMinPrice = withdrawal.TxPrice
 			}
 			withdrawAmount += withdrawal.Amount
 		}
 
-		// actual fee is the minimum of networkFee * multiplier and the minimum MaxTxFee in the group
-		estimatedFee := int64(float64(networkFee) * multiplier)
-		actualFee := int64(groupMinFee)
-		if estimatedFee < int64(groupMinFee) {
-			actualFee = estimatedFee
+		// actual price is the minimum of networkFee * multiplier and the minimum MaxTxPrice in the group
+		estimatedPrice := int64(float64(networkFee) * multiplier)
+		actualPrice := int64(groupMinPrice)
+		if estimatedPrice < int64(actualPrice) {
+			actualPrice = estimatedPrice
 		}
 
-		return group, int64(withdrawAmount), actualFee
+		return group, int64(withdrawAmount), actualPrice
 	}
 
 	// process group1 (MaxTxFee > 150, fee: networkFee * 1.25 or min MaxTxFee in the group)
 	if len(group1) > 0 {
-		selectedWithdrawals, withdrawAmount, minTxFee := applyGroup(group1, 1.25)
-		return selectedWithdrawals, withdrawAmount, minTxFee, nil
+		selectedWithdrawals, withdrawAmount, minTxPrice := applyGroup(group1, 1.25)
+		return selectedWithdrawals, withdrawAmount, minTxPrice, nil
 	}
 
 	// process group2 (50 < MaxTxFee <= 150, fee: networkFee * 1.1 or min MaxTxFee in the group)
 	if len(group2) > 0 {
-		selectedWithdrawals, withdrawAmount, minTxFee := applyGroup(group2, 1.1)
-		return selectedWithdrawals, withdrawAmount, minTxFee, nil
+		selectedWithdrawals, withdrawAmount, minTxPrice := applyGroup(group2, 1.1)
+		return selectedWithdrawals, withdrawAmount, minTxPrice, nil
 	}
 
 	// process group3 (MaxTxFee <= 50, fee: networkFee)
 	if len(group3) > 0 {
-		selectedWithdrawals, withdrawAmount, minTxFee := applyGroup(group3, 1.0)
-		return selectedWithdrawals, withdrawAmount, minTxFee, nil
+		selectedWithdrawals, withdrawAmount, minTxPrice := applyGroup(group3, 1.0)
+		return selectedWithdrawals, withdrawAmount, minTxPrice, nil
 	}
 
 	// no withdrawals found

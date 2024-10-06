@@ -31,7 +31,7 @@ func (s *State) AddUnconfirmBtcBlock(height uint64, hash string) error {
 	defer s.btcHeadMu.Unlock()
 
 	// check if exist, if not save to db
-	_, err := s.queryBtcBlockByHeigh(height)
+	_, err := s.queryBtcBlockByHeight(height)
 	if err != nil && err != gorm.ErrRecordNotFound {
 		return err
 	}
@@ -63,7 +63,7 @@ func (s *State) SaveConfirmBtcBlock(height uint64, hash string) error {
 	s.btcHeadMu.Lock()
 	defer s.btcHeadMu.Unlock()
 
-	btcBlock, err := s.queryBtcBlockByHeigh(height)
+	btcBlock, err := s.queryBtcBlockByHeight(height)
 	status := db.BTC_BLOCK_STATUS_CONFIRMED
 	if height <= s.btcHeadState.Latest.Height {
 		status = db.BTC_BLOCK_STATUS_PROCESSED
@@ -99,16 +99,25 @@ func (s *State) UpdateProcessedBtcBlock(block uint64, height uint64, hash string
 	s.btcHeadMu.Lock()
 	defer s.btcHeadMu.Unlock()
 
-	btcBlock, err := s.queryBtcBlockByHeigh(height)
+	btcBlock, err := s.queryBtcBlockByHeight(height)
 	if err != nil {
 		// query db failed, update cache
 		// this will happen when L2 scan fast than btc
-		s.btcHeadState.Latest = db.BtcBlock{
-			Height:    height,
-			Hash:      hash,
-			UpdatedAt: time.Now(),
+		if err != gorm.ErrRecordNotFound {
+			s.btcHeadState.Latest = db.BtcBlock{
+				Height:    height,
+				Hash:      hash,
+				UpdatedAt: time.Now(),
+			}
+			return err
+		} else {
+			btcBlock = &db.BtcBlock{
+				Height:    height,
+				Hash:      hash,
+				Status:    db.BTC_BLOCK_STATUS_CONFIRMED,
+				UpdatedAt: time.Now(),
+			}
 		}
-		return err
 	}
 
 	if btcBlock.Status == db.BTC_BLOCK_STATUS_PROCESSED {
@@ -169,7 +178,19 @@ func (s *State) GetCurrentBtcBlock() (db.BtcBlock, error) {
 	return s.btcHeadState.Latest, nil
 }
 
-func (s *State) queryBtcBlockByHeigh(height uint64) (*db.BtcBlock, error) {
+func (s *State) GetLatestConfirmedBtcBlock() (*db.BtcBlock, error) {
+	s.btcHeadMu.RLock()
+	defer s.btcHeadMu.RUnlock()
+
+	var btcBlock db.BtcBlock
+	err := s.dbm.GetBtcLightDB().Where("status <> ?", db.BTC_BLOCK_STATUS_UNCONFIRM).Order("height desc").First(&btcBlock).Error
+	if err != nil {
+		return nil, err
+	}
+	return &btcBlock, nil
+}
+
+func (s *State) queryBtcBlockByHeight(height uint64) (*db.BtcBlock, error) {
 	var btcBlock db.BtcBlock
 	result := s.dbm.GetBtcLightDB().Where("height = ?", height).First(&btcBlock)
 	if result.Error != nil {

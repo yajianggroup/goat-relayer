@@ -78,10 +78,12 @@ func (lis *Layer2Listener) processEndBlock(block uint64) error {
 func (lis *Layer2Listener) processFirstBlock(info *db.L2Info, voters []*db.Voter, epoch, sequence uint64, proposer string, pubkey relayertypes.PublicKey) error {
 	err := lis.state.UpdateL2InfoFirstBlock(1, info, voters, epoch, sequence, proposer)
 	if err != nil {
+		log.Errorf("Abci processFirstBlock UpdateL2InfoFirstBlock error: %v", err)
 		return err
 	}
 	err = lis.state.UpdateL2InfoLatestBtc(1, info.StartBtcHeight)
 	if err != nil {
+		log.Errorf("Abci processFirstBlock UpdateL2InfoLatestBtc error: %v", err)
 		return err
 	}
 	// save pubkey
@@ -95,7 +97,12 @@ func (lis *Layer2Listener) processFirstBlock(info *db.L2Info, voters []*db.Voter
 		walletType = "schnorr"
 		walletKey = base64.StdEncoding.EncodeToString(v.Schnorr)
 	}
-	return lis.state.UpdateL2InfoWallet(1, walletType, walletKey)
+	err = lis.state.UpdateL2InfoWallet(1, walletType, walletKey)
+	if err != nil {
+		log.Errorf("Abci processFirstBlock UpdateL2InfoWallet error: %v", err)
+		return err
+	}
+	return nil
 }
 
 func (lis *Layer2Listener) processBlockVoters(block uint64) error {
@@ -103,6 +110,7 @@ func (lis *Layer2Listener) processBlockVoters(block uint64) error {
 	defer cancel()
 	respRelayer, err := lis.QueryRelayer(ctx)
 	if err != nil {
+		log.Errorf("Abci processBlockVoters QueryRelayer error: %v", err)
 		return err
 	}
 	// respVoters, err := lis.QueryVotersOfRelayer(ctx)
@@ -143,7 +151,12 @@ func (lis *Layer2Listener) processUserCancelWithdrawal(block uint64, attributes 
 	if id == 0 {
 		return nil
 	}
-	return lis.state.UpdateWithdrawCancel(id)
+	err := lis.state.UpdateWithdrawCancel(id)
+	if err != nil {
+		log.Errorf("Abci RequestCancelWithdrawal UpdateWithdrawCancel error: %v", err)
+		return err
+	}
+	return nil
 }
 
 func (lis *Layer2Listener) processUserReplaceWithdrawal(block uint64, attributes []abcitypes.EventAttribute) error {
@@ -164,7 +177,12 @@ func (lis *Layer2Listener) processUserReplaceWithdrawal(block uint64, attributes
 	if id == 0 {
 		return nil
 	}
-	return lis.state.UpdateWithdrawReplace(id, txPrice)
+	err := lis.state.UpdateWithdrawReplace(id, txPrice)
+	if err != nil {
+		log.Errorf("Abci RequestReplaceWithdrawal UpdateWithdrawReplace error: %v", err)
+		return err
+	}
+	return nil
 }
 
 func (lis *Layer2Listener) processUserRequestWithdrawal(block uint64, attributes []abcitypes.EventAttribute) error {
@@ -188,11 +206,12 @@ func (lis *Layer2Listener) processUserRequestWithdrawal(block uint64, attributes
 		}
 	}
 	log.Infof("Abci RequestWithdrawal, address: %s, block: %d, id: %d, txPrice: %d, amount: %d", address, block, id, txPrice, amount)
-
-	if id == 0 {
-		return nil
+	err := lis.state.CreateWithdrawal(address, block, id, txPrice, amount)
+	if err != nil {
+		log.Errorf("Abci RequestWithdrawal CreateWithdrawal error: %v", err)
+		return err
 	}
-	return lis.state.CreateWithdrawal(address, block, id, txPrice, amount)
+	return nil
 }
 
 func (lis *Layer2Listener) processWithdrawalFinalized(block uint64, attributes []abcitypes.EventAttribute) error {
@@ -210,7 +229,12 @@ func (lis *Layer2Listener) processWithdrawalFinalized(block uint64, attributes [
 	if txid == "" {
 		return nil
 	}
-	return lis.state.UpdateWithdrawFinalized(txid)
+	err := lis.state.UpdateWithdrawFinalized(txid)
+	if err != nil {
+		log.Errorf("Abci FinalizeWithdrawal UpdateWithdrawFinalized error: %v", err)
+		return err
+	}
+	return nil
 }
 
 func (lis *Layer2Listener) processWithdrawalCancelApproved(block uint64, attributes []abcitypes.EventAttribute) error {
@@ -249,7 +273,12 @@ func (lis *Layer2Listener) processWithdrawalInitialized(block uint64, attributes
 	if txid == "" {
 		return nil
 	}
-	return lis.state.UpdateWithdrawInitialized(txid)
+	err := lis.state.UpdateWithdrawInitialized(txid)
+	if err != nil {
+		log.Errorf("Abci WithdrawalInitialized UpdateWithdrawInitialized error: %v", err)
+		return err
+	}
+	return nil
 }
 
 func (lis *Layer2Listener) processNewConsolidation(block uint64, attributes []abcitypes.EventAttribute) error {
@@ -269,7 +298,12 @@ func (lis *Layer2Listener) processNewConsolidation(block uint64, attributes []ab
 		return nil
 	}
 	// call the same method as withdrawal initialized to update send order
-	return lis.state.UpdateWithdrawInitialized(txid)
+	err := lis.state.UpdateWithdrawInitialized(txid)
+	if err != nil {
+		log.Errorf("Abci NewConsolidation UpdateWithdrawInitialized error: %v", err)
+		return err
+	}
+	return nil
 }
 
 func (lis *Layer2Listener) processNewDeposit(block uint64, attributes []abcitypes.EventAttribute) error {
@@ -363,21 +397,23 @@ func (lis *Layer2Listener) processNewBtcBlockHash(block uint64, attributes []abc
 		u64, _ := strconv.ParseUint(height, 10, 64)
 		err := lis.state.UpdateL2InfoLatestBtc(block, u64)
 		if err != nil {
+			log.Errorf("Abci processNewBtcBlockHash UpdateL2InfoLatestBtc error: %v", err)
 			return err
 		}
 
 		// manage BtcHeadState queue
 		err = lis.state.UpdateProcessedBtcBlock(block, u64, hash)
 		if err != nil {
+			log.Errorf("Abci processNewBtcBlockHash UpdateProcessedBtcBlock error: %v", err)
 			return err
 		}
 
 		// update deposit state
 		err = lis.state.UpdateConfirmedDepositsByBtcHeight(u64, hash)
 		if err != nil {
+			log.Errorf("Abci processNewBtcBlockHash UpdateConfirmedDepositsByBtcHeight error: %v", err)
 			return err
 		}
-		return nil
 	}
 	return nil
 }
@@ -392,7 +428,11 @@ func (lis *Layer2Listener) processNewEpochEvent(block uint64, attributes []abcit
 			log.Infof("Abci NewEpoch: %s, block: %d", value, block)
 
 			u64, _ := strconv.ParseUint(value, 10, 64)
-			return lis.state.UpdateL2InfoEpoch(block, u64, "")
+			err := lis.state.UpdateL2InfoEpoch(block, u64, "")
+			if err != nil {
+				log.Errorf("Abci processNewEpochEvent UpdateL2InfoEpoch error: %v", err)
+				return err
+			}
 		}
 	}
 	return nil
@@ -408,7 +448,11 @@ func (lis *Layer2Listener) processFinalizedProposalEvent(block uint64, attribute
 			log.Infof("Abci FinalizedProposal Sequence: %s, block: %d", value, block)
 
 			u64, _ := strconv.ParseUint(value, 10, 64)
-			return lis.state.UpdateL2InfoSequence(block, u64)
+			err := lis.state.UpdateL2InfoSequence(block, u64)
+			if err != nil {
+				log.Errorf("Abci FinalizedProposal UpdateL2InfoSequence error: %v", err)
+				return err
+			}
 		}
 	}
 	return nil
@@ -435,11 +479,17 @@ func (lis *Layer2Listener) processElectedProposerEvent(block uint64, attributes 
 	// query and update voters
 	err := lis.processBlockVoters(block)
 	if err != nil {
+		log.Errorf("Abci ElectedProposer processBlockVoters error: %v", err)
 		return err
 	}
 
 	u64, _ := strconv.ParseUint(epoch, 10, 64)
-	return lis.state.UpdateL2InfoEpoch(block, u64, proposer)
+	err = lis.state.UpdateL2InfoEpoch(block, u64, proposer)
+	if err != nil {
+		log.Errorf("Abci ElectedProposer UpdateL2InfoEpoch error: %v", err)
+		return err
+	}
+	return nil
 }
 
 // Process accepted_proposer event

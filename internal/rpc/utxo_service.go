@@ -69,13 +69,13 @@ func (s *UtxoServer) NewTransaction(ctx context.Context, req *pb.NewTransactionR
 
 	evmAddr := strings.TrimPrefix(req.EvmAddress, "0x")
 
-	isTrue, signVersion, outputIndex, err := s.VerifyDeposit(tx, evmAddr)
+	isTrue, signVersion, outputIndex, amount, err := s.VerifyDeposit(tx, evmAddr)
 	if err != nil || !isTrue || outputIndex == -1 {
 		log.Errorf("Failed to verify deposit: %v", err)
 		return nil, err
 	}
 
-	err = s.state.AddUnconfirmDeposit(req.TransactionId, req.RawTransaction, evmAddr, signVersion, outputIndex)
+	err = s.state.AddUnconfirmDeposit(req.TransactionId, req.RawTransaction, evmAddr, signVersion, outputIndex, amount)
 	if err != nil {
 		log.Errorf("Failed to add unconfirmed deposit: %v", err)
 		return nil, err
@@ -87,6 +87,7 @@ func (s *UtxoServer) NewTransaction(ctx context.Context, req *pb.NewTransactionR
 		EvmAddr:     evmAddr,
 		SignVersion: signVersion,
 		OutputIndex: outputIndex,
+		Amount:      amount,
 		Timestamp:   time.Now().Unix(),
 	}
 

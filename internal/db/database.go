@@ -1,6 +1,7 @@
 package db
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -31,58 +32,40 @@ func (dm *DatabaseManager) initDB() {
 		log.Fatalf("Failed to create database directory: %v", err)
 	}
 
-	l2SyncPath := filepath.Join(dbDir, "l2_sync.db")
-	l2SyncDb, err := gorm.Open(sqlite.Open(l2SyncPath), &gorm.Config{
-		Logger: gormlogger.Default.LogMode(gormlogger.Warn),
-	})
-	if err != nil {
-		log.Fatalf("Failed to connect to database 1: %v", err)
+	databaseConfigs := []struct {
+		dbPath string
+		dbRef  **gorm.DB
+		dbName string
+	}{
+		{filepath.Join(dbDir, "l2_sync.db"), &dm.l2SyncDb, "Database 1"},
+		{filepath.Join(dbDir, "l2_info.db"), &dm.l2InfoDb, "Database 2"},
+		{filepath.Join(dbDir, "btc_light.db"), &dm.btcLightDb, "Database 3"},
+		{filepath.Join(dbDir, "wallet_order.db"), &dm.walletDb, "Database 4"},
+		{filepath.Join(dbDir, "btc_cache.db"), &dm.btcCacheDb, "Database 5"},
 	}
-	dm.l2SyncDb = l2SyncDb
-	log.Debugf("Database 1 connected successfully, path: %s", l2SyncPath)
 
-	l2InfoPath := filepath.Join(dbDir, "l2_info.db")
-	l2InfoDb, err := gorm.Open(sqlite.Open(l2InfoPath), &gorm.Config{
-		Logger: gormlogger.Default.LogMode(gormlogger.Warn),
-	})
-	if err != nil {
-		log.Fatalf("Failed to connect to database 2: %v", err)
+	for _, dbConfig := range databaseConfigs {
+		if err := dm.connectDatabase(dbConfig.dbPath, dbConfig.dbRef, dbConfig.dbName); err != nil {
+			log.Fatalf("Failed to connect to %s: %v", dbConfig.dbName, err)
+		}
 	}
-	dm.l2InfoDb = l2InfoDb
-	log.Debugf("Database 2 connected successfully, path: %s", l2InfoPath)
-
-	btcLightPath := filepath.Join(dbDir, "btc_light.db")
-	btcLightDb, err := gorm.Open(sqlite.Open(btcLightPath), &gorm.Config{
-		Logger: gormlogger.Default.LogMode(gormlogger.Warn),
-	})
-	if err != nil {
-		log.Fatalf("Failed to connect to database 3: %v", err)
-	}
-	dm.btcLightDb = btcLightDb
-	log.Debugf("Database 3 connected successfully, path: %s", btcLightPath)
-
-	walletPath := filepath.Join(dbDir, "wallet_order.db")
-	walletDb, err := gorm.Open(sqlite.Open(walletPath), &gorm.Config{
-		Logger: gormlogger.Default.LogMode(gormlogger.Warn),
-	})
-	if err != nil {
-		log.Fatalf("Failed to connect to database 4: %v", err)
-	}
-	dm.walletDb = walletDb
-	log.Debugf("Database 4 connected successfully, path: %s", walletPath)
-
-	btcCachePath := filepath.Join(dbDir, "btc_cache.db")
-	btcCacheDb, err := gorm.Open(sqlite.Open(btcCachePath), &gorm.Config{
-		Logger: gormlogger.Default.LogMode(gormlogger.Warn),
-	})
-	if err != nil {
-		log.Fatalf("Failed to connect to database 5: %v", err)
-	}
-	dm.btcCacheDb = btcCacheDb
-	log.Debugf("Database 5 connected successfully, path: %s", btcCachePath)
 
 	dm.autoMigrate()
 	log.Debugf("Database migration completed successfully")
+}
+
+func (dm *DatabaseManager) connectDatabase(dbPath string, dbRef **gorm.DB, dbName string) error {
+	// open database and set WAL mode
+	db, err := gorm.Open(sqlite.Open(dbPath+"?_journal_mode=WAL"), &gorm.Config{
+		Logger: gormlogger.Default.LogMode(gormlogger.Warn),
+	})
+	if err != nil {
+		return fmt.Errorf("failed to connect to %s: %w", dbName, err)
+	}
+
+	*dbRef = db
+	log.Debugf("%s connected successfully in WAL mode, path: %s", dbName, dbPath)
+	return nil
 }
 
 func (dm *DatabaseManager) GetL2SyncDB() *gorm.DB {
