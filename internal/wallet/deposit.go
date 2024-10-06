@@ -37,7 +37,7 @@ func (w *WalletServer) depositLoop(ctx context.Context) {
 				log.Errorf("Invalid deposit data type")
 				continue
 			}
-			err := w.state.AddUnconfirmDeposit(depositData.TxId, depositData.RawTx, depositData.EvmAddr, depositData.SignVersion, depositData.OutputIndex)
+			err := w.state.AddUnconfirmDeposit(depositData.TxId, depositData.RawTx, depositData.EvmAddr, depositData.SignVersion, depositData.OutputIndex, depositData.Amount)
 			if err != nil {
 				log.Errorf("Failed to add unconfirmed deposit: %v", err)
 				continue

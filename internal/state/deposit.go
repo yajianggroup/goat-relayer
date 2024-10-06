@@ -2,6 +2,7 @@ package state
 
 import (
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/goatnetwork/goat-relayer/internal/db"
@@ -14,7 +15,7 @@ import (
 AddUnconfirmDeposit
 when utxo scanner detected a new transaction in 1 confirm, save to unconfirmed,
 */
-func (s *State) AddUnconfirmDeposit(txHash string, rawTx string, evmAddr string, signVersion uint32, outputIndex int) error {
+func (s *State) AddUnconfirmDeposit(txHash string, rawTx string, evmAddr string, signVersion uint32, outputIndex int, amount int64) error {
 	s.depositMu.Lock()
 	defer s.depositMu.Unlock()
 
@@ -32,6 +33,7 @@ func (s *State) AddUnconfirmDeposit(txHash string, rawTx string, evmAddr string,
 
 	deposit := &db.Deposit{
 		Status:      status,
+		Amount:      amount,
 		UpdatedAt:   time.Now(),
 		TxHash:      txHash,
 		RawTx:       rawTx,
@@ -74,7 +76,7 @@ func (s *State) SaveConfirmDeposit(txHash string, rawTx string, evmAddr string, 
 				OutputIndex: outputIndex,
 				MerkleRoot:  merkleRoot,
 				Proof:       proofBytes,
-				TxIndex:     uint64(txIndex),
+				TxIndex:     txIndex,
 			}
 		} else {
 			// DB error
@@ -85,7 +87,7 @@ func (s *State) SaveConfirmDeposit(txHash string, rawTx string, evmAddr string, 
 			deposit.Status = status
 			deposit.BlockHash = blockHash
 			deposit.BlockHeight = blockHeight
-			deposit.TxIndex = uint64(txIndex)
+			deposit.TxIndex = txIndex
 			deposit.MerkleRoot = merkleRoot
 			deposit.Proof = proofBytes
 		}
@@ -227,21 +229,24 @@ func (s *State) UpdateConfirmedDepositsByBtcHeight(blockHeight uint64, blockHash
 	if err != nil {
 		return err
 	}
+	txHashes := make([]string, 0)
+	err = json.Unmarshal([]byte(btcBlockData.TxHashes), &txHashes)
+	if err != nil {
+		return err
+	}
 	for _, deposit := range s.depositState.UnconfirmQueue {
-		txHashes := make([]string, 0)
-		err := json.Unmarshal([]byte(btcBlockData.TxHashes), &txHashes)
+		if !strings.Contains(btcBlockData.TxHashes, deposit.TxHash) {
+			continue
+		}
+		merkleRoot, proofBytes, txIndex, err := types.GenerateSPVProof(deposit.TxHash, txHashes)
 		if err != nil {
 			return err
 		}
-		merkleRoot, proofBytes, txIndex, err := types.GenerateSPVProof(deposit.TxHash, txHashes)
-		if deposit.Status == db.DEPOSIT_STATUS_UNCONFIRM && txIndex != -1 {
-			if err != nil {
-				return err
-			}
+		if deposit.Status == db.DEPOSIT_STATUS_UNCONFIRM {
 			deposit.Status = db.DEPOSIT_STATUS_CONFIRMED
 			deposit.BlockHash = blockHash
 			deposit.BlockHeight = blockHeight
-			deposit.TxIndex = uint64(txIndex)
+			deposit.TxIndex = txIndex
 			deposit.MerkleRoot = merkleRoot
 			deposit.Proof = proofBytes
 			deposit.UpdatedAt = time.Now()

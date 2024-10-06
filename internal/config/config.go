@@ -56,6 +56,7 @@ func InitConfig() {
 	viper.SetDefault("RELAYER_PRIVATE_KEY", "")
 	viper.SetDefault("RELAYER_BLS_SK", "")
 	viper.SetDefault("BLS_SIG_TIMEOUT", "300s")
+	viper.SetDefault("MIN_DEPOSIT_AMOUNT", 1000000)
 
 	logLevel, err := logrus.ParseLevel(strings.ToLower(viper.GetString("LOG_LEVEL")))
 	if err != nil {
@@ -114,6 +115,7 @@ func InitConfig() {
 		RelayerAddress:         relayerAddress,
 		RelayerBlsSk:           viper.GetString("RELAYER_BLS_SK"),
 		BlsSigTimeout:          viper.GetDuration("BLS_SIG_TIMEOUT"),
+		MinDepositAmount:       viper.GetInt64("MIN_DEPOSIT_AMOUNT"),
 	}
 
 	if (AppConfig.BTCNetworkType == "" || AppConfig.BTCNetworkType == "mainnet") && AppConfig.BTCConfirmations < 6 {
@@ -166,4 +168,5 @@ type Config struct {
 	RelayerAddress         string
 	RelayerBlsSk           string
 	BlsSigTimeout          time.Duration
+	MinDepositAmount       int64
 }
