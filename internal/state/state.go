@@ -116,12 +116,12 @@ func InitializeState(dbm *db.DatabaseManager) *State {
 
 	go func() {
 		defer wg.Done()
-		loadData(btcLightDb, &unconfirmBtcQueue, "status in (?)", []string{"unconfirm", "confirmed"})
+		loadData(btcLightDb, &unconfirmBtcQueue, "status in (?)", []string{db.BTC_BLOCK_STATUS_UNCONFIRM, db.BTC_BLOCK_STATUS_CONFIRMED})
 	}()
 
 	go func() {
 		defer wg.Done()
-		loadData(btcLightDb, &sigBtcQueue, "status in (?)", []string{"signing", "pending"})
+		loadData(btcLightDb, &sigBtcQueue, "status in (?)", []string{db.BTC_BLOCK_STATUS_SIGNING, db.BTC_BLOCK_STATUS_PENDING})
 	}()
 
 	go func() {
@@ -133,19 +133,19 @@ func InitializeState(dbm *db.DatabaseManager) *State {
 
 	go func() {
 		defer wg.Done()
-		loadData(btcCacheDb, &unconfirmDepositQueue, "status in (?)", []string{"unconfirm", "confirmed"})
+		loadData(btcCacheDb, &unconfirmDepositQueue, "status in (?)", []string{db.DEPOSIT_STATUS_UNCONFIRM, db.DEPOSIT_STATUS_CONFIRMED})
 	}()
 
 	go func() {
 		defer wg.Done()
-		loadData(btcCacheDb, &sigDepositQueue, "status in (?)", []string{"signing", "pending"})
+		loadData(btcCacheDb, &sigDepositQueue, "status in (?)", []string{db.DEPOSIT_STATUS_SIGNING, db.DEPOSIT_STATUS_PENDING})
 	}()
 
 	go func() {
 		defer wg.Done()
-		loadData(walletDb, &sendOrderQueue, "status <> ?", "processed")
-		loadData(walletDb, &vinQueue, "status <> ?", "processed")
-		loadData(walletDb, &voutQueue, "status <> ?", "processed")
+		loadData(walletDb, &sendOrderQueue, "status <> ?", db.ORDER_STATUS_PROCESSED)
+		loadData(walletDb, &vinQueue, "status <> ?", db.ORDER_STATUS_PROCESSED)
+		loadData(walletDb, &voutQueue, "status <> ?", db.ORDER_STATUS_PROCESSED)
 	}()
 
 	wg.Wait()

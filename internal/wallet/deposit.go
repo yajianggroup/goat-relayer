@@ -179,6 +179,7 @@ func (w *WalletServer) initDepositSig() {
 	blockHeaders := make(map[uint64][]byte)
 	for _, blockData := range blockData {
 		blockHeaders[blockData.BlockHeight] = blockData.Header
+		log.Debugf("WalletServer initDepositSig blockHeaders[%d] %d", blockData.BlockHeight, len(blockData.Header))
 	}
 	proposer := w.state.GetEpochVoter().Proposer
 	headersBytes, err := json.Marshal(blockHeaders)

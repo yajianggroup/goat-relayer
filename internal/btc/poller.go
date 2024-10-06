@@ -144,7 +144,7 @@ func (p *BTCPoller) GetBlockHeader(blockHash *chainhash.Hash) (*wire.BlockHeader
 	}
 
 	header := wire.BlockHeader{}
-	err := header.Deserialize(bytes.NewReader([]byte(blockData.Header)))
+	err := header.Deserialize(bytes.NewReader(blockData.Header))
 	if err != nil {
 		return nil, fmt.Errorf("failed to deserialize block header: %v", err)
 	}

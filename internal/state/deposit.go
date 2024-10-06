@@ -83,6 +83,11 @@ func (s *State) SaveConfirmDeposit(txHash string, rawTx string, evmAddr string, 
 	} else {
 		if deposit.Status != db.DEPOSIT_STATUS_PROCESSED {
 			deposit.Status = status
+			deposit.BlockHash = blockHash
+			deposit.BlockHeight = blockHeight
+			deposit.TxIndex = uint64(txIndex)
+			deposit.MerkleRoot = merkleRoot
+			deposit.Proof = proofBytes
 		}
 		deposit.UpdatedAt = time.Now()
 	}
@@ -167,7 +172,7 @@ func (s *State) GetDepositForSign(size int) ([]*db.Deposit, error) {
 
 	from := s.depositState.Latest.ID
 	var deposits []*db.Deposit
-	err := s.dbm.GetBtcCacheDB().Where("id > ? and status = ?", from, "confirmed").Order("id asc").Limit(size).Find(&deposits).Error
+	err := s.dbm.GetBtcCacheDB().Where("id > ? and status = ? and block_hash <> ''", from, db.DEPOSIT_STATUS_CONFIRMED).Order("id asc").Limit(size).Find(&deposits).Error
 	if err != nil && err != gorm.ErrRecordNotFound {
 		return nil, err
 	}
@@ -229,11 +234,11 @@ func (s *State) UpdateConfirmedDepositsByBtcHeight(blockHeight uint64, blockHash
 			return err
 		}
 		merkleRoot, proofBytes, txIndex, err := types.GenerateSPVProof(deposit.TxHash, txHashes)
-		if deposit.Status == "unconfirm" && txIndex != -1 {
+		if deposit.Status == db.DEPOSIT_STATUS_UNCONFIRM && txIndex != -1 {
 			if err != nil {
 				return err
 			}
-			deposit.Status = "confirmed"
+			deposit.Status = db.DEPOSIT_STATUS_CONFIRMED
 			deposit.BlockHash = blockHash
 			deposit.BlockHeight = blockHeight
 			deposit.TxIndex = uint64(txIndex)

@@ -339,14 +339,14 @@ func (lis *Layer2Listener) getGoatBlock(ctx context.Context, height uint64) erro
 	for _, txResult := range blockResults.TxsResults {
 		for _, event := range txResult.Events {
 			if err := lis.processEvent(height, event); err != nil {
-				return fmt.Errorf("failed to process tx event: %w", err)
+				return fmt.Errorf("failed to process tx event %s: %w", event.Type, err)
 			}
 		}
 	}
 
 	for _, event := range blockResults.FinalizeBlockEvents {
 		if err := lis.processEvent(height, event); err != nil {
-			return fmt.Errorf("failed to process EndBlock event: %w", err)
+			return fmt.Errorf("failed to process EndBlock event %s: %w", event.Type, err)
 		}
 	}
 

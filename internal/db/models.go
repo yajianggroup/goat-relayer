@@ -72,7 +72,7 @@ type BtcBlock struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
 	Height    uint64    `gorm:"not null;uniqueIndex" json:"height"`
 	Hash      string    `gorm:"not null" json:"hash"`
-	Status    string    `gorm:"not null" json:"status"` // "unconfirm", "confirmed", "signing", "pending", "processed"
+	Status    string    `gorm:"not null;index:btc_block_status_index" json:"status"` // "unconfirm", "confirmed", "signing", "pending", "processed"
 	UpdatedAt time.Time `gorm:"not null" json:"updated_at"`
 }
 
@@ -209,7 +209,7 @@ type Deposit struct {
 	TxHash      string    `gorm:"not null;index:deposit_txhash_index" json:"tx_hash"`
 	RawTx       string    `gorm:"not null" json:"raw_tx"`
 	EvmAddr     string    `gorm:"not null" json:"evm_addr"`
-	BlockHash   string    `gorm:"not null" json:"block_hash"`
+	BlockHash   string    `gorm:"not null;index:deposit_blockhash_index" json:"block_hash"`
 	BlockHeight uint64    `gorm:"not null" json:"block_height"`
 	TxIndex     uint64    `gorm:"not null" json:"tx_index"`
 	OutputIndex int       `gorm:"not null;index:deposit_output_index" json:"output_index"`

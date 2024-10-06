@@ -55,6 +55,17 @@ func NewBTCNotifier(client *rpcclient.Client, cache *BTCCache, poller *BTCPoller
 		syncStatus.UpdatedAt = time.Now()
 		cache.db.Create(&syncStatus)
 		log.Info("New btc notify sync status not found, create one")
+	} else if resultQuery.Error == nil {
+		// check btc light db latest block
+		confirmedBlock, err := poller.state.GetLatestConfirmedBtcBlock()
+		if err != nil {
+			log.Warnf("New btc notify sync status GetLatestConfirmedBtcBlock error: %v", err)
+		}
+		if confirmedBlock.Height < uint64(syncStatus.ConfirmedHeight) {
+			syncStatus.ConfirmedHeight = int64(confirmedBlock.Height)
+			syncStatus.UpdatedAt = time.Now()
+			log.Warnf("New btc notify sync status set confirmed height to %d", confirmedBlock.Height)
+		}
 	}
 	log.Infof("New btc notify sync status confirmed height is %d", syncStatus.ConfirmedHeight)
 
@@ -199,7 +210,7 @@ func (bn *BTCNotifier) checkConfirmations(ctx context.Context) {
 				}
 				blockWithHeight := BlockWithHeight{
 					Block:  block,
-					Height: bn.currentHeight,
+					Height: uint64(height),
 				}
 				bn.cache.blockChan <- blockWithHeight
 				// if blockInDb.BlockHash != block.BlockHash().String() {
