@@ -150,7 +150,7 @@ func (w *WalletServer) initWithdrawSig() {
 		log.Infof("WalletServer initWithdrawSig no withdraw from db can start, count: %d", len(withdraws))
 		return
 	}
-	selectedWithdraws, withdrawAmount, actualFee, err := SelectWithdrawals(withdraws, int64(btcState.NetworkFee), 150)
+	selectedWithdraws, withdrawAmount, actualPrice, err := SelectWithdrawals(withdraws, int64(btcState.NetworkFee), 150)
 	if err != nil {
 		log.Warnf("WalletServer initWithdrawSig SelectWithdrawals error: %v", err)
 		return
@@ -162,7 +162,7 @@ func (w *WalletServer) initWithdrawSig() {
 	if wCount == 0 {
 		log.Infof("WalletServer initWithdrawSig no withdraw after filter can start, count: %d", len(selectedWithdraws))
 	} else {
-		log.Infof("WalletServer initWithdrawSig SelectWithdrawals, withdrawAmount: %d, actualFee: %d, selectedWithdraws: %d", withdrawAmount, actualFee, len(selectedWithdraws))
+		log.Infof("WalletServer initWithdrawSig SelectWithdrawals, withdrawAmount: %d, actualPrice: %d, selectedWithdraws: %d", withdrawAmount, actualPrice, len(selectedWithdraws))
 		if wCount >= 150 {
 			startBls = true
 			log.Debugf("WalletServer initWithdrawSig set start bls to true, count: %d", wCount)
@@ -236,7 +236,7 @@ func (w *WalletServer) initWithdrawSig() {
 		}
 	} else {
 		// create SendOrder for selectedWithdraws
-		selectOptimalUTXOs, totalSelectedAmount, _, changeAmount, estimateFee, err := SelectOptimalUTXOs(utxos, withdrawAmount, int64(currNetworkFee), len(selectedWithdraws))
+		selectOptimalUTXOs, totalSelectedAmount, _, changeAmount, estimateFee, err := SelectOptimalUTXOs(utxos, withdrawAmount, actualPrice, len(selectedWithdraws))
 		if err != nil {
 			log.Errorf("WalletServer initWithdrawSig SelectOptimalUTXOs error: %v", err)
 			return
@@ -259,7 +259,7 @@ func (w *WalletServer) initWithdrawSig() {
 		}
 		log.Infof("WalletServer initWithdrawSig CreateRawTransaction for withdraw, tx: %s, network fee rate: %d", tx.TxID(), currNetworkFee)
 
-		msgSignSendOrder, err = w.createSendOrder(tx, db.ORDER_TYPE_WITHDRAWAL, selectOptimalUTXOs, selectedWithdraws, totalSelectedAmount, withdrawAmount, changeAmount, uint64(estimateFee), currNetworkFee, epochVoter, network)
+		msgSignSendOrder, err = w.createSendOrder(tx, db.ORDER_TYPE_WITHDRAWAL, selectOptimalUTXOs, selectedWithdraws, totalSelectedAmount, withdrawAmount, changeAmount, uint64(estimateFee), uint64(actualPrice), epochVoter, network)
 		if err != nil {
 			log.Errorf("WalletServer initWithdrawSig createSendOrder for withdraw error: %v", err)
 			return
@@ -302,7 +302,6 @@ func (w *WalletServer) createSendOrder(tx *wire.MsgTx, orderType string, selecte
 	var withdrawIds []uint64
 	var withdrawBytes []byte
 	if len(selectedWithdraws) > 0 {
-		order.TxPrice = selectedWithdraws[len(selectedWithdraws)-1].TxPrice
 		withdrawBytes, err = json.Marshal(selectedWithdraws)
 		if err != nil {
 			return nil, err

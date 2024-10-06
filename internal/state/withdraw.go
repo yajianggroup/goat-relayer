@@ -23,7 +23,7 @@ func (s *State) CreateWithdrawal(address string, block, id, txPrice, amount uint
 	defer s.walletMu.Unlock()
 
 	// check if exist, if not save to db
-	_, err := s.getWithdrawByRequestId(id)
+	_, err := s.getWithdrawByRequestId(nil, id)
 	if err != nil && err != gorm.ErrRecordNotFound {
 		return err
 	}
@@ -110,7 +110,12 @@ func (s *State) CreateSendOrder(order *db.SendOrder, selectedUtxos []*db.Utxo, s
 					if withdrawInDb.Status != db.WITHDRAW_STATUS_CREATE {
 						return fmt.Errorf("withdraw status can not be make withdrawal, id: %d, status: %s", withdrawInDb.ID, withdrawInDb.Status)
 					}
-					err = tx.Model(&db.Withdraw{}).Where("id = ?", withdrawInDb.ID).Updates(&db.Utxo{Status: db.WITHDRAW_STATUS_AGGREGATING, UpdatedAt: time.Now()}).Error
+					err = tx.Model(&db.Withdraw{}).Where("id = ?", withdrawInDb.ID).Updates(&db.Withdraw{
+						Status:    db.WITHDRAW_STATUS_AGGREGATING,
+						OrderId:   order.OrderId,
+						Txid:      order.Txid,
+						UpdatedAt: time.Now(),
+					}).Error
 					if err != nil {
 						log.Errorf("State CreateSendOrder update withdraw records error: %v", err)
 						return err
@@ -120,8 +125,13 @@ func (s *State) CreateSendOrder(order *db.SendOrder, selectedUtxos []*db.Utxo, s
 					if withdrawInDb.Status != db.WITHDRAW_STATUS_CREATE && withdrawInDb.Status != db.WITHDRAW_STATUS_AGGREGATING {
 						return fmt.Errorf("withdraw status can not be make withdrawal, id: %d, status: %s", withdrawInDb.ID, withdrawInDb.Status)
 					}
-					if withdrawInDb.Status == db.WITHDRAW_STATUS_CREATE {
-						err = tx.Model(&db.Withdraw{}).Where("id = ?", withdrawInDb.ID).Updates(&db.Utxo{Status: db.WITHDRAW_STATUS_AGGREGATING, UpdatedAt: time.Now()}).Error
+					if withdrawInDb.Status == db.WITHDRAW_STATUS_CREATE || withdrawInDb.Status == db.WITHDRAW_STATUS_AGGREGATING {
+						err = tx.Model(&db.Withdraw{}).Where("id = ?", withdrawInDb.ID).Updates(&db.Withdraw{
+							Status:    db.WITHDRAW_STATUS_AGGREGATING,
+							OrderId:   order.OrderId,
+							Txid:      order.Txid,
+							UpdatedAt: time.Now(),
+						}).Error
 						if err != nil {
 							log.Errorf("State CreateSendOrder update withdraw records error: %v", err)
 							return err
@@ -136,11 +146,91 @@ func (s *State) CreateSendOrder(order *db.SendOrder, selectedUtxos []*db.Utxo, s
 	return err
 }
 
+// RecoverSendOrder, recover send order when layer2 read MsgInitalizeWithdrawal tx
+func (s *State) RecoverSendOrder(order *db.SendOrder, vins []*db.Vin, vouts []*db.Vout, withdrawIds []uint64) error {
+	// 1. check order, if exists, return
+	s.walletMu.Lock()
+	defer s.walletMu.Unlock()
+
+	err := s.dbm.GetWalletDB().Transaction(func(tx *gorm.DB) error {
+		// 2. check order, if exists, return
+		orderInDb, err := s.getOrderByTxidAndStatuses(tx, order.Txid, db.ORDER_STATUS_INIT, db.ORDER_STATUS_AGGREGATING)
+		if err != nil && err != gorm.ErrRecordNotFound {
+			return err
+		}
+		if orderInDb != nil {
+			return nil
+		}
+
+		// 2. update withdraw status to aggregating
+		for _, withdrawId := range withdrawIds {
+			withdrawInDb, err := s.getWithdrawByRequestId(tx, withdrawId)
+			if err != nil && err != gorm.ErrRecordNotFound {
+				return err
+			}
+			if err == gorm.ErrRecordNotFound {
+				continue
+			}
+			if withdrawInDb.Status != db.WITHDRAW_STATUS_CREATE && withdrawInDb.Status != db.WITHDRAW_STATUS_AGGREGATING {
+				continue
+			}
+			withdrawInDb.Status = db.WITHDRAW_STATUS_INIT
+			withdrawInDb.OrderId = order.OrderId
+			withdrawInDb.Txid = order.Txid
+			withdrawInDb.UpdatedAt = time.Now()
+			err = s.saveWithdraw(withdrawInDb)
+			if err != nil {
+				return err
+			}
+		}
+
+		// 3. update utxo status if find
+		for _, vin := range vins {
+			var utxoInDb db.Utxo
+			err := tx.Where("txid = ? and out_index = ?", vin.Txid, vin.OutIndex).Order("id desc").First(&utxoInDb).Error
+			if err != nil && err != gorm.ErrRecordNotFound {
+				return err
+			}
+			if err == gorm.ErrRecordNotFound {
+				continue
+			}
+			if utxoInDb.Status == db.UTXO_STATUS_PENDING || utxoInDb.Status == db.UTXO_STATUS_SPENT {
+				continue
+			}
+			err = tx.Model(&db.Utxo{}).Where("id = ?", utxoInDb.ID).Updates(&db.Utxo{Status: db.UTXO_STATUS_PENDING, UpdatedAt: time.Now()}).Error
+			if err != nil {
+				log.Errorf("State RecoverSendOrder update utxo records error: %v", err)
+				return err
+			}
+			// set receiver type to vin
+			vin.ReceiverType = utxoInDb.ReceiverType
+		}
+
+		// 4. save order
+		err = s.saveOrder(tx, order)
+		if err != nil {
+			return err
+		}
+
+		// 5. vins, vouts
+		if err = tx.Create(&vins).Error; err != nil {
+			return err
+		}
+
+		if err = tx.Create(&vouts).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+	return err
+}
+
 func (s *State) UpdateWithdrawReplace(id, txPrice uint64) error {
 	s.walletMu.Lock()
 	defer s.walletMu.Unlock()
 
-	withdraw, err := s.getWithdrawByRequestId(id)
+	withdraw, err := s.getWithdrawByRequestId(nil, id)
 	if err != nil {
 		return err
 	}
@@ -162,7 +252,7 @@ func (s *State) UpdateWithdrawCancel(id uint64) error {
 	s.walletMu.Lock()
 	defer s.walletMu.Unlock()
 
-	withdraw, err := s.getWithdrawByRequestId(id)
+	withdraw, err := s.getWithdrawByRequestId(nil, id)
 	if err != nil {
 		return err
 	}
@@ -421,9 +511,12 @@ func (s *State) getSendOrder(orderId string) (*db.SendOrder, error) {
 }
 
 // queryWithdrawByEvmTxId
-func (s *State) getWithdrawByRequestId(requestId uint64) (*db.Withdraw, error) {
+func (s *State) getWithdrawByRequestId(tx *gorm.DB, requestId uint64) (*db.Withdraw, error) {
+	if tx == nil {
+		tx = s.dbm.GetWalletDB()
+	}
 	var withdraw db.Withdraw
-	result := s.dbm.GetWalletDB().Where("request_id=?", requestId).First(&withdraw)
+	result := tx.Where("request_id=?", requestId).First(&withdraw)
 	if result.Error != nil {
 		return nil, result.Error
 	}
@@ -451,6 +544,18 @@ func (s *State) getOrderByTxid(tx *gorm.DB, txid string) (*db.SendOrder, error) 
 	}
 	var order db.SendOrder
 	result := tx.Where("txid=?", txid).Order("id DESC").First(&order)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return &order, nil
+}
+
+func (s *State) getOrderByTxidAndStatuses(tx *gorm.DB, txid string, statuses ...string) (*db.SendOrder, error) {
+	if tx == nil {
+		tx = s.dbm.GetWalletDB()
+	}
+	var order db.SendOrder
+	result := tx.Where("txid=? and status in (?)", txid, statuses).Order("id DESC").First(&order)
 	if result.Error != nil {
 		return nil, result.Error
 	}
