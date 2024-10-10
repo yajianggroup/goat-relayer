@@ -206,6 +206,15 @@ func (s *State) QueryUnConfirmDeposit() ([]db.Deposit, error) {
 }
 
 // QueryBtcBlockDataByHeight query btc block data by height
+func (s *State) QueryBtcBlockDataByHeight(height uint64) (db.BtcBlockData, error) {
+	var btcBlockData db.BtcBlockData
+	result := s.dbm.GetBtcCacheDB().Where("block_height = ?", height).First(&btcBlockData)
+	if result.Error != nil {
+		return db.BtcBlockData{}, result.Error
+	}
+	return btcBlockData, nil
+}
+
 func (s *State) QueryBtcBlockDataByBlockHashes(blockHashes []string) ([]db.BtcBlockData, error) {
 	var btcBlockData []db.BtcBlockData
 	result := s.dbm.GetBtcCacheDB().Where("block_hash IN (?)", blockHashes).Find(&btcBlockData)

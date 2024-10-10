@@ -270,6 +270,33 @@ func (s *State) UpdateWithdrawCancel(id uint64) error {
 	return s.saveWithdraw(withdraw)
 }
 
+// UpdateSendOrderPending
+// when a withdrawal or consolidation request is confirmed, save to confirmed
+func (s *State) UpdateSendOrderPending(txid string) error {
+	s.walletMu.Lock()
+	defer s.walletMu.Unlock()
+
+	err := s.dbm.GetWalletDB().Transaction(func(tx *gorm.DB) error {
+		order, err := s.getOrderByTxid(tx, txid)
+		if err != nil && err != gorm.ErrRecordNotFound {
+			return err
+		}
+		if order == nil {
+			return nil
+		}
+
+		order.Status = db.ORDER_STATUS_PENDING
+		order.UpdatedAt = time.Now()
+		err = s.saveOrder(tx, order)
+		if err != nil {
+			return err
+		}
+
+		return nil
+	})
+	return err
+}
+
 // UpdateSendOrderConfirmed
 // when a withdrawal or consolidation request is confirmed, save to confirmed
 func (s *State) UpdateSendOrderConfirmed(txid string) error {
@@ -478,6 +505,36 @@ func (s *State) GetWithdrawsCanStart() ([]*db.Withdraw, error) {
 	}
 
 	return withdraws, nil
+}
+
+func (s *State) GetSendOrderInitlized() ([]*db.SendOrder, error) {
+	s.walletMu.RLock()
+	defer s.walletMu.RUnlock()
+
+	sendOrders, err := s.getOrderByStatuses(nil, "tx_price desc", db.ORDER_STATUS_INIT)
+	if err != nil {
+		if err != gorm.ErrRecordNotFound {
+			return nil, err
+		}
+		return nil, nil
+	}
+
+	return sendOrders, nil
+}
+
+// GetSendOrderProcessed get deposits for sign
+func (s *State) GetSendOrderProcessed(size int) ([]*db.SendOrder, error) {
+	s.walletMu.RLock()
+	defer s.walletMu.RUnlock()
+
+	from := s.walletState.Latest.ID
+	var sendOrders []*db.SendOrder
+	err := s.dbm.GetBtcCacheDB().Where("id > ? and status = ?", from, db.DEPOSIT_STATUS_CONFIRMED).Order("id asc").Limit(size).Find(&sendOrders).Error
+	if err != nil && err != gorm.ErrRecordNotFound {
+		return nil, err
+	}
+	log.Debugf("GetSendOrderProcessed from: %d, sendOrders found: %d", from, len(sendOrders))
+	return sendOrders, nil
 }
 
 func (s *State) CloseWithdraw(id uint, reason string) error {

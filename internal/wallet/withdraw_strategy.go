@@ -352,6 +352,10 @@ func CreateRawTransaction(utxos []*db.Utxo, withdrawals []*db.Withdraw, changeAd
 		if err != nil {
 			return nil, 0, err
 		}
+		val := changeAmount - actualFee
+		if val <= types.DUST_LIMIT {
+			actualFee += val
+		}
 		tx.AddTxOut(wire.NewTxOut(changeAmount-actualFee, changePkScript))
 	}
 

@@ -44,6 +44,7 @@ func (w *WalletServer) withdrawLoop(ctx context.Context) {
 			w.handleWithdrawSigFinish(sigFinish)
 		case <-ticker.C:
 			w.initWithdrawSig()
+			w.finalizeWithdrawSig()
 		}
 	}
 }
@@ -80,6 +81,9 @@ func (w *WalletServer) handleWithdrawSigFinish(event interface{}) {
 		log.Infof("Event handleWithdrawSigFinish is of type MsgSignSendOrder, request id %s", e.RequestId)
 		w.sigStatus = false
 		w.sigFinishHeight = w.state.GetL2Info().Height
+	case types.MsgSignFinalizeWithdraw:
+		log.Infof("Event handleWithdrawSigFinish is of type MsgSignFinalizeWithdraw, request id %s", e.RequestId)
+		w.execWithdrawStatus = false
 	default:
 		log.Debug("WalletServer withdrawLoop ignore unsupport type")
 	}
