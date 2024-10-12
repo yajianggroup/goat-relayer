@@ -12,6 +12,7 @@ import (
 	"github.com/btcsuite/btcd/wire"
 	"github.com/goatnetwork/goat-relayer/internal/db"
 	"github.com/goatnetwork/goat-relayer/internal/types"
+	log "github.com/sirupsen/logrus"
 )
 
 // ConsolidateSmallUTXOs consolidate small utxos
@@ -376,11 +377,12 @@ func CreateRawTransaction(utxos []*db.Utxo, withdrawals []*db.Withdraw, changeAd
 //	error - error if any
 func SignTransactionByPrivKey(privKey *btcec.PrivateKey, tx *wire.MsgTx, utxos []*db.Utxo, net *chaincfg.Params) error {
 	for i, utxo := range utxos {
+		log.Debugf("SignTransactionByPrivKey utxo: %+v", utxo)
 		switch utxo.ReceiverType {
 		// P2PKH
 		case types.WALLET_TYPE_P2PKH:
 			// P2PKH uncompressed address
-			addr, err := btcutil.DecodeAddress(utxo.Sender, net)
+			addr, err := btcutil.DecodeAddress(utxo.Receiver, net)
 			if err != nil {
 				return err
 			}
@@ -401,7 +403,7 @@ func SignTransactionByPrivKey(privKey *btcec.PrivateKey, tx *wire.MsgTx, utxos [
 		// P2WPKH
 		case types.WALLET_TYPE_P2WPKH:
 			// P2WPKH needs witness data
-			addr, err := btcutil.DecodeAddress(utxo.Sender, net)
+			addr, err := btcutil.DecodeAddress(utxo.Receiver, net)
 			if err != nil {
 				return err
 			}
@@ -411,7 +413,7 @@ func SignTransactionByPrivKey(privKey *btcec.PrivateKey, tx *wire.MsgTx, utxos [
 			}
 
 			// create witness signature
-			witnessSig, err := txscript.RawTxInWitnessSignature(tx, txscript.NewTxSigHashes(tx, nil), i, utxo.Amount, pkScript, txscript.SigHashAll, privKey)
+			witnessSig, err := txscript.RawTxInWitnessSignature(tx, txscript.NewTxSigHashes(tx, txscript.NewCannedPrevOutputFetcher(pkScript, utxo.Amount)), i, utxo.Amount, pkScript, txscript.SigHashAll, privKey)
 			if err != nil {
 				return err
 			}
@@ -427,8 +429,13 @@ func SignTransactionByPrivKey(privKey *btcec.PrivateKey, tx *wire.MsgTx, utxos [
 			// P2WSH needs subScript
 			// assume subScript is known
 
+			prevPkScript, err := txscript.NewScriptBuilder().AddOp(txscript.OP_0).AddData(utxo.SubScript).Script()
+			if err != nil {
+				return err
+			}
+			inputFetcher := txscript.NewCannedPrevOutputFetcher(prevPkScript, utxo.Amount)
 			// generate witness signature
-			witnessSig, err := txscript.RawTxInWitnessSignature(tx, txscript.NewTxSigHashes(tx, nil), i, utxo.Amount, utxo.SubScript, txscript.SigHashAll, privKey)
+			witnessSig, err := txscript.RawTxInWitnessSignature(tx, txscript.NewTxSigHashes(tx, inputFetcher), 0, utxo.Amount, utxo.SubScript, txscript.SigHashAll, privKey)
 			if err != nil {
 				return err
 			}
