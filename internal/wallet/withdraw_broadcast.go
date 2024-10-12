@@ -11,7 +11,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func (w *WalletServer) withdrawProcessLoop(ctx context.Context) {
+func (w *WalletServer) txBroadcastLoop(ctx context.Context) {
 	log.Debug("WalletServer withdrawProcessLoop")
 	// init status process, if restart && layer2 status is up to date, remove all status "create", "aggregating"
 	if !w.state.GetBtcHead().Syncing {
@@ -26,25 +26,25 @@ func (w *WalletServer) withdrawProcessLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			w.execWithdrawSig()
+			w.handleTxBroadcast()
 		}
 	}
 }
 
-func (w *WalletServer) execWithdrawSig() {
+func (w *WalletServer) handleTxBroadcast() {
 	l2Info := w.state.GetL2Info()
 	if l2Info.Syncing {
-		log.Infof("WalletServer execWithdrawSig ignore, layer2 is catching up")
+		log.Infof("WalletServer handleTxBroadcast ignore, layer2 is catching up")
 		return
 	}
 
 	btcState := w.state.GetBtcHead()
 	if btcState.Syncing {
-		log.Infof("WalletServer execWithdrawSig ignore, btc is catching up")
+		log.Infof("WalletServer handleTxBroadcast ignore, btc is catching up")
 		return
 	}
 	if btcState.NetworkFee > 500 {
-		log.Infof("WalletServer execWithdrawSig ignore, btc network fee too high: %d", btcState.NetworkFee)
+		log.Infof("WalletServer handleTxBroadcast ignore, btc network fee too high: %d", btcState.NetworkFee)
 		return
 	}
 
@@ -59,67 +59,67 @@ func (w *WalletServer) execWithdrawSig() {
 			// clean process, role changed, remove all status "create", "aggregating"
 			w.cleanWithdrawProcess()
 		}
-		log.Debugf("WalletServer execWithdrawSig ignore, self is not proposer, epoch: %d, proposer: %s", epochVoter.Epoch, epochVoter.Proposer)
+		log.Debugf("WalletServer handleTxBroadcast ignore, self is not proposer, epoch: %d, proposer: %s", epochVoter.Epoch, epochVoter.Proposer)
 		return
 	}
 
 	// 2. check if there is a sig in progress
 	if w.txBroadcastStatus {
-		log.Debug("WalletServer execWithdrawSig ignore, there is a sig")
+		log.Debug("WalletServer handleTxBroadcast ignore, there is a broadcast in progress")
 		return
 	}
 	if l2Info.LatestBtcHeight <= w.txBroadcastFinishBtcHeight+1 {
-		log.Debugf("WalletServer execWithdrawSig ignore, last finish broadcast in this block: %d", w.txBroadcastFinishBtcHeight)
+		log.Debugf("WalletServer handleTxBroadcast ignore, last finish broadcast in this block: %d", w.txBroadcastFinishBtcHeight)
 		return
 	}
 
 	sendOrders, err := w.state.GetSendOrderInitlized()
 	if err != nil {
-		log.Errorf("WalletServer execWithdrawSig error: %v", err)
+		log.Errorf("WalletServer handleTxBroadcast error: %v", err)
 		return
 	}
 	if len(sendOrders) == 0 {
-		log.Debug("WalletServer execWithdrawSig ignore, no withdraw for sign")
+		log.Debug("WalletServer handleTxBroadcast ignore, no withdraw for broadcast")
 		return
 	}
 
 	privKeyBytes, err := hex.DecodeString(config.AppConfig.FireblocksPrivKey)
 	if err != nil {
-		log.Errorf("WalletServer execWithdrawSig decode privKey error: %v", err)
+		log.Errorf("WalletServer handleTxBroadcast decode privKey error: %v", err)
 	}
 	privKey, _ := btcec.PrivKeyFromBytes(privKeyBytes)
 
 	for _, sendOrder := range sendOrders {
 		tx, err := types.DeserializeTransaction(sendOrder.NoWitnessTx)
 		if err != nil {
-			log.Errorf("WalletServer execWithdrawSig deserialize tx error: %v", err)
+			log.Errorf("WalletServer handleTxBroadcast deserialize tx error: %v", err)
 			return
 		}
 
 		utxos, err := w.state.GetUtxoByOrderId(sendOrder.OrderId)
 		if err != nil {
-			log.Errorf("WalletServer execWithdrawSig get utxos error: %v", err)
+			log.Errorf("WalletServer handleTxBroadcast get utxos error: %v", err)
 			continue
 		}
 
 		// sign the transaction
 		err = SignTransactionByPrivKey(privKey, tx, utxos, types.GetBTCNetwork(config.AppConfig.BTCNetworkType))
 		if err != nil {
-			log.Errorf("WalletServer execWithdrawSig sign tx error: %v", err)
+			log.Errorf("WalletServer handleTxBroadcast sign tx error: %v", err)
 			continue
 		}
 
 		// broadcast the transaction
 		txHash, err := w.btcClient.SendRawTransaction(tx, false)
 		if err != nil {
-			log.Errorf("WalletServer execWithdrawSig broadcast tx error: %v", err)
+			log.Errorf("WalletServer handleTxBroadcast broadcast tx error: %v", err)
 			continue
 		}
 
 		// update sendOrder status to pending
 		err = w.state.UpdateSendOrderPending(txHash.String())
 		if err != nil {
-			log.Errorf("WalletServer execWithdrawSig update sendOrder status error: %v", err)
+			log.Errorf("WalletServer handleTxBroadcast update sendOrder status error: %v", err)
 			continue
 		}
 	}

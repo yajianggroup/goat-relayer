@@ -87,7 +87,7 @@ func (w *WalletServer) Start(ctx context.Context) {
 	go w.blockScanLoop(ctx)
 	go w.depositLoop(ctx)
 	go w.withdrawLoop(ctx)
-	go w.withdrawProcessLoop(ctx)
+	go w.txBroadcastLoop(ctx)
 
 	log.Info("WalletServer started.")
 
