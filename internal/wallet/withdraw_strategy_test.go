@@ -188,3 +188,34 @@ func TestSignTransactionByPrivKey(t *testing.T) {
 	err = wallet.SignTransactionByPrivKey(privKey, tx, []*db.Utxo{utxo1, utxo2}, &chaincfg.RegressionNetParams)
 	require.NoError(t, err)
 }
+
+// Test GenerateRawMeessageToFireblocks function
+func TestGenerateRawMeessageToFireblocks(t *testing.T) {
+	nowitnessHex := "01000000029C1E3B925508BFDA1EA5420062310BC05194174DD88A2C0A081E4C3F48DAE4FE0000000000FFFFFFFFB085207198C6D04687B8A1446DE9CC22DCC74F320B0AFA60E8A1415BC1FF82CD0000000000FFFFFFFF021F47980000000000160014B4278200CDA9E9E4F4FCEB6DFC4A9AED115A0B609FEA7C29010000001600149759ED6AAE6ADE43AE6628A943A39974CD21C5DF00000000"
+	nowitnessBytes, err := hex.DecodeString(nowitnessHex)
+	require.NoError(t, err)
+
+	tx, err := types.DeserializeTransaction(nowitnessBytes)
+	require.NoError(t, err)
+
+	utxo1 := &db.Utxo{
+		ReceiverType: "P2WPKH",
+		Receiver:     "bcrt1qjav7664wdt0y8tnx9z558guewnxjr3wllz2s9u",
+		Amount:       5000000000,
+	}
+	utxo2 := &db.Utxo{
+		ReceiverType: "P2WPKH",
+		Receiver:     "bcrt1qjav7664wdt0y8tnx9z558guewnxjr3wllz2s9u",
+		Amount:       1000000,
+	}
+	utxos := []*db.Utxo{utxo1, utxo2}
+
+	hashes, err := wallet.GenerateRawMeessageToFireblocks(tx, utxos, &chaincfg.RegressionNetParams)
+	require.NoError(t, err)
+
+	require.Equal(t, len(utxos), len(hashes))
+
+	for i, hash := range hashes {
+		t.Logf("UTXO %d hash: %s", i, hex.EncodeToString(hash))
+	}
+}

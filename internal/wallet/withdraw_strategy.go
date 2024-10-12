@@ -455,4 +455,78 @@ func SignTransactionByPrivKey(privKey *btcec.PrivateKey, tx *wire.MsgTx, utxos [
 	return nil
 }
 
-// TODO sign with Fireblocks
+// GenerateRawMeessageToFireblocks generate the raw message to fireblocks
+func GenerateRawMeessageToFireblocks(tx *wire.MsgTx, utxos []*db.Utxo, net *chaincfg.Params) ([][]byte, error) {
+	hashes := make([][]byte, len(utxos)) // store the hash of each input
+
+	for i, utxo := range utxos {
+		log.Debugf("GenerateHashForTSSSignatures utxo: %+v", utxo)
+		var pkScript []byte
+
+		switch utxo.ReceiverType {
+		// P2PKH
+		case types.WALLET_TYPE_P2PKH:
+			// P2PKH uncompressed address
+			addr, err := btcutil.DecodeAddress(utxo.Receiver, net)
+			if err != nil {
+				return nil, err
+			}
+			pkScript, err = txscript.PayToAddrScript(addr)
+			if err != nil {
+				return nil, err
+			}
+
+			// calculate the hash of P2PKH
+			hash, err := txscript.CalcSignatureHash(pkScript, txscript.SigHashAll, tx, i)
+			if err != nil {
+				return nil, err
+			}
+			hashes[i] = hash
+
+		// P2WPKH
+		case types.WALLET_TYPE_P2WPKH:
+			// P2WPKH needs witness data
+			addr, err := btcutil.DecodeAddress(utxo.Receiver, net)
+			if err != nil {
+				return nil, err
+			}
+			pkScript, err = txscript.PayToAddrScript(addr)
+			if err != nil {
+				return nil, err
+			}
+
+			// generate the PrevOutputFetcher for CalcWitnessSigHash
+			inputFetcher := txscript.NewCannedPrevOutputFetcher(pkScript, utxo.Amount)
+
+			// calculate the hash of P2WPKH
+			hash, err := txscript.CalcWitnessSigHash(pkScript, txscript.NewTxSigHashes(tx, inputFetcher), txscript.SigHashAll, tx, i, utxo.Amount)
+			if err != nil {
+				return nil, err
+			}
+			hashes[i] = hash
+
+		// P2WSH
+		case types.WALLET_TYPE_P2WSH:
+			// P2WSH needs subScript
+			// assume subScript is known
+			prevPkScript, err := txscript.NewScriptBuilder().AddOp(txscript.OP_0).AddData(utxo.SubScript).Script()
+			if err != nil {
+				return nil, err
+			}
+
+			inputFetcher := txscript.NewCannedPrevOutputFetcher(prevPkScript, utxo.Amount)
+
+			// calculate the hash of P2WSH
+			hash, err := txscript.CalcWitnessSigHash(utxo.SubScript, txscript.NewTxSigHashes(tx, inputFetcher), txscript.SigHashAll, tx, i, utxo.Amount)
+			if err != nil {
+				return nil, err
+			}
+			hashes[i] = hash
+
+		default:
+			return nil, fmt.Errorf("unknown UTXO type: %s", utxo.ReceiverType)
+		}
+	}
+
+	return hashes, nil
+}
