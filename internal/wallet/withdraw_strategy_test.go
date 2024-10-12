@@ -1,9 +1,11 @@
 package wallet_test
 
 import (
+	"encoding/hex"
 	"fmt"
 	"testing"
 
+	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
@@ -12,6 +14,7 @@ import (
 	"github.com/goatnetwork/goat-relayer/internal/types"
 	"github.com/goatnetwork/goat-relayer/internal/wallet"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Test ConsolidateSmallUTXOs function
@@ -154,4 +157,34 @@ func TestCreateRawTransaction(t *testing.T) {
 	assert.Error(t, err)
 	assert.Equal(t, uint(1), dustWithdraw) // the ID of the withdrawal with the small amount
 	assert.EqualError(t, err, fmt.Sprintf("withdrawal amount too small after fee deduction: %d", withdrawals[0].Amount-1000/3))
+}
+
+// Test SignTransactionByPrivKey function
+func TestSignTransactionByPrivKey(t *testing.T) {
+	privKeyHex := "e9ccd0ec6bb77c263dc46c0f81962c0b378a67befe089e90ef81e96a4a4c5bc5"
+	privKeyBytes, err := hex.DecodeString(privKeyHex)
+	require.NoError(t, err)
+	privKey, _ := btcec.PrivKeyFromBytes(privKeyBytes)
+
+	nowitnessHex := "01000000029C1E3B925508BFDA1EA5420062310BC05194174DD88A2C0A081E4C3F48DAE4FE0000000000FFFFFFFFB085207198C6D04687B8A1446DE9CC22DCC74F320B0AFA60E8A1415BC1FF82CD0000000000FFFFFFFF021F47980000000000160014B4278200CDA9E9E4F4FCEB6DFC4A9AED115A0B609FEA7C29010000001600149759ED6AAE6ADE43AE6628A943A39974CD21C5DF00000000"
+	nowitnessBytes, err := hex.DecodeString(nowitnessHex)
+	require.NoError(t, err)
+
+	tx, err := types.DeserializeTransaction(nowitnessBytes)
+	require.NoError(t, err)
+
+	utxo1 := &db.Utxo{
+		ReceiverType: "P2WPKH",
+		Receiver:     "bcrt1qjav7664wdt0y8tnx9z558guewnxjr3wllz2s9u",
+		Amount:       5000000000,
+	}
+	utxo2 := &db.Utxo{
+		ReceiverType: "P2WPKH",
+		Receiver:     "bcrt1qjav7664wdt0y8tnx9z558guewnxjr3wllz2s9u",
+		Amount:       1000000,
+	}
+
+	// sign transaction
+	err = wallet.SignTransactionByPrivKey(privKey, tx, []*db.Utxo{utxo1, utxo2}, &chaincfg.RegressionNetParams)
+	require.NoError(t, err)
 }
