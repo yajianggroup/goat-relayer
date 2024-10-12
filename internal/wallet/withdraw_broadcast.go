@@ -48,14 +48,14 @@ func (w *WalletServer) execWithdrawSig() {
 		return
 	}
 
-	w.sigMu.Lock()
-	defer w.sigMu.Unlock()
+	w.txBroadcastMu.Lock()
+	defer w.txBroadcastMu.Unlock()
 
 	epochVoter := w.state.GetEpochVoter()
 	if epochVoter.Proposer != config.AppConfig.RelayerAddress {
 		// do not clean immediately
-		if w.execWithdrawStatus && l2Info.Height > epochVoter.Height+1 {
-			w.execWithdrawStatus = false
+		if w.txBroadcastStatus && l2Info.Height > epochVoter.Height+1 {
+			w.txBroadcastStatus = false
 			// clean process, role changed, remove all status "create", "aggregating"
 			w.cleanWithdrawProcess()
 		}
@@ -64,12 +64,12 @@ func (w *WalletServer) execWithdrawSig() {
 	}
 
 	// 2. check if there is a sig in progress
-	if !w.execWithdrawStatus {
-		log.Debug("WalletServer execWithdrawSig ignore, there is no sig")
+	if w.txBroadcastStatus {
+		log.Debug("WalletServer execWithdrawSig ignore, there is a sig")
 		return
 	}
-	if l2Info.LatestBtcHeight <= w.execWithdrawFinishBtcHeight+2 {
-		log.Debug("WalletServer execWithdrawSig ignore, last finish sig in 2 blocks")
+	if l2Info.LatestBtcHeight <= w.txBroadcastFinishBtcHeight+1 {
+		log.Debugf("WalletServer execWithdrawSig ignore, last finish broadcast in this block: %d", w.txBroadcastFinishBtcHeight)
 		return
 	}
 

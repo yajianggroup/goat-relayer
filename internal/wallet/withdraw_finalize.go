@@ -30,73 +30,65 @@ func (w *WalletServer) finalizeWithdrawSig() {
 		return
 	}
 
-	w.sigMu.Lock()
-	defer w.sigMu.Unlock()
+	w.finalizeWithdrawMu.Lock()
+	defer w.finalizeWithdrawMu.Unlock()
 
 	epochVoter := w.state.GetEpochVoter()
 	if epochVoter.Proposer != config.AppConfig.RelayerAddress {
 		// do not clean immediately
-		if w.sigStatus && l2Info.Height > epochVoter.Height+1 {
-			w.sigStatus = false
+		if w.finalizeWithdrawStatus && l2Info.Height > epochVoter.Height+1 {
+			w.finalizeWithdrawStatus = false
 			// clean process, role changed, remove all status "create", "aggregating"
-			w.cleanWithdrawProcess()
 		}
 		log.Debugf("WalletServer finalizeWithdrawSig ignore, self is not proposer, epoch: %d, proposer: %s", epochVoter.Epoch, epochVoter.Proposer)
 		return
 	}
 
 	// 2. check if there is a sig in progress
-	if !w.sigStatus {
-		log.Debug("WalletServer finalizeWithdrawSig ignore, there is no sig")
+	if w.finalizeWithdrawStatus {
+		log.Debug("WalletServer finalizeWithdrawSig ignore, there is finalize in progress")
 		return
 	}
-	if l2Info.Height <= w.sigFinishHeight+2 {
-		log.Debug("WalletServer finalizeWithdrawSig ignore, last finish sig in 2 blocks")
+	if l2Info.Height <= w.finalizeWithdrawFinishHeight+2 {
+		log.Debug("WalletServer finalizeWithdrawSig ignore, last finish finalize in 2 blocks")
 		return
 	}
 
-	sendOrders, err := w.state.GetSendOrderProcessed(1)
+	sendOrder, err := w.state.GetLatestSendOrderConfirmed()
 	if err != nil {
 		log.Errorf("WalletServer finalizeWithdrawSig error: %v", err)
 		return
 	}
-	if len(sendOrders) == 0 {
-		log.Debug("WalletServer finalizeWithdrawSig ignore, no withdraw for finalize")
-		return
-	}
 
 	// assemble msg tx
-	for _, sendOrder := range sendOrders {
-		log.Debugf("WalletServer finalizeWithdrawSig sendOrder: %+v", sendOrder)
+	log.Debugf("WalletServer finalizeWithdrawSig sendOrder: %+v", sendOrder)
 
-		btcBlockData, err := w.state.QueryBtcBlockDataByHeight(sendOrder.BtcBlock)
-		if err != nil {
-			log.Errorf("WalletServer finalizeWithdrawSig query btc block data by height error: %v", err)
-			return
-		}
-		txhash, err := chainhash.NewHashFromStr(sendOrder.Txid)
-		if err != nil {
-			log.Errorf("WalletServer finalizeWithdrawSig new hash from str error: %v", err)
-			return
-		}
-		txHashes := make([]string, 0)
-		err = json.Unmarshal([]byte(btcBlockData.TxHashes), &txHashes)
-		if err != nil {
-			return
-		}
-		_, proof, txIndex, err := types.GenerateSPVProof(sendOrder.Txid, txHashes)
-		if err != nil {
-			log.Errorf("WalletServer finalizeWithdrawSig generate spv proof error: %v", err)
-			return
-		}
-		msgSignFinalize := types.MsgSignFinalizeWithdraw{
-			Txid:              txhash[:],
-			BlockNumber:       uint64(sendOrder.BtcBlock),
-			TxIndex:           uint32(txIndex),
-			IntermediateProof: proof,
-			BlockHeader:       btcBlockData.Header,
-		}
-		w.state.EventBus.Publish(state.WithdrawFinalize, msgSignFinalize)
+	btcBlockData, err := w.state.QueryBtcBlockDataByHeight(sendOrder.BtcBlock)
+	if err != nil {
+		log.Errorf("WalletServer finalizeWithdrawSig query btc block data by height error: %v", err)
+		return
 	}
-
+	txhash, err := chainhash.NewHashFromStr(sendOrder.Txid)
+	if err != nil {
+		log.Errorf("WalletServer finalizeWithdrawSig new hash from str error: %v", err)
+		return
+	}
+	txHashes := make([]string, 0)
+	err = json.Unmarshal([]byte(btcBlockData.TxHashes), &txHashes)
+	if err != nil {
+		return
+	}
+	_, proof, txIndex, err := types.GenerateSPVProof(sendOrder.Txid, txHashes)
+	if err != nil {
+		log.Errorf("WalletServer finalizeWithdrawSig generate spv proof error: %v", err)
+		return
+	}
+	msgSignFinalize := types.MsgSignFinalizeWithdraw{
+		Txid:              txhash[:],
+		BlockNumber:       uint64(sendOrder.BtcBlock),
+		TxIndex:           uint32(txIndex),
+		IntermediateProof: proof,
+		BlockHeader:       btcBlockData.Header,
+	}
+	w.state.EventBus.Publish(state.WithdrawFinalize, msgSignFinalize)
 }

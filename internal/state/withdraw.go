@@ -522,19 +522,22 @@ func (s *State) GetSendOrderInitlized() ([]*db.SendOrder, error) {
 	return sendOrders, nil
 }
 
-// GetSendOrderProcessed get deposits for sign
-func (s *State) GetSendOrderProcessed(size int) ([]*db.SendOrder, error) {
+// GetLatestSendOrderConfirmed get confirmed send order
+func (s *State) GetLatestSendOrderConfirmed() (*db.SendOrder, error) {
 	s.walletMu.RLock()
 	defer s.walletMu.RUnlock()
 
 	from := s.walletState.Latest.ID
-	var sendOrders []*db.SendOrder
-	err := s.dbm.GetBtcCacheDB().Where("id > ? and status = ?", from, db.DEPOSIT_STATUS_CONFIRMED).Order("id asc").Limit(size).Find(&sendOrders).Error
+	if s.walletState.Latest.Status == db.ORDER_STATUS_PENDING {
+		from = 0
+	}
+	var sendOrder *db.SendOrder
+	err := s.dbm.GetWalletDB().Where("id = ? and status = ?", from+1, db.ORDER_STATUS_CONFIRMED).First(&sendOrder).Error
 	if err != nil && err != gorm.ErrRecordNotFound {
 		return nil, err
 	}
-	log.Debugf("GetSendOrderProcessed from: %d, sendOrders found: %d", from, len(sendOrders))
-	return sendOrders, nil
+	log.Debugf("GetSendOrderConfirmed from: %d, sendOrder found: %v", from, sendOrder.Txid)
+	return sendOrder, nil
 }
 
 func (s *State) CloseWithdraw(id uint, reason string) error {

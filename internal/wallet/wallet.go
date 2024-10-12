@@ -21,11 +21,17 @@ type WalletServer struct {
 	btcClient *rpcclient.Client
 
 	// after sig, it can start a new sig 2 blocks later
-	sigMu                       sync.Mutex
-	sigStatus                   bool
-	sigFinishHeight             uint64
-	execWithdrawStatus          bool
-	execWithdrawFinishBtcHeight uint64
+	sigMu           sync.Mutex
+	sigStatus       bool
+	sigFinishHeight uint64
+
+	txBroadcastMu              sync.Mutex
+	txBroadcastStatus          bool
+	txBroadcastFinishBtcHeight uint64
+
+	finalizeWithdrawMu           sync.Mutex
+	finalizeWithdrawStatus       bool
+	finalizeWithdrawFinishHeight uint64
 
 	sigDepositMu           sync.Mutex
 	sigDepositStatus       bool

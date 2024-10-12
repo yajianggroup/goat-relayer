@@ -62,6 +62,9 @@ func (w *WalletServer) handleWithdrawSigFailed(event interface{}, reason string)
 	case types.MsgSignSendOrder:
 		log.Infof("Event handleWithdrawSigFailed is of type MsgSignSendOrder, request id %s, reason: %s", e.RequestId, reason)
 		w.sigStatus = false
+	case types.MsgSignFinalizeWithdraw:
+		log.Infof("Event handleWithdrawSigFailed is of type MsgSignFinalizeWithdraw, request id %s, reason: %s", e.RequestId, reason)
+		w.finalizeWithdrawStatus = false
 	default:
 		log.Debug("WalletServer withdrawLoop ignore unsupport type")
 	}
@@ -83,7 +86,7 @@ func (w *WalletServer) handleWithdrawSigFinish(event interface{}) {
 		w.sigFinishHeight = w.state.GetL2Info().Height
 	case types.MsgSignFinalizeWithdraw:
 		log.Infof("Event handleWithdrawSigFinish is of type MsgSignFinalizeWithdraw, request id %s", e.RequestId)
-		w.execWithdrawStatus = false
+		w.finalizeWithdrawStatus = false
 	default:
 		log.Debug("WalletServer withdrawLoop ignore unsupport type")
 	}
