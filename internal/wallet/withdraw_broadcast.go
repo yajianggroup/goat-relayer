@@ -96,7 +96,7 @@ func (w *WalletServer) execWithdrawSig() {
 			return
 		}
 
-		utxos, err := w.state.GetUtxoByTxidOutIndex(tx.TxID(), int(tx.TxIn[0].PreviousOutPoint.Index))
+		utxos, err := w.state.GetUtxoByOrderId(sendOrder.OrderId)
 		if err != nil {
 			log.Errorf("WalletServer execWithdrawSig get utxos error: %v", err)
 			continue

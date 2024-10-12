@@ -254,16 +254,24 @@ func (s *State) AddOrUpdateVout(vout *db.Vout) error {
 	return s.saveVout(vout)
 }
 
-func (s *State) GetUtxoByTxidOutIndex(txid string, outIndex int) ([]*db.Utxo, error) {
+func (s *State) GetUtxoByOrderId(orderId string) (vinUtxos []*db.Utxo, err error) {
 	s.walletMu.RLock()
 	defer s.walletMu.RUnlock()
 
-	var utxos []*db.Utxo
-	err := s.dbm.GetWalletDB().Where("txid=? and out_index=?", txid, outIndex).Find(&utxos).Error
+	vins, err := s.getVinsByOrderId(nil, orderId)
 	if err != nil {
 		return nil, err
 	}
-	return utxos, nil
+	for _, vin := range vins {
+		var utxos []*db.Utxo
+		err = s.dbm.GetWalletDB().Where("txid = ? and out_index = ?", vin.Txid, vin.OutIndex).Find(&utxos).Error
+		if err != nil {
+			return nil, err
+		}
+		vinUtxos = append(vinUtxos, utxos...)
+	}
+
+	return vinUtxos, nil
 }
 
 func (s *State) GetUtxoCanSpend() ([]*db.Utxo, error) {
