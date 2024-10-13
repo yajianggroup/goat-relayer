@@ -169,4 +169,5 @@ type FbOneTimeAddress struct {
 	Tag     string `json:"tag,omitempty"`
 }
 
+// "BLOCKED", "CANCELLED", "REJECTED", "FAILED", "COMPLETED"
 type FbCTRStatus string

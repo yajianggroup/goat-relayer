@@ -4,16 +4,14 @@ import (
 	"crypto"
 	"crypto/rsa"
 	"crypto/sha512"
-	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
-	"encoding/pem"
 	"errors"
-	"fmt"
-	"io/ioutil"
+	"io"
 	"net/http"
 
 	"github.com/goatnetwork/goat-relayer/internal/config"
+	"github.com/goatnetwork/goat-relayer/internal/types"
 	"github.com/golang-jwt/jwt/v5"
 
 	log "github.com/sirupsen/logrus"
@@ -99,21 +97,21 @@ func (s *HTTPServer) handleFireblocksCosignerTxSign(c *gin.Context) {
 		return
 	}
 
-	rsaPubKey, err := s.parseRSAPublicKeyFromPEM(config.AppConfig.FireblocksPubKey)
+	rsaPubKey, err := types.ParseRSAPublicKeyFromPEM(config.AppConfig.FireblocksPubKey)
 	if err != nil {
 		log.Errorf("Cosigner error parsing RSA public key: %v", err)
 		c.String(http.StatusInternalServerError, "Public key parsing error")
 		return
 	}
 
-	rsaPrivKey, err := s.parseRSAPrivateKeyFromPEM(config.AppConfig.FireblocksPrivKey)
+	rsaPrivKey, err := types.ParseRSAPrivateKeyFromPEM(config.AppConfig.FireblocksPrivKey)
 	if err != nil {
 		log.Errorf("Cosigner error parsing RSA private key: %v", err)
 		c.String(http.StatusInternalServerError, "Private key parsing error")
 		return
 	}
 
-	bodyBytes, err := ioutil.ReadAll(c.Request.Body)
+	bodyBytes, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		log.Errorf("Cosigner error read body: %v", err)
 		c.Status(http.StatusInternalServerError)
@@ -169,7 +167,7 @@ func (s *HTTPServer) handleFireblocksCosignerTxSign(c *gin.Context) {
 
 // verifyWebhookSig verify sig from webhook request
 func (s *HTTPServer) verifyWebhookSig(c *gin.Context) ([]byte, error) {
-	body, err := ioutil.ReadAll(c.Request.Body)
+	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		return nil, err
 	}
@@ -186,7 +184,7 @@ func (s *HTTPServer) verifyWebhookSig(c *gin.Context) ([]byte, error) {
 	}
 
 	// Extract pk
-	rsaPub, err := s.parseRSAPublicKeyFromPEM(webhookPkProduction)
+	rsaPub, err := types.ParseRSAPublicKeyFromPEM(webhookPkProduction)
 	if err != nil {
 		return nil, err
 	}
@@ -203,50 +201,4 @@ func (s *HTTPServer) verifyWebhookSig(c *gin.Context) ([]byte, error) {
 		return nil, errors.New("invalid signature")
 	}
 	return body, nil
-}
-
-func (s *HTTPServer) parseRSAPublicKeyFromPEM(pubKeyPEM string) (*rsa.PublicKey, error) {
-	block, _ := pem.Decode([]byte(pubKeyPEM))
-	if block == nil || block.Type != "PUBLIC KEY" {
-		return nil, errors.New("failed to decode PEM block containing public key")
-	}
-
-	parsedKey, err := x509.ParsePKIXPublicKey(block.Bytes)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse public key: %v", err)
-	}
-
-	pubKey, ok := parsedKey.(*rsa.PublicKey)
-	if !ok {
-		return nil, errors.New("not an RSA public key")
-	}
-
-	return pubKey, nil
-}
-
-func (s *HTTPServer) parseRSAPrivateKeyFromPEM(privKeyPEM string) (*rsa.PrivateKey, error) {
-	block, _ := pem.Decode([]byte(privKeyPEM))
-	if block == nil || block.Type != "PRIVATE KEY" && block.Type != "RSA PRIVATE KEY" {
-		return nil, errors.New("failed to decode PEM block containing private key")
-	}
-
-	var parsedKey interface{}
-	var err error
-
-	if block.Type == "PRIVATE KEY" {
-		parsedKey, err = x509.ParsePKCS8PrivateKey(block.Bytes)
-	} else if block.Type == "RSA PRIVATE KEY" {
-		parsedKey, err = x509.ParsePKCS1PrivateKey(block.Bytes)
-	}
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse private key: %v", err)
-	}
-
-	privKey, ok := parsedKey.(*rsa.PrivateKey)
-	if !ok {
-		return nil, errors.New("not an RSA private key")
-	}
-
-	return privKey, nil
 }
