@@ -284,14 +284,19 @@ func (s *State) UpdateSendOrderPending(txid string) error {
 		if order == nil {
 			return nil
 		}
-
+		if order.Status == db.ORDER_STATUS_CONFIRMED || order.Status == db.ORDER_STATUS_PROCESSED || order.Status == db.ORDER_STATUS_CLOSED {
+			return nil
+		}
 		order.Status = db.ORDER_STATUS_PENDING
 		order.UpdatedAt = time.Now()
 		err = s.saveOrder(tx, order)
 		if err != nil {
 			return err
 		}
-
+		err = s.updateOtherStatusByOrder(tx, order.OrderId, db.ORDER_STATUS_PENDING)
+		if err != nil {
+			return err
+		}
 		return nil
 	})
 	return err

@@ -6,7 +6,9 @@ import (
 	"time"
 
 	"github.com/btcsuite/btcd/btcec/v2"
+	"github.com/btcsuite/btcd/btcjson"
 	"github.com/goatnetwork/goat-relayer/internal/config"
+	"github.com/goatnetwork/goat-relayer/internal/db"
 	"github.com/goatnetwork/goat-relayer/internal/types"
 	log "github.com/sirupsen/logrus"
 )
@@ -86,40 +88,57 @@ func (w *WalletServer) handleTxBroadcast() {
 	privKeyBytes, err := hex.DecodeString(config.AppConfig.FireblocksPrivKey)
 	if err != nil {
 		log.Errorf("WalletServer handleTxBroadcast decode privKey error: %v", err)
+		return
 	}
 	privKey, _ := btcec.PrivKeyFromBytes(privKeyBytes)
 
 	for _, sendOrder := range sendOrders {
 		tx, err := types.DeserializeTransaction(sendOrder.NoWitnessTx)
 		if err != nil {
-			log.Errorf("WalletServer handleTxBroadcast deserialize tx error: %v", err)
-			return
+			log.Errorf("WalletServer handleTxBroadcast deserialize tx error: %v, txid: %s", err, sendOrder.Txid)
+			continue
 		}
 
 		utxos, err := w.state.GetUtxoByOrderId(sendOrder.OrderId)
 		if err != nil {
-			log.Errorf("WalletServer handleTxBroadcast get utxos error: %v", err)
+			log.Errorf("WalletServer handleTxBroadcast get utxos error: %v, txid: %s", err, sendOrder.Txid)
 			continue
 		}
 
 		// sign the transaction
 		err = SignTransactionByPrivKey(privKey, tx, utxos, types.GetBTCNetwork(config.AppConfig.BTCNetworkType))
 		if err != nil {
-			log.Errorf("WalletServer handleTxBroadcast sign tx error: %v", err)
+			log.Errorf("WalletServer handleTxBroadcast sign tx error: %v, txid: %s", err, sendOrder.Txid)
 			continue
 		}
 
-		// broadcast the transaction
+		// broadcast the transaction and update sendOrder status
 		txHash, err := w.btcClient.SendRawTransaction(tx, false)
 		if err != nil {
-			log.Errorf("WalletServer handleTxBroadcast broadcast tx error: %v", err)
+			if rpcErr, ok := err.(*btcjson.RPCError); ok {
+				switch rpcErr.Code {
+				case btcjson.ErrRPCTxAlreadyInChain:
+					log.Infof("WalletServer handleTxBroadcast tx already in chain, txid: %s", sendOrder.Txid)
+					if sendOrder.Status == db.ORDER_STATUS_CONFIRMED {
+						continue
+					}
+					err = w.state.UpdateSendOrderConfirmed(sendOrder.Txid)
+					if err != nil {
+						log.Errorf("WalletServer handleTxBroadcast update sendOrder status error: %v, txid: %s", err, sendOrder.Txid)
+					}
+					continue
+				default:
+					log.Errorf("WalletServer handleTxBroadcast broadcast tx error: %v, txid: %s", rpcErr, sendOrder.Txid)
+				}
+			}
 			continue
 		}
+		log.Infof("WalletServer handleTxBroadcast tx broadcast success, txid: %s", txHash.String())
 
 		// update sendOrder status to pending
 		err = w.state.UpdateSendOrderPending(txHash.String())
 		if err != nil {
-			log.Errorf("WalletServer handleTxBroadcast update sendOrder status error: %v", err)
+			log.Errorf("WalletServer handleTxBroadcast update sendOrder status error: %v, txid: %s", err, sendOrder.Txid)
 			continue
 		}
 	}
