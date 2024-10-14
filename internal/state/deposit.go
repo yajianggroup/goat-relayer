@@ -11,6 +11,14 @@ import (
 	"gorm.io/gorm"
 )
 
+// UpdateDepositState update the DepositState from memory
+func (s *State) UpdateDepositState(deposits []*db.Deposit) {
+	s.depositMu.Lock()
+	defer s.depositMu.Unlock()
+
+	s.depositState.UnconfirmQueue = deposits
+}
+
 /*
 AddUnconfirmDeposit
 when utxo scanner detected a new transaction in 1 confirm, save to unconfirmed,

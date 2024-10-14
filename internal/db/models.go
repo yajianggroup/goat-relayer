@@ -132,7 +132,7 @@ type SendOrder struct {
 	OrderId     string    `gorm:"not null;uniqueIndex" json:"order_id"`
 	Proposer    string    `gorm:"not null" json:"proposer"`
 	Amount      uint64    `gorm:"not null" json:"amount"` // BTC precision up to 8 decimal places
-	TxPrice     uint64    `gorm:"not null" json:"tx_price"`
+	TxPrice     uint64    `gorm:"not null;index:sendorder_txprice_index" json:"tx_price"`
 	Status      string    `gorm:"not null;index:sendorder_status_index" json:"status"`        // "aggregating", "init", "signing", "pending", "rbf-request", "unconfirm", "confirmed", "processed", "closed" - means not in use, should rollback withdraw, vin, vout
 	OrderType   string    `gorm:"not null;index:sendorder_ordertype_index" json:"order_type"` // "withdrawal", "consolidation"
 	BtcBlock    uint64    `gorm:"not null" json:"btc_block"`                                  // BTC block height

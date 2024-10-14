@@ -9,6 +9,23 @@ import (
 	"gorm.io/gorm"
 )
 
+type WithdrawStateStore interface {
+	CleanProcessingWithdraw() error
+	CloseWithdraw(id uint, reason string) error
+	CreateWithdrawal(address string, block, id, txPrice, amount uint64) error
+	CreateSendOrder(order *db.SendOrder, selectedUtxos []*db.Utxo, selectedWithdraws []*db.Withdraw, vins []*db.Vin, vouts []*db.Vout, isProposer bool) error
+	RecoverSendOrder(order *db.SendOrder, vins []*db.Vin, vouts []*db.Vout, withdrawIds []uint64) error
+	UpdateWithdrawInitialized(txid string) error
+	UpdateWithdrawFinalized(txid string) error
+	UpdateWithdrawReplace(id, txPrice uint64) error
+	UpdateWithdrawCancel(id uint64) error
+	UpdateSendOrderPending(txid string) error
+	UpdateSendOrderConfirmed(txid string) error
+	GetWithdrawsCanStart() ([]*db.Withdraw, error)
+	GetSendOrderInitlized() ([]*db.SendOrder, error)
+	GetLatestSendOrderConfirmed() (*db.SendOrder, error)
+}
+
 // CreateWithdrawal, when a new withdrawal request is detected, save to unconfirmed
 //
 // Parameters:

@@ -11,6 +11,19 @@ import (
 	"gorm.io/gorm"
 )
 
+type WalletStateStore interface {
+	UpdateUtxoStatusProcessed(txid string, out int) error
+	UpdateUtxoStatusSpent(txid string, out int, btcBlock uint64) error
+	AddUtxo(utxo *db.Utxo, pk []byte, blockHash string, blockHeight uint64, noWitnessTx []byte, merkleRoot []byte, proofBytes []byte, txIndex int) error
+	UpdateUtxoSubScript(txid string, out uint64, evmAddr string, pk []byte) error
+	GetDepositResultsNeedFetchSubScript() ([]*db.DepositResult, error)
+	AddDepositResult(txid string, out uint64, address string, amount uint64, blockHash string) error
+	AddOrUpdateVin(vin *db.Vin) error
+	AddOrUpdateVout(vout *db.Vout) error
+	GetUtxoByOrderId(orderId string) ([]*db.Utxo, error)
+	GetUtxoCanSpend() ([]*db.Utxo, error)
+}
+
 func (s *State) UpdateUtxoStatusProcessed(txid string, out int) error {
 	s.walletMu.Lock()
 	defer s.walletMu.Unlock()
