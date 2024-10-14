@@ -18,16 +18,12 @@ type WalletServer struct {
 	signer *bls.Signer
 	once   sync.Once
 
-	btcClient *rpcclient.Client
+	orderBroadcaster OrderBroadcaster
 
 	// after sig, it can start a new sig 2 blocks later
 	sigMu           sync.Mutex
 	sigStatus       bool
 	sigFinishHeight uint64
-
-	txBroadcastMu              sync.Mutex
-	txBroadcastStatus          bool
-	txBroadcastFinishBtcHeight uint64
 
 	finalizeWithdrawMu           sync.Mutex
 	finalizeWithdrawStatus       bool
@@ -62,13 +58,14 @@ func NewWalletServer(libp2p *p2p.LibP2PService, st *state.State, signer *bls.Sig
 	if err != nil {
 		log.Fatalf("Failed to start bitcoin client: %v", err)
 	}
+
 	return &WalletServer{
-		libp2p:    libp2p,
-		state:     st,
-		signer:    signer,
-		btcClient: btcClient,
-		depositCh: make(chan interface{}, 100),
-		blockCh:   make(chan interface{}, state.BTC_BLOCK_CHAN_LENGTH),
+		libp2p:           libp2p,
+		state:            st,
+		signer:           signer,
+		orderBroadcaster: NewOrderBroadcaster(btcClient, st),
+		depositCh:        make(chan interface{}, 100),
+		blockCh:          make(chan interface{}, state.BTC_BLOCK_CHAN_LENGTH),
 
 		depositSigFailChan:    make(chan interface{}, 10),
 		depositSigFinishChan:  make(chan interface{}, 10),
@@ -87,7 +84,8 @@ func (w *WalletServer) Start(ctx context.Context) {
 	go w.blockScanLoop(ctx)
 	go w.depositLoop(ctx)
 	go w.withdrawLoop(ctx)
-	go w.txBroadcastLoop(ctx)
+
+	go w.orderBroadcaster.Start(ctx)
 
 	log.Info("WalletServer started.")
 

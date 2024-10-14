@@ -32,6 +32,7 @@ type FireblocksProposal struct {
 }
 
 func NewFireblocksProposal() *FireblocksProposal {
+	// TODO: set Bip44AddressIndex|Bip44Change from config
 	return &FireblocksProposal{
 		Bip44AddressIndex: 0,
 		Bip44Change:       0,
