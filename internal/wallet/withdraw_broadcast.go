@@ -29,7 +29,7 @@ type OrderBroadcaster interface {
 
 type RemoteClient interface {
 	SendRawTransaction(tx *wire.MsgTx, utxos []*db.Utxo, orderType string) (txHash string, exist bool, err error)
-	CheckPending(txid string, externalTxId string) (revert bool, confirmations uint64, err error)
+	CheckPending(txid string, externalTxId string, updatedAt time.Time) (revert bool, confirmations uint64, err error)
 }
 
 type BtcClient struct {
@@ -81,20 +81,34 @@ func (c *BtcClient) SendRawTransaction(tx *wire.MsgTx, utxos []*db.Utxo, orderTy
 	return txid, false, nil
 }
 
-func (c *BtcClient) CheckPending(txid string, externalTxId string) (revert bool, confirmations uint64, err error) {
+func (c *BtcClient) CheckPending(txid string, externalTxId string, updatedAt time.Time) (revert bool, confirmations uint64, err error) {
 	txHash, err := chainhash.NewHashFromStr(txid)
 	if err != nil {
 		return false, 0, fmt.Errorf("new hash from str error: %v, raw txid: %s", err, txid)
 	}
 	txRawResult, err := c.client.GetRawTransactionVerbose(txHash)
 	if err != nil {
+		if rpcErr, ok := err.(*btcjson.RPCError); ok {
+			// If the transaction is not found, handle it based on time
+			switch rpcErr.Code {
+			case btcjson.ErrRPCNoTxInfo:
+				timeDuration := time.Since(updatedAt)
+				// Revert for re-submission if not found in 10 minutes or after 72 hours
+				if (timeDuration >= 10*time.Minute && timeDuration <= 20*time.Minute) || timeDuration > 72*time.Hour {
+					log.Warnf("Transaction not found in %d minutes, reverting for re-submission, txid: %s", timeDuration.Minutes(), txid)
+					return true, 0, nil
+				}
+				// If more than 10 minutes and less than 72 hours, no action required, continue waiting
+				log.Infof("Transaction not found yet, waiting for more time, txid: %s", txid)
+				return false, 0, nil
+			default:
+				return false, 0, fmt.Errorf("get raw transaction verbose error: %v, txid: %s", rpcErr.Error(), txid)
+			}
+		}
+
 		return false, 0, fmt.Errorf("get raw transaction verbose error: %v, txid: %s", err, txid)
 	}
-
-	// TODO:
-	// 1. if tx is no found in 10 minutes, revert to submit again
-	// 2. if tx is no found after 72 hours (perhaps removed from mempool), revert to submit again
-
+	// If the transaction is found, return the number of confirmations
 	return false, txRawResult.Confirmations, nil
 }
 
@@ -114,7 +128,7 @@ func (c *FireblocksClient) SendRawTransaction(tx *wire.MsgTx, utxos []*db.Utxo, 
 	return resp.ID, false, nil
 }
 
-func (c *FireblocksClient) CheckPending(txid string, externalTxId string) (revert bool, confirmations uint64, err error) {
+func (c *FireblocksClient) CheckPending(txid string, externalTxId string, updatedAt time.Time) (revert bool, confirmations uint64, err error) {
 	txDetails, err := c.client.QueryTransaction(externalTxId)
 	if err != nil {
 		return false, 0, fmt.Errorf("get tx details from fireblocks error: %v, txid: %s", err, txid)
@@ -235,18 +249,9 @@ func (b *BaseOrderBroadcaster) broadcastOrders() {
 		if err != nil {
 			if exist {
 				log.Warnf("WalletServer broadcastOrders tx already in chain, txid: %s, err: %v", sendOrder.Txid, err)
-				if sendOrder.Status == db.ORDER_STATUS_CONFIRMED {
-					continue
-				}
-				err = b.state.UpdateSendOrderConfirmed(sendOrder.Txid)
-				if err != nil {
-					log.Errorf("WalletServer broadcastOrders update sendOrder %s status error: %v", sendOrder.Txid, err)
-				}
-				continue
 			}
 			continue
 		}
-		log.Infof("WalletServer broadcastOrders tx broadcast success, txid: %s", txHash)
 
 		// update sendOrder status to pending
 		err = b.state.UpdateSendOrderPending(sendOrder.Txid, txHash)
@@ -254,13 +259,50 @@ func (b *BaseOrderBroadcaster) broadcastOrders() {
 			log.Errorf("WalletServer broadcastOrders update sendOrder status error: %v, txid: %s", err, sendOrder.Txid)
 			continue
 		}
+
+		log.Infof("WalletServer broadcastOrders tx broadcast success, txid: %s", txHash)
 	}
 }
 
 // broadcastPendingCheck is a function that checks the pending status of the orders
 // if it is failed, broadcast it again
 func (b *BaseOrderBroadcaster) broadcastPendingCheck() {
-	// TODO: query pending orders (limit 50 per time)
+	// Assume limit 50 pending orders at a time
+	pendingOrders, err := b.state.GetSendOrderPending(50)
+	if err != nil {
+		log.Errorf("OrderBroadcaster broadcastPendingCheck error getting pending orders: %v", err)
+		return
+	}
+	if len(pendingOrders) == 0 {
+		log.Debug("OrderBroadcaster broadcastPendingCheck no pending orders found")
+		return
+	}
 
-	// TODO: call remoteClient.CheckPending to check the pending status of the orders
+	for _, pendingOrder := range pendingOrders {
+		revert, confirmations, err := b.remoteClient.CheckPending(pendingOrder.Txid, pendingOrder.ExternalTxId, pendingOrder.UpdatedAt)
+		if err != nil {
+			log.Errorf("OrderBroadcaster broadcastPendingCheck check pending error: %v, txid: %s", err, pendingOrder.Txid)
+			continue
+		}
+
+		if revert {
+			log.Warnf("OrderBroadcaster broadcastPendingCheck tx failed, reverting order: %s", pendingOrder.Txid)
+			err := b.state.UpdateSendOrderInitlized(pendingOrder.Txid, pendingOrder.ExternalTxId)
+			if err != nil {
+				log.Errorf("OrderBroadcaster broadcastPendingCheck revert order to re-initialized error: %v, txid: %s", err, pendingOrder.Txid)
+			}
+			continue
+		}
+
+		if confirmations >= uint64(config.AppConfig.BTCConfirmations) {
+			log.Infof("OrderBroadcaster broadcastPendingCheck tx confirmed, txid: %s", pendingOrder.Txid)
+			err := b.state.UpdateSendOrderConfirmed(pendingOrder.Txid)
+			if err != nil {
+				log.Errorf("OrderBroadcaster broadcastPendingCheck update confirmed order error: %v, txid: %s", err, pendingOrder.Txid)
+			}
+			continue
+		}
+
+		log.Debugf("OrderBroadcaster broadcastPendingCheck tx still pending, txid: %s, confirmations: %d", pendingOrder.Txid, confirmations)
+	}
 }

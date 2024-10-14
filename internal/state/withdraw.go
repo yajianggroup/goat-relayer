@@ -19,10 +19,12 @@ type WithdrawStateStore interface {
 	UpdateWithdrawFinalized(txid string) error
 	UpdateWithdrawReplace(id, txPrice uint64) error
 	UpdateWithdrawCancel(id uint64) error
+	UpdateSendOrderInitlized(txid string, externalTxId string) error
 	UpdateSendOrderPending(txid string, externalTxId string) error
 	UpdateSendOrderConfirmed(txid string) error
 	GetWithdrawsCanStart() ([]*db.Withdraw, error)
 	GetSendOrderInitlized() ([]*db.SendOrder, error)
+	GetSendOrderPending(limit int) ([]*db.SendOrder, error)
 	GetLatestSendOrderConfirmed() (*db.SendOrder, error)
 }
 
@@ -287,6 +289,39 @@ func (s *State) UpdateWithdrawCancel(id uint64) error {
 	return s.saveWithdraw(withdraw)
 }
 
+// UpdateSendOrderInitlized
+// when a withdrawal or consolidation request is confirmed, save to confirmed
+func (s *State) UpdateSendOrderInitlized(txid string, externalTxId string) error {
+	s.walletMu.Lock()
+	defer s.walletMu.Unlock()
+
+	err := s.dbm.GetWalletDB().Transaction(func(tx *gorm.DB) error {
+		order, err := s.getOrderByTxid(tx, txid)
+		if err != nil && err != gorm.ErrRecordNotFound {
+			return err
+		}
+		if order == nil {
+			return nil
+		}
+		if order.Status == db.ORDER_STATUS_CONFIRMED || order.Status == db.ORDER_STATUS_PROCESSED || order.Status == db.ORDER_STATUS_CLOSED {
+			return nil
+		}
+		order.Status = db.ORDER_STATUS_INIT
+		order.UpdatedAt = time.Now()
+		order.ExternalTxId = externalTxId
+		err = s.saveOrder(tx, order)
+		if err != nil {
+			return err
+		}
+		err = s.updateOtherStatusByOrder(tx, order.OrderId, db.ORDER_STATUS_INIT)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	return err
+}
+
 // UpdateSendOrderPending
 // when a withdrawal or consolidation request is confirmed, save to confirmed
 func (s *State) UpdateSendOrderPending(txid string, externalTxId string) error {
@@ -340,7 +375,6 @@ func (s *State) UpdateSendOrderConfirmed(txid string) error {
 
 			order.Status = db.ORDER_STATUS_CONFIRMED
 			order.UpdatedAt = time.Now()
-
 			err = s.saveOrder(tx, order)
 			if err != nil {
 				return err
@@ -543,6 +577,19 @@ func (s *State) GetSendOrderInitlized() ([]*db.SendOrder, error) {
 	}
 
 	return sendOrders, nil
+}
+
+func (s *State) GetSendOrderPending(limit int) ([]*db.SendOrder, error) {
+	s.walletMu.RLock()
+	defer s.walletMu.RUnlock()
+
+	var pendingOrders []*db.SendOrder
+	err := s.dbm.GetWalletDB().Where("status = ?", db.ORDER_STATUS_PENDING).Order("id asc").Limit(limit).Find(&pendingOrders).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return pendingOrders, nil
 }
 
 // GetLatestSendOrderConfirmed get confirmed send order
