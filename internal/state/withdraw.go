@@ -19,7 +19,7 @@ type WithdrawStateStore interface {
 	UpdateWithdrawFinalized(txid string) error
 	UpdateWithdrawReplace(id, txPrice uint64) error
 	UpdateWithdrawCancel(id uint64) error
-	UpdateSendOrderPending(txid string) error
+	UpdateSendOrderPending(txid string, externalTxId string) error
 	UpdateSendOrderConfirmed(txid string) error
 	GetWithdrawsCanStart() ([]*db.Withdraw, error)
 	GetSendOrderInitlized() ([]*db.SendOrder, error)
@@ -289,7 +289,7 @@ func (s *State) UpdateWithdrawCancel(id uint64) error {
 
 // UpdateSendOrderPending
 // when a withdrawal or consolidation request is confirmed, save to confirmed
-func (s *State) UpdateSendOrderPending(txid string) error {
+func (s *State) UpdateSendOrderPending(txid string, externalTxId string) error {
 	s.walletMu.Lock()
 	defer s.walletMu.Unlock()
 
@@ -306,6 +306,7 @@ func (s *State) UpdateSendOrderPending(txid string) error {
 		}
 		order.Status = db.ORDER_STATUS_PENDING
 		order.UpdatedAt = time.Now()
+		order.ExternalTxId = externalTxId
 		err = s.saveOrder(tx, order)
 		if err != nil {
 			return err
