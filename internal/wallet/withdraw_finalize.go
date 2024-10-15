@@ -56,8 +56,13 @@ func (w *WalletServer) finalizeWithdrawSig() {
 	}
 
 	sendOrder, err := w.state.GetLatestSendOrderConfirmed()
-	if err != nil || sendOrder == nil {
-		log.Errorf("WalletServer finalizeWithdrawSig error: %v", err)
+	if err != nil {
+		log.Errorf("WalletServer finalizeWithdrawSig get latest confirmed send order error: %v", err)
+		return
+	}
+
+	if sendOrder.Txid == "" {
+		log.Infof("WalletServer finalizeWithdrawSig no confirmed send order")
 		return
 	}
 	log.Debugf("WalletServer finalizeWithdrawSig get latest confirmed send order, sendOrder: %+v", sendOrder)
