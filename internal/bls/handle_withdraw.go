@@ -5,12 +5,12 @@ package bls
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/goatnetwork/goat-relayer/internal/config"
 	"github.com/goatnetwork/goat-relayer/internal/p2p"
 	"github.com/goatnetwork/goat-relayer/internal/state"
 	"github.com/goatnetwork/goat-relayer/internal/types"
+	bitcointypes "github.com/goatnetwork/goat/x/bitcoin/types"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -32,21 +32,13 @@ func (s *Signer) handleSigStartWithdrawFinalize(ctx context.Context, e types.Msg
 	}
 
 	// build sign
-	rpcMsg := &types.MsgSignFinalizeWithdraw{
-		MsgSign: types.MsgSign{
-			RequestId:    e.RequestId,
-			Sequence:     e.Sequence,
-			Epoch:        e.Epoch,
-			IsProposer:   true,
-			VoterAddress: s.address, // proposer address
-			SigData:      nil,
-			CreateTime:   time.Now().Unix(),
-		},
+	rpcMsg := &bitcointypes.MsgFinalizeWithdrawal{
+		Proposer:          e.MsgSign.VoterAddress,
 		Txid:              e.Txid,
-		TxIndex:           e.TxIndex,
 		BlockNumber:       e.BlockNumber,
-		BlockHeader:       e.BlockHeader,
+		TxIndex:           e.TxIndex,
 		IntermediateProof: e.IntermediateProof,
+		BlockHeader:       e.BlockHeader,
 	}
 	err := s.RetrySubmit(ctx, e.RequestId, rpcMsg, config.AppConfig.L2SubmitRetry)
 	if err != nil {

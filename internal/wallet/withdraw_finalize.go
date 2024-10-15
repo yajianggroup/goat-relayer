@@ -2,6 +2,7 @@ package wallet
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/goatnetwork/goat-relayer/internal/config"
@@ -61,9 +62,6 @@ func (w *WalletServer) finalizeWithdrawSig() {
 	}
 	log.Debugf("WalletServer finalizeWithdrawSig get latest confirmed send order, sendOrder: %+v", sendOrder)
 
-	// assemble msg tx
-	log.Debugf("WalletServer finalizeWithdrawSig sendOrder: %+v", sendOrder)
-
 	btcBlockData, err := w.state.QueryBtcBlockDataByHeight(sendOrder.BtcBlock)
 	if err != nil {
 		log.Errorf("WalletServer finalizeWithdrawSig query btc block data by height error: %v", err)
@@ -84,12 +82,19 @@ func (w *WalletServer) finalizeWithdrawSig() {
 		log.Errorf("WalletServer finalizeWithdrawSig generate spv proof error: %v", err)
 		return
 	}
+	requestId := fmt.Sprintf("WITHDRAWFINALIZE:%s:%d", config.AppConfig.RelayerAddress, sendOrder.BtcBlock)
 	msgSignFinalize := types.MsgSignFinalizeWithdraw{
+		MsgSign: types.MsgSign{
+			RequestId:    requestId,
+			VoterAddress: epochVoter.Proposer,
+		},
 		Txid:              txhash[:],
 		BlockNumber:       uint64(sendOrder.BtcBlock),
 		TxIndex:           uint32(txIndex),
 		IntermediateProof: proof,
 		BlockHeader:       btcBlockData.Header,
 	}
-	w.state.EventBus.Publish(state.WithdrawFinalize, msgSignFinalize)
+	w.state.EventBus.Publish(state.SigStart, msgSignFinalize)
+	w.finalizeWithdrawStatus = true
+	log.Infof("P2P publish msgSignFinalize success, request id: %s", requestId)
 }
