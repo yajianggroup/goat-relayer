@@ -21,7 +21,7 @@ type WithdrawStateStore interface {
 	UpdateWithdrawCancel(id uint64) error
 	UpdateSendOrderInitlized(txid string, externalTxId string) error
 	UpdateSendOrderPending(txid string, externalTxId string) error
-	UpdateSendOrderConfirmed(txid string) error
+	UpdateSendOrderConfirmed(txid string, blockHeight uint64) error
 	GetWithdrawsCanStart() ([]*db.Withdraw, error)
 	GetSendOrderInitlized() ([]*db.SendOrder, error)
 	GetSendOrderPending(limit int) ([]*db.SendOrder, error)
@@ -357,7 +357,7 @@ func (s *State) UpdateSendOrderPending(txid string, externalTxId string) error {
 
 // UpdateSendOrderConfirmed
 // when a withdrawal or consolidation request is confirmed, save to confirmed
-func (s *State) UpdateSendOrderConfirmed(txid string) error {
+func (s *State) UpdateSendOrderConfirmed(txid string, btcBlock uint64) error {
 	s.walletMu.Lock()
 	defer s.walletMu.Unlock()
 
@@ -373,6 +373,7 @@ func (s *State) UpdateSendOrderConfirmed(txid string) error {
 				return nil
 			}
 
+			order.BtcBlock = btcBlock
 			order.Status = db.ORDER_STATUS_CONFIRMED
 			order.UpdatedAt = time.Now()
 			err = s.saveOrder(tx, order)
@@ -597,16 +598,12 @@ func (s *State) GetLatestSendOrderConfirmed() (*db.SendOrder, error) {
 	s.walletMu.RLock()
 	defer s.walletMu.RUnlock()
 
-	from := s.walletState.Latest.ID
-	if s.walletState.Latest.Status == db.ORDER_STATUS_PENDING {
-		from = 0
-	}
 	var sendOrder *db.SendOrder
-	err := s.dbm.GetWalletDB().Where("id = ? and status = ?", from+1, db.ORDER_STATUS_CONFIRMED).First(&sendOrder).Error
+	err := s.dbm.GetWalletDB().Where("status = ?", db.ORDER_STATUS_CONFIRMED).First(&sendOrder).Error
 	if err != nil && err != gorm.ErrRecordNotFound {
 		return nil, err
 	}
-	log.Debugf("GetSendOrderConfirmed from: %d, sendOrder found: %v", from, sendOrder.Txid)
+	log.Debugf("GetSendOrderConfirmed sendOrder found: %v", sendOrder.Txid)
 	return sendOrder, nil
 }
 

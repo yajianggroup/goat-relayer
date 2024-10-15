@@ -236,7 +236,7 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 				// Note, if isUtxo && isVin, it is withdrawal||consolidation with change out to self
 				if isWithdrawl || isConsolidation {
 					log.Debugf("Update send order confirmed, txid: %s", tx.TxID())
-					err = w.state.UpdateSendOrderConfirmed(tx.TxID())
+					err = w.state.UpdateSendOrderConfirmed(tx.TxID(), btcBlock.BlockNumber)
 					if err != nil {
 						// this can be ignore, because recovery model order will not exitst
 						log.Debugf("Update send order confirmed %v err %v", tx.TxID(), err)

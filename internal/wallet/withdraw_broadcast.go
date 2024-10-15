@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"strconv"
 	"sync"
 	"time"
 
@@ -29,7 +30,7 @@ type OrderBroadcaster interface {
 
 type RemoteClient interface {
 	SendRawTransaction(tx *wire.MsgTx, utxos []*db.Utxo, orderType string) (txHash string, exist bool, err error)
-	CheckPending(txid string, externalTxId string, updatedAt time.Time) (revert bool, confirmations uint64, err error)
+	CheckPending(txid string, externalTxId string, updatedAt time.Time) (revert bool, confirmations uint64, blockHeight uint64, err error)
 }
 
 type BtcClient struct {
@@ -81,10 +82,14 @@ func (c *BtcClient) SendRawTransaction(tx *wire.MsgTx, utxos []*db.Utxo, orderTy
 	return txid, false, nil
 }
 
-func (c *BtcClient) CheckPending(txid string, externalTxId string, updatedAt time.Time) (revert bool, confirmations uint64, err error) {
+func (c *BtcClient) CheckPending(txid string, externalTxId string, updatedAt time.Time) (revert bool, confirmations uint64, blockHeight uint64, err error) {
 	txHash, err := chainhash.NewHashFromStr(txid)
 	if err != nil {
-		return false, 0, fmt.Errorf("new hash from str error: %v, raw txid: %s", err, txid)
+		return false, 0, 0, fmt.Errorf("new hash from str error: %v, raw txid: %s", err, txid)
+	}
+	_, height, err := c.client.GetBestBlock()
+	if err != nil {
+		return false, 0, 0, fmt.Errorf("get best block error: %v", err)
 	}
 	txRawResult, err := c.client.GetRawTransactionVerbose(txHash)
 	if err != nil {
@@ -96,20 +101,20 @@ func (c *BtcClient) CheckPending(txid string, externalTxId string, updatedAt tim
 				// Revert for re-submission if not found in 10 minutes or after 72 hours
 				if (timeDuration >= 10*time.Minute && timeDuration <= 20*time.Minute) || timeDuration > 72*time.Hour {
 					log.Warnf("Transaction not found in %d minutes, reverting for re-submission, txid: %s", timeDuration.Minutes(), txid)
-					return true, 0, nil
+					return true, 0, 0, nil
 				}
 				// If more than 10 minutes and less than 72 hours, no action required, continue waiting
 				log.Infof("Transaction not found yet, waiting for more time, txid: %s", txid)
-				return false, 0, nil
+				return false, 0, 0, nil
 			default:
-				return false, 0, fmt.Errorf("get raw transaction verbose error: %v, txid: %s", rpcErr.Error(), txid)
+				return false, 0, 0, fmt.Errorf("get raw transaction verbose error: %v, txid: %s", rpcErr.Error(), txid)
 			}
 		}
 
-		return false, 0, fmt.Errorf("get raw transaction verbose error: %v, txid: %s", err, txid)
+		return false, 0, 0, fmt.Errorf("get raw transaction verbose error: %v, txid: %s", err, txid)
 	}
 	// If the transaction is found, return the number of confirmations
-	return false, txRawResult.Confirmations, nil
+	return false, txRawResult.Confirmations, uint64(height), nil
 }
 
 func (c *FireblocksClient) SendRawTransaction(tx *wire.MsgTx, utxos []*db.Utxo, orderType string) (txHash string, exist bool, err error) {
@@ -128,21 +133,26 @@ func (c *FireblocksClient) SendRawTransaction(tx *wire.MsgTx, utxos []*db.Utxo, 
 	return resp.ID, false, nil
 }
 
-func (c *FireblocksClient) CheckPending(txid string, externalTxId string, updatedAt time.Time) (revert bool, confirmations uint64, err error) {
+func (c *FireblocksClient) CheckPending(txid string, externalTxId string, updatedAt time.Time) (revert bool, confirmations uint64, blockHeight uint64, err error) {
 	txDetails, err := c.client.QueryTransaction(externalTxId)
 	if err != nil {
-		return false, 0, fmt.Errorf("get tx details from fireblocks error: %v, txid: %s", err, txid)
+		return false, 0, 0, fmt.Errorf("get tx details from fireblocks error: %v, txid: %s", err, txid)
 	}
 
 	failedStatus := []string{"CANCELLING", "CANCELLED", "BLOCKED", "REJECTED", "FAILED"}
 	// Check if txDetails.Status is in failedStatus
 	for _, status := range failedStatus {
 		if txDetails.Status == status {
-			return true, 0, nil
+			return true, 0, 0, nil
 		}
 	}
 
-	return false, uint64(txDetails.NumOfConfirmations), nil
+	blockHeight, err = strconv.ParseUint(txDetails.BlockInfo.BlockHeight, 10, 64)
+	if err != nil {
+		return false, 0, 0, fmt.Errorf("parse block height error: %v, txid: %s", err, txid)
+	}
+
+	return false, uint64(txDetails.NumOfConfirmations), blockHeight, nil
 }
 
 func NewOrderBroadcaster(btcClient *rpcclient.Client, state *state.State) OrderBroadcaster {
@@ -279,7 +289,7 @@ func (b *BaseOrderBroadcaster) broadcastPendingCheck() {
 	}
 
 	for _, pendingOrder := range pendingOrders {
-		revert, confirmations, err := b.remoteClient.CheckPending(pendingOrder.Txid, pendingOrder.ExternalTxId, pendingOrder.UpdatedAt)
+		revert, confirmations, blockHeight, err := b.remoteClient.CheckPending(pendingOrder.Txid, pendingOrder.ExternalTxId, pendingOrder.UpdatedAt)
 		if err != nil {
 			log.Errorf("OrderBroadcaster broadcastPendingCheck check pending error: %v, txid: %s", err, pendingOrder.Txid)
 			continue
@@ -296,7 +306,7 @@ func (b *BaseOrderBroadcaster) broadcastPendingCheck() {
 
 		if confirmations >= uint64(config.AppConfig.BTCConfirmations) {
 			log.Infof("OrderBroadcaster broadcastPendingCheck tx confirmed, txid: %s", pendingOrder.Txid)
-			err := b.state.UpdateSendOrderConfirmed(pendingOrder.Txid)
+			err := b.state.UpdateSendOrderConfirmed(pendingOrder.Txid, uint64(blockHeight))
 			if err != nil {
 				log.Errorf("OrderBroadcaster broadcastPendingCheck update confirmed order error: %v, txid: %s", err, pendingOrder.Txid)
 			}
