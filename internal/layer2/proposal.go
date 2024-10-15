@@ -193,7 +193,6 @@ func (lis *Layer2Listener) SubmitToConsensus(ctx context.Context, msg interface{
 }
 
 func (lis *Layer2Listener) convertToTypes(msg interface{}) (*bitcointypes.MsgNewDeposits, *bitcointypes.MsgNewBlockHashes, *bitcointypes.MsgInitializeWithdrawal, *bitcointypes.MsgFinalizeWithdrawal, error) {
-	log.Debugf("convertToTypes msg: %v", msg)
 	if msgNewDeposits, ok := msg.(*bitcointypes.MsgNewDeposits); ok {
 		return msgNewDeposits, nil, nil, nil, nil
 	}

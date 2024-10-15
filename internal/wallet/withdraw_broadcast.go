@@ -87,9 +87,9 @@ func (c *BtcClient) CheckPending(txid string, externalTxId string, updatedAt tim
 	if err != nil {
 		return false, 0, 0, fmt.Errorf("new hash from str error: %v, raw txid: %s", err, txid)
 	}
-	_, height, err := c.client.GetBestBlock()
+	bestHeight, err := c.client.GetBlockCount()
 	if err != nil {
-		return false, 0, 0, fmt.Errorf("get best block error: %v", err)
+		return false, 0, 0, fmt.Errorf("getting the latest block height from rpc error: %v", err)
 	}
 	txRawResult, err := c.client.GetRawTransactionVerbose(txHash)
 	if err != nil {
@@ -114,7 +114,7 @@ func (c *BtcClient) CheckPending(txid string, externalTxId string, updatedAt tim
 		return false, 0, 0, fmt.Errorf("get raw transaction verbose error: %v, txid: %s", err, txid)
 	}
 	// If the transaction is found, return the number of confirmations
-	return false, txRawResult.Confirmations, uint64(height), nil
+	return false, txRawResult.Confirmations, uint64(bestHeight), nil
 }
 
 func (c *FireblocksClient) SendRawTransaction(tx *wire.MsgTx, utxos []*db.Utxo, orderType string) (txHash string, exist bool, err error) {
