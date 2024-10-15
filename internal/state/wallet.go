@@ -14,7 +14,7 @@ import (
 type WalletStateStore interface {
 	UpdateUtxoStatusProcessed(txid string, out int) error
 	UpdateUtxoStatusSpent(txid string, out int, btcBlock uint64) error
-	AddUtxo(utxo *db.Utxo, pk []byte, blockHash string, blockHeight uint64, noWitnessTx []byte, merkleRoot []byte, proofBytes []byte, txIndex int) error
+	AddUtxo(utxo *db.Utxo, pk []byte, blockHash string, blockHeight uint64, noWitnessTx []byte, merkleRoot []byte, proofBytes []byte, txIndex int, isDeposit bool) error
 	UpdateUtxoSubScript(txid string, out uint64, evmAddr string, pk []byte) error
 	GetDepositResultsNeedFetchSubScript() ([]*db.DepositResult, error)
 	AddDepositResult(txid string, out uint64, address string, amount uint64, blockHash string) error
