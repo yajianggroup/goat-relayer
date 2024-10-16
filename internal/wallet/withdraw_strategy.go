@@ -1,6 +1,8 @@
 package wallet
 
 import (
+	"bytes"
+	"crypto/sha256"
 	"fmt"
 	"sort"
 
@@ -458,25 +460,41 @@ func SignTransactionByPrivKey(privKey *btcec.PrivateKey, tx *wire.MsgTx, utxos [
 
 		// P2WSH
 		case types.WALLET_TYPE_P2WSH:
-			// P2WSH needs subScript
-			// assume subScript is known
-
-			prevPkScript, err := txscript.NewScriptBuilder().AddOp(txscript.OP_0).AddData(utxo.SubScript).Script()
-			if err != nil {
-				return err
-			}
-			inputFetcher := txscript.NewCannedPrevOutputFetcher(prevPkScript, utxo.Amount)
-			// generate witness signature
-			witnessSig, err := txscript.RawTxInWitnessSignature(tx, txscript.NewTxSigHashes(tx, inputFetcher), 0, utxo.Amount, utxo.SubScript, txscript.SigHashAll, privKey)
+			// Decode the address from the UTXO receiver
+			addr, err := btcutil.DecodeAddress(utxo.Receiver, net)
 			if err != nil {
 				return err
 			}
 
-			// set Witness data
+			// Get the scriptPubKey from the address
+			pkScript, err := txscript.PayToAddrScript(addr)
+			if err != nil {
+				return err
+			}
+
+			// Ensure the hash of the subScript matches the hash in the scriptPubKey
+			subScriptHash := sha256.Sum256(utxo.SubScript)
+			expectedPkScript, err := txscript.NewScriptBuilder().AddOp(txscript.OP_0).AddData(subScriptHash[:]).Script()
+			if err != nil {
+				return err
+			}
+			if !bytes.Equal(pkScript, expectedPkScript) {
+				return fmt.Errorf("subScript hash does not match the scriptPubKey of the UTXO")
+			}
+
+			// Create the inputFetcher with the correct scriptPubKey and amount
+			inputFetcher := txscript.NewCannedPrevOutputFetcher(pkScript, utxo.Amount)
+
+			// Generate the witness signature using the subScript
+			witnessSig, err := txscript.RawTxInWitnessSignature(tx, txscript.NewTxSigHashes(tx, inputFetcher), i, utxo.Amount, utxo.SubScript, txscript.SigHashAll, privKey)
+			if err != nil {
+				return err
+			}
+
+			// Set the witness stack
 			tx.TxIn[i].Witness = wire.TxWitness{
-				witnessSig,                             // signature
-				privKey.PubKey().SerializeCompressed(), // public key
-				utxo.SubScript,                         // sub script
+				witnessSig,     // signature
+				utxo.SubScript, // subScript (redeem script)
 			}
 
 		default:

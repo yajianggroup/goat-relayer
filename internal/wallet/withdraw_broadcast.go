@@ -278,7 +278,10 @@ func (b *BaseOrderBroadcaster) broadcastOrders() {
 		return
 	}
 
-	for _, sendOrder := range sendOrders {
+	log.Infof("OrderBroadcaster broadcastOrders found %d orders to broadcast", len(sendOrders))
+
+	for i, sendOrder := range sendOrders {
+		log.Debugf("OrderBroadcaster broadcastOrders order broadcasting %d/%d, txid: %s", i, len(sendOrders), sendOrder.Txid)
 		tx, err := types.DeserializeTransaction(sendOrder.NoWitnessTx)
 		if err != nil {
 			log.Errorf("OrderBroadcaster broadcastOrders deserialize tx error: %v, txid: %s", err, sendOrder.Txid)
@@ -287,15 +290,16 @@ func (b *BaseOrderBroadcaster) broadcastOrders() {
 
 		utxos, err := b.state.GetUtxoByOrderId(sendOrder.OrderId)
 		if err != nil {
-			log.Errorf("WalletServer broadcastOrders get utxos error: %v, txid: %s", err, sendOrder.Txid)
+			log.Errorf("OrderBroadcaster broadcastOrders get utxos error: %v, txid: %s", err, sendOrder.Txid)
 			continue
 		}
 
 		// broadcast the transaction and update sendOrder status
 		txHash, exist, err := b.remoteClient.SendRawTransaction(tx, utxos, sendOrder.OrderType)
 		if err != nil {
+			log.Errorf("OrderBroadcaster broadcastOrders send raw transaction error: %v, txid: %s", err, sendOrder.Txid)
 			if exist {
-				log.Warnf("WalletServer broadcastOrders tx already in chain, txid: %s, err: %v", sendOrder.Txid, err)
+				log.Warnf("OrderBroadcaster broadcastOrders tx already in chain, txid: %s, err: %v", sendOrder.Txid, err)
 			}
 			continue
 		}
@@ -303,7 +307,7 @@ func (b *BaseOrderBroadcaster) broadcastOrders() {
 		// update sendOrder status to pending
 		err = b.state.UpdateSendOrderPending(sendOrder.Txid, txHash)
 		if err != nil {
-			log.Errorf("WalletServer broadcastOrders update sendOrder status error: %v, txid: %s", err, sendOrder.Txid)
+			log.Errorf("OrderBroadcaster broadcastOrders update sendOrder status error: %v, txid: %s", err, sendOrder.Txid)
 			continue
 		}
 

@@ -608,10 +608,13 @@ func (s *State) GetSendOrderByTxIdOrExternalId(id string) (*db.SendOrder, error)
 	if err != nil && err != gorm.ErrRecordNotFound {
 		return nil, err
 	}
-	if err == gorm.ErrRecordNotFound || sendOrder == nil {
+	if err == gorm.ErrRecordNotFound {
 		sendOrder, err = s.getOrderByExternalId(nil, id)
 		if err != nil && err != gorm.ErrRecordNotFound {
 			return nil, err
+		}
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
 		}
 	}
 	return sendOrder, nil

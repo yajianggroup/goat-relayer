@@ -64,6 +64,21 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 
 				isUtxo, isVin := false, false
 				isWithdrawl, isDeposit, isConsolidation := false, false, false
+
+				// query db send order to check isWithdrawl, isConsolidation
+				sendOrder, err := w.state.GetSendOrderByTxIdOrExternalId(tx.TxID())
+				if err != nil {
+					log.Fatalf("Get send order by txid %s err %v", tx.TxID(), err)
+				}
+				if sendOrder != nil {
+					if sendOrder.OrderType == db.ORDER_TYPE_WITHDRAWAL {
+						isWithdrawl = true
+					}
+					if sendOrder.OrderType == db.ORDER_TYPE_CONSOLIDATION {
+						isConsolidation = true
+					}
+				}
+
 				sender, receiver := "", ""
 				for _, vin := range tx.TxIn {
 					_, addresses, requireSigs, err := txscript.ExtractPkScriptAddrs(vin.SignatureScript, network)
@@ -77,7 +92,7 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 							log.Debugf("Detect coinbase tx")
 							break
 						} else {
-							log.Errorf("Error extracting input address nil")
+							log.Warnf("Error extracting input address nil")
 							continue
 						}
 					}
