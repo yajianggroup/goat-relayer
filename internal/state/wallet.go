@@ -28,7 +28,7 @@ func (s *State) UpdateUtxoStatusProcessed(txid string, out int) error {
 	s.walletMu.Lock()
 	defer s.walletMu.Unlock()
 
-	utxo, err := s.getUtxo(txid, out)
+	utxo, err := s.getUtxo(nil, txid, out)
 	if err != nil {
 		return err
 	}
@@ -40,21 +40,21 @@ func (s *State) UpdateUtxoStatusProcessed(txid string, out int) error {
 		return nil
 	}
 	utxo.Status = db.UTXO_STATUS_PROCESSED
-	return s.saveUtxo(utxo)
+	return s.saveUtxo(nil, utxo)
 }
 
 func (s *State) UpdateUtxoStatusSpent(txid string, out int, btcBlock uint64) error {
 	s.walletMu.Lock()
 	defer s.walletMu.Unlock()
 
-	return s.updateUtxoStatusSpent(txid, out, btcBlock)
+	return s.updateUtxoStatusSpent(nil, txid, out, btcBlock)
 }
 
 func (s *State) AddUtxo(utxo *db.Utxo, pk []byte, blockHash string, blockHeight uint64, noWitnessTx []byte, merkleRoot []byte, proofBytes []byte, txIndex int, isDeposit bool) error {
 	s.walletMu.Lock()
 	defer s.walletMu.Unlock()
 
-	utxoExists, err := s.getUtxo(utxo.Txid, utxo.OutIndex)
+	utxoExists, err := s.getUtxo(nil, utxo.Txid, utxo.OutIndex)
 	if err != nil && err != gorm.ErrRecordNotFound {
 		return err
 	}
@@ -94,7 +94,7 @@ func (s *State) AddUtxo(utxo *db.Utxo, pk []byte, blockHash string, blockHeight 
 		}
 	}
 
-	return s.saveUtxo(utxo)
+	return s.saveUtxo(nil, utxo)
 }
 
 func (s *State) UpdateUtxoSubScript(txid string, out uint64, evmAddr string, pk []byte) error {
@@ -107,12 +107,15 @@ func (s *State) UpdateUtxoSubScript(txid string, out uint64, evmAddr string, pk 
 	}
 
 	err = s.dbm.GetWalletDB().Transaction(func(tx *gorm.DB) error {
-		err := tx.Model(&db.Utxo{}).Where("txid=? and out_index=?", txid, out).Update("sub_script", subScript).Error
-		if err != nil && err != gorm.ErrRecordNotFound {
-			return err
+		result := tx.Model(&db.Utxo{}).Where("txid=? and out_index=?", txid, out).Update("sub_script", subScript)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return gorm.ErrRecordNotFound
 		}
 		err = tx.Model(&db.DepositResult{}).Where("txid=? and tx_out=?", txid, out).Update("need_fetch_sub_script", false).Error
-		if err != nil && err != gorm.ErrRecordNotFound {
+		if err != nil {
 			return err
 		}
 		return nil
@@ -137,10 +140,13 @@ func (s *State) AddDepositResult(txid string, out uint64, address string, amount
 	s.walletMu.Lock()
 	defer s.walletMu.Unlock()
 
-	utxo, err := s.getUtxo(txid, int(out))
+	utxo, err := s.getUtxo(nil, txid, int(out))
 	var needFetchSubScript bool
 	if err != nil && err != gorm.ErrRecordNotFound {
 		return err
+	}
+	if err == gorm.ErrRecordNotFound {
+		needFetchSubScript = true
 	}
 	if err == nil && utxo.ReceiverType == db.WALLET_TYPE_P2WSH && len(utxo.SubScript) == 0 {
 		needFetchSubScript = true
@@ -148,7 +154,7 @@ func (s *State) AddDepositResult(txid string, out uint64, address string, amount
 	if err == nil && (utxo.Status == db.UTXO_STATUS_CONFIRMED || utxo.Status == db.UTXO_STATUS_UNCONFIRM) {
 		utxo.Status = db.UTXO_STATUS_PROCESSED
 		utxo.UpdatedAt = time.Now()
-		err = s.saveUtxo(utxo)
+		err = s.saveUtxo(nil, utxo)
 		if err != nil {
 			return err
 		}
@@ -187,7 +193,7 @@ func (s *State) AddOrUpdateVin(vin *db.Vin) error {
 	defer s.walletMu.Unlock()
 
 	// 1. update utxo status spent
-	err := s.updateUtxoStatusSpent(vin.Txid, vin.OutIndex, vin.BtcHeight)
+	err := s.updateUtxoStatusSpent(nil, vin.Txid, vin.OutIndex, vin.BtcHeight)
 	if err != nil && err != gorm.ErrRecordNotFound {
 		return err
 	}
@@ -332,9 +338,12 @@ func (s *State) getVout(txid string, out int) (*db.Vout, error) {
 	return &vout, nil
 }
 
-func (s *State) getUtxo(txid string, out int) (*db.Utxo, error) {
+func (s *State) getUtxo(tx *gorm.DB, txid string, out int) (*db.Utxo, error) {
+	if tx == nil {
+		tx = s.dbm.GetWalletDB()
+	}
 	var utxo db.Utxo
-	result := s.dbm.GetWalletDB().Where("txid=? and out_index=?", txid, out).Order("id desc").First(&utxo)
+	result := tx.Where("txid=? and out_index=?", txid, out).Order("id desc").First(&utxo)
 	if result.Error != nil {
 		return nil, result.Error
 	}
@@ -356,8 +365,11 @@ func (s *State) getUtxoByStatuses(tx *gorm.DB, orderBy string, statuses ...strin
 	return utxos, nil
 }
 
-func (s *State) saveUtxo(utxo *db.Utxo) error {
-	result := s.dbm.GetWalletDB().Save(utxo)
+func (s *State) saveUtxo(tx *gorm.DB, utxo *db.Utxo) error {
+	if tx == nil {
+		tx = s.dbm.GetWalletDB()
+	}
+	result := tx.Save(utxo)
 	if result.Error != nil {
 		log.Errorf("State saveUTXO error: %v", result.Error)
 		return result.Error
@@ -384,8 +396,12 @@ func (s *State) saveVout(vout *db.Vout) error {
 	return nil
 }
 
-func (s *State) updateUtxoStatusSpent(txid string, out int, btcBlock uint64) error {
-	utxo, err := s.getUtxo(txid, out)
+func (s *State) updateUtxoStatusSpent(tx *gorm.DB, txid string, out int, btcBlock uint64) error {
+	if tx == nil {
+		tx = s.dbm.GetWalletDB()
+	}
+	// if not found, return error
+	utxo, err := s.getUtxo(tx, txid, out)
 	if err != nil {
 		return err
 	}
@@ -396,5 +412,22 @@ func (s *State) updateUtxoStatusSpent(txid string, out int, btcBlock uint64) err
 	utxo.Status = db.UTXO_STATUS_SPENT
 	utxo.SpentBlock = btcBlock
 	utxo.UpdatedAt = time.Now()
-	return s.saveUtxo(utxo)
+	return s.saveUtxo(tx, utxo)
+}
+
+func (s *State) updateUtxoStatusPending(tx *gorm.DB, txid string, out int) error {
+	if tx == nil {
+		tx = s.dbm.GetWalletDB()
+	}
+	utxo, err := s.getUtxo(tx, txid, out)
+	if err != nil {
+		return err
+	}
+	if utxo.Status == db.UTXO_STATUS_SPENT || utxo.Status == db.UTXO_STATUS_PENDING {
+		return nil
+	}
+
+	utxo.Status = db.UTXO_STATUS_PENDING
+	utxo.UpdatedAt = time.Now()
+	return s.saveUtxo(tx, utxo)
 }

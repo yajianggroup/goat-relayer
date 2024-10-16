@@ -93,7 +93,7 @@ func (w *WalletServer) finalizeWithdrawSig() {
 			RequestId:    requestId,
 			VoterAddress: epochVoter.Proposer,
 		},
-		Txid:              txhash[:],
+		Txid:              txhash.CloneBytes(),
 		BlockNumber:       uint64(sendOrder.BtcBlock),
 		TxIndex:           uint32(txIndex),
 		IntermediateProof: proof,

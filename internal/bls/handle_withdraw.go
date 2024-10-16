@@ -42,7 +42,7 @@ func (s *Signer) handleSigStartWithdrawFinalize(ctx context.Context, e types.Msg
 	}
 	err := s.RetrySubmit(ctx, e.RequestId, rpcMsg, config.AppConfig.L2SubmitRetry)
 	if err != nil {
-		log.Errorf("Proposer submit NewDeposit to consensus error, request id: %s, err: %v", e.RequestId, err)
+		log.Errorf("Proposer submit FinalizeWithdrawal to consensus error, request id: %s, err: %v", e.RequestId, err)
 		// feedback SigFailed, deposit should module subscribe it to save UTXO or mark confirm
 		s.state.EventBus.Publish(state.SigFailed, e)
 		return err

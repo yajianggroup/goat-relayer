@@ -53,16 +53,19 @@ func (w *WalletServer) handleWithdrawSigFailed(event interface{}, reason string)
 	w.sigMu.Lock()
 	defer w.sigMu.Unlock()
 
-	if !w.sigStatus {
-		log.Debug("Event handleWithdrawSigFailed ignore, sigStatus is false")
-		return
-	}
-
 	switch e := event.(type) {
 	case types.MsgSignSendOrder:
+		if !w.sigStatus {
+			log.Debug("Event handleWithdrawSigFailed ignore, sigStatus is false")
+			return
+		}
 		log.Infof("Event handleWithdrawSigFailed is of type MsgSignSendOrder, request id %s, reason: %s", e.RequestId, reason)
 		w.sigStatus = false
 	case types.MsgSignFinalizeWithdraw:
+		if !w.finalizeWithdrawStatus {
+			log.Debug("Event handleWithdrawSigFailed ignore, finalizeWithdrawStatus is false")
+			return
+		}
 		log.Infof("Event handleWithdrawSigFailed is of type MsgSignFinalizeWithdraw, request id %s, reason: %s", e.RequestId, reason)
 		w.finalizeWithdrawStatus = false
 	default:
@@ -74,17 +77,20 @@ func (w *WalletServer) handleWithdrawSigFinish(event interface{}) {
 	w.sigMu.Lock()
 	defer w.sigMu.Unlock()
 
-	if !w.sigStatus {
-		log.Debug("Event handleWithdrawSigFinish ignore, sigStatus is false")
-		return
-	}
-
 	switch e := event.(type) {
 	case types.MsgSignSendOrder:
+		if !w.sigStatus {
+			log.Debug("Event handleWithdrawSigFinish ignore, sigStatus is false")
+			return
+		}
 		log.Infof("Event handleWithdrawSigFinish is of type MsgSignSendOrder, request id %s", e.RequestId)
 		w.sigStatus = false
 		w.sigFinishHeight = w.state.GetL2Info().Height
 	case types.MsgSignFinalizeWithdraw:
+		if !w.finalizeWithdrawStatus {
+			log.Debug("Event handleWithdrawSigFinish ignore, finalizeWithdrawStatus is false")
+			return
+		}
 		log.Infof("Event handleWithdrawSigFinish is of type MsgSignFinalizeWithdraw, request id %s", e.RequestId)
 		w.finalizeWithdrawStatus = false
 	default:
