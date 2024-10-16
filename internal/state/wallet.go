@@ -107,7 +107,7 @@ func (s *State) UpdateUtxoSubScript(txid string, out uint64, evmAddr string, pk 
 	}
 
 	err = s.dbm.GetWalletDB().Transaction(func(tx *gorm.DB) error {
-		err := tx.Model(&db.Utxo{}).Where("txid=? and tx_out=?", txid, out).Update("sub_script", subScript).Error
+		err := tx.Model(&db.Utxo{}).Where("txid=? and out_index=?", txid, out).Update("sub_script", subScript).Error
 		if err != nil && err != gorm.ErrRecordNotFound {
 			return err
 		}

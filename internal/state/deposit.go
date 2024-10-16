@@ -43,6 +43,7 @@ func (s *State) AddUnconfirmDeposit(txHash string, rawTx string, evmAddr string,
 		Status:      status,
 		Amount:      amount,
 		UpdatedAt:   time.Now(),
+		CreatedAt:   time.Now(),
 		TxHash:      txHash,
 		RawTx:       rawTx,
 		EvmAddr:     evmAddr,
@@ -98,6 +99,7 @@ func (s *State) SaveConfirmDeposit(txHash string, rawTx string, evmAddr string, 
 			deposit.TxIndex = txIndex
 			deposit.MerkleRoot = merkleRoot
 			deposit.Proof = proofBytes
+			deposit.OutputIndex = outputIndex
 		}
 		deposit.UpdatedAt = time.Now()
 	}
@@ -182,7 +184,7 @@ func (s *State) GetDepositForSign(size int) ([]*db.Deposit, error) {
 
 	from := s.depositState.Latest.ID
 	var deposits []*db.Deposit
-	err := s.dbm.GetBtcCacheDB().Where("id > ? and status = ? and block_hash <> ''", from, db.DEPOSIT_STATUS_CONFIRMED).Order("id asc").Limit(size).Find(&deposits).Error
+	err := s.dbm.GetBtcCacheDB().Where("id > ? and status = ? and block_hash <> '' and tx_index >= 0", from, db.DEPOSIT_STATUS_CONFIRMED).Order("id asc").Limit(size).Find(&deposits).Error
 	if err != nil && err != gorm.ErrRecordNotFound {
 		return nil, err
 	}
@@ -198,12 +200,13 @@ func (s *State) GetCurrentDeposit() (db.Deposit, error) {
 	return s.depositState.Latest, nil
 }
 
-func (s *State) QueryUnConfirmDeposit() ([]db.Deposit, error) {
+func (s *State) QueryUnConfirmDeposit(startId uint64, size int) ([]db.Deposit, error) {
 	s.depositMu.RLock()
 	defer s.depositMu.RUnlock()
 
 	var deposit []db.Deposit
-	err := s.dbm.GetBtcCacheDB().Where("status = ?", db.DEPOSIT_STATUS_UNCONFIRM).Find(&deposit).Error
+	err := s.dbm.GetBtcCacheDB().Where("status = ? and id > ? and created_at > ?",
+		db.DEPOSIT_STATUS_UNCONFIRM, startId, time.Now().Add(-time.Hour*72)).Order("id asc").Limit(size).Find(&deposit).Error
 	if err != nil && err != gorm.ErrRecordNotFound {
 		return nil, err
 	}

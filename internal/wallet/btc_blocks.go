@@ -193,7 +193,11 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 							utxo.Source = db.UTXO_SOURCE_WITHDRAWAL
 						}
 						noWitnessTx, _ := types.SerializeTransactionNoWitness(tx)
-						merkleRoot, proofBytes, txIndex, _ := types.GenerateSPVProof(utxo.Txid, blockTxHashs)
+						merkleRoot, proofBytes, txIndex, err := types.GenerateSPVProof(utxo.Txid, blockTxHashs)
+						if err != nil {
+							log.Errorf("GenerateSPVProof err %v, txid: %s, block tx hashes: %s", err, utxo.Txid, blockTxHashs)
+							continue
+						}
 						err = w.state.AddUtxo(utxo, pubkeyBytes, btcBlock.BlockHash().String(), btcBlock.BlockNumber, noWitnessTx, merkleRoot, proofBytes, txIndex, isDeposit)
 						if err != nil {
 							// TODO if err, update btc height before fatal quit

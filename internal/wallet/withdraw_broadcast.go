@@ -87,38 +87,70 @@ func (c *BtcClient) CheckPending(txid string, externalTxId string, updatedAt tim
 	if err != nil {
 		return false, 0, 0, fmt.Errorf("new hash from str error: %v, raw txid: %s", err, txid)
 	}
+
 	txRawResult, err := c.client.GetRawTransactionVerbose(txHash)
 	if err != nil {
-		if rpcErr, ok := err.(*btcjson.RPCError); ok {
-			// If the transaction is not found, handle it based on time
-			switch rpcErr.Code {
-			case btcjson.ErrRPCNoTxInfo:
-				timeDuration := time.Since(updatedAt)
-				// Revert for re-submission if not found in 10 minutes or after 72 hours
-				if (timeDuration >= 10*time.Minute && timeDuration <= 20*time.Minute) || timeDuration > 72*time.Hour {
-					log.Warnf("Transaction not found in %d minutes, reverting for re-submission, txid: %s", timeDuration.Minutes(), txid)
-					return true, 0, 0, nil
-				}
-				// If more than 10 minutes and less than 72 hours, no action required, continue waiting
-				log.Infof("Transaction not found yet, waiting for more time, txid: %s", txid)
-				return false, 0, 0, nil
-			default:
-				return false, 0, 0, fmt.Errorf("get raw transaction verbose error: %v, txid: %s", rpcErr.Error(), txid)
-			}
-		}
-
-		return false, 0, 0, fmt.Errorf("get raw transaction verbose error: %v, txid: %s", err, txid)
+		return c.handleTxNotFoundError(err, txid, updatedAt)
 	}
+
 	blockHash, err := chainhash.NewHashFromStr(txRawResult.BlockHash)
 	if err != nil {
 		return false, 0, 0, fmt.Errorf("new hash from str error: %v, raw block hash: %s", err, txRawResult.BlockHash)
 	}
+
+	// query block
 	block, err := c.client.GetBlockVerbose(blockHash)
 	if err != nil {
 		return false, 0, 0, fmt.Errorf("get block verbose error: %v, block hash: %s", err, blockHash.String())
 	}
-	// If the transaction is found, return the number of confirmations
+
+	// if found, return confirmations and block height
 	return false, txRawResult.Confirmations, uint64(block.Height), nil
+}
+
+// handleTxNotFoundError handle tx not found error
+func (c *BtcClient) handleTxNotFoundError(err error, txid string, updatedAt time.Time) (bool, uint64, uint64, error) {
+	if rpcErr, ok := err.(*btcjson.RPCError); ok && rpcErr.Code == btcjson.ErrRPCNoTxInfo {
+		timeDuration := time.Since(updatedAt)
+
+		// if tx not found in 10 minutes to 20 minutes or over 72 hours, revert
+		if c.shouldRevert(timeDuration) {
+			return c.checkMempoolAndRevert(txid, timeDuration)
+		}
+
+		// if tx not found in 10 minutes to 20 minutes or over 72 hours, waiting
+		log.Infof("Transaction not found yet, waiting for more time, txid: %s", txid)
+		return false, 0, 0, nil
+	}
+
+	return false, 0, 0, fmt.Errorf("get raw transaction verbose error: %v, txid: %s", err, txid)
+}
+
+// shouldRevert check if revert is needed
+func (c *BtcClient) shouldRevert(timeDuration time.Duration) bool {
+	return (timeDuration >= 10*time.Minute && timeDuration <= 20*time.Minute) || timeDuration > 72*time.Hour
+}
+
+// checkMempoolAndRevert check mempool and revert
+func (c *BtcClient) checkMempoolAndRevert(txid string, timeDuration time.Duration) (bool, uint64, uint64, error) {
+	_, err := c.client.GetMempoolEntry(txid)
+	if err == nil {
+		// if tx in mempool, it is pending
+		log.Infof("Transaction is still in mempool, waiting, txid: %s", txid)
+		return false, 0, 0, nil
+	}
+
+	if rpcErr, ok := err.(*btcjson.RPCError); ok && rpcErr.Code == btcjson.ErrRPCClientMempoolDisabled {
+		log.Warnf("Mempool is disabled, txid: %s", txid)
+		// if mempool is disabled, and time less than 72 hours, record warning
+		if timeDuration <= 72*time.Hour {
+			return false, 0, 0, fmt.Errorf("mempool is disabled, txid: %s", txid)
+		}
+	}
+
+	// if tx not found or mempool is disabled, revert
+	log.Warnf("Transaction not found in %d minutes, reverting for re-submission, txid: %s", uint64(timeDuration.Minutes()), txid)
+	return true, 0, 0, nil
 }
 
 func (c *FireblocksClient) SendRawTransaction(tx *wire.MsgTx, utxos []*db.Utxo, orderType string) (txHash string, exist bool, err error) {
@@ -235,6 +267,7 @@ func (b *BaseOrderBroadcaster) broadcastOrders() {
 		return
 	}
 
+	// TODO: limit the number of orders to broadcast
 	sendOrders, err := b.state.GetSendOrderInitlized()
 	if err != nil {
 		log.Errorf("OrderBroadcaster broadcastOrders error: %v", err)
@@ -281,6 +314,7 @@ func (b *BaseOrderBroadcaster) broadcastOrders() {
 // broadcastPendingCheck is a function that checks the pending status of the orders
 // if it is failed, broadcast it again
 func (b *BaseOrderBroadcaster) broadcastPendingCheck() {
+	// TODO: start id
 	// Assume limit 50 pending orders at a time
 	pendingOrders, err := b.state.GetSendOrderPending(50)
 	if err != nil {

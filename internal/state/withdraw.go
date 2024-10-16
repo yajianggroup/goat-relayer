@@ -593,6 +593,24 @@ func (s *State) GetSendOrderPending(limit int) ([]*db.SendOrder, error) {
 	return pendingOrders, nil
 }
 
+// GetSendOrderByTxIdOrExternalId get send order by txid or external id
+func (s *State) GetSendOrderByTxIdOrExternalId(id string) (*db.SendOrder, error) {
+	s.walletMu.RLock()
+	defer s.walletMu.RUnlock()
+
+	sendOrder, err := s.getOrderByTxid(nil, id)
+	if err != nil && err != gorm.ErrRecordNotFound {
+		return nil, err
+	}
+	if err == gorm.ErrRecordNotFound || sendOrder == nil {
+		sendOrder, err = s.getOrderByExternalId(nil, id)
+		if err != nil && err != gorm.ErrRecordNotFound {
+			return nil, err
+		}
+	}
+	return sendOrder, nil
+}
+
 // GetLatestSendOrderConfirmed get confirmed send order
 func (s *State) GetLatestSendOrderConfirmed() (*db.SendOrder, error) {
 	s.walletMu.RLock()
@@ -671,6 +689,18 @@ func (s *State) getOrderByTxid(tx *gorm.DB, txid string) (*db.SendOrder, error) 
 	}
 	var order db.SendOrder
 	result := tx.Where("txid=?", txid).Order("id DESC").First(&order)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return &order, nil
+}
+
+func (s *State) getOrderByExternalId(tx *gorm.DB, externalId string) (*db.SendOrder, error) {
+	if tx == nil {
+		tx = s.dbm.GetWalletDB()
+	}
+	var order db.SendOrder
+	result := tx.Where("external_tx_id=?", externalId).Order("id DESC").First(&order)
 	if result.Error != nil {
 		return nil, result.Error
 	}

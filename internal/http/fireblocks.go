@@ -11,6 +11,7 @@ import (
 	"net/http"
 
 	"github.com/goatnetwork/goat-relayer/internal/config"
+	"github.com/goatnetwork/goat-relayer/internal/db"
 	"github.com/goatnetwork/goat-relayer/internal/types"
 	"github.com/golang-jwt/jwt/v5"
 
@@ -145,11 +146,23 @@ func (s *HTTPServer) handleFireblocksCosignerTxSign(c *gin.Context) {
 
 	log.Infof("Cosigner callback JWT claim received, requestId %s, txId %s", requestId, txId)
 
-	// TODO: check by more fields
-
 	// Sign the response APPROVE|REJECT|RETRY
 	action := "APPROVE"
 	rejectionReason := ""
+
+	// check by more fields
+	sendOrder, err := s.state.GetSendOrderByTxIdOrExternalId(txId)
+	if err != nil {
+		log.Errorf("Cosigner callback get send order error: %v", err)
+		action = "RETRY"
+		rejectionReason = "read db error"
+	} else if sendOrder == nil {
+		action = "REJECT"
+		rejectionReason = "send order not found"
+	} else if sendOrder.Status != db.ORDER_STATUS_INIT && sendOrder.Status != db.ORDER_STATUS_PENDING {
+		action = "REJECT"
+		rejectionReason = "send order status not expected, current status: " + sendOrder.Status
+	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodRS256, jwt.MapClaims{
 		"action":          action,

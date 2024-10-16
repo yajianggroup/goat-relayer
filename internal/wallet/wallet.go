@@ -18,6 +18,7 @@ type WalletServer struct {
 	signer *bls.Signer
 	once   sync.Once
 
+	depositProcessor DepositProcessor
 	orderBroadcaster OrderBroadcaster
 
 	// after sig, it can start a new sig 2 blocks later
@@ -29,16 +30,7 @@ type WalletServer struct {
 	finalizeWithdrawStatus       bool
 	finalizeWithdrawFinishHeight uint64
 
-	sigDepositMu           sync.Mutex
-	sigDepositStatus       bool
-	sigDepositFinishHeight uint64
-
-	depositCh chan interface{}
-	blockCh   chan interface{}
-
-	depositSigFailChan    chan interface{}
-	depositSigFinishChan  chan interface{}
-	depositSigTimeoutChan chan interface{}
+	blockCh chan interface{}
 
 	withdrawSigFailChan    chan interface{}
 	withdrawSigFinishChan  chan interface{}
@@ -63,13 +55,9 @@ func NewWalletServer(libp2p *p2p.LibP2PService, st *state.State, signer *bls.Sig
 		libp2p:           libp2p,
 		state:            st,
 		signer:           signer,
+		depositProcessor: NewDepositProcessor(btcClient, st),
 		orderBroadcaster: NewOrderBroadcaster(btcClient, st),
-		depositCh:        make(chan interface{}, 100),
 		blockCh:          make(chan interface{}, state.BTC_BLOCK_CHAN_LENGTH),
-
-		depositSigFailChan:    make(chan interface{}, 10),
-		depositSigFinishChan:  make(chan interface{}, 10),
-		depositSigTimeoutChan: make(chan interface{}, 10),
 
 		withdrawSigFailChan:    make(chan interface{}, 10),
 		withdrawSigFinishChan:  make(chan interface{}, 10),
@@ -79,12 +67,11 @@ func NewWalletServer(libp2p *p2p.LibP2PService, st *state.State, signer *bls.Sig
 
 func (w *WalletServer) Start(ctx context.Context) {
 	w.state.EventBus.Subscribe(state.BlockScanned, w.blockCh)
-	w.state.EventBus.Subscribe(state.DepositReceive, w.depositCh)
 
 	go w.blockScanLoop(ctx)
-	go w.depositLoop(ctx)
 	go w.withdrawLoop(ctx)
 
+	go w.depositProcessor.Start(ctx)
 	go w.orderBroadcaster.Start(ctx)
 
 	log.Info("WalletServer started.")
@@ -98,11 +85,6 @@ func (w *WalletServer) Start(ctx context.Context) {
 func (w *WalletServer) Stop() {
 	w.once.Do(func() {
 		close(w.blockCh)
-		close(w.depositCh)
-
-		close(w.depositSigFailChan)
-		close(w.depositSigFinishChan)
-		close(w.depositSigTimeoutChan)
 
 		close(w.withdrawSigFailChan)
 		close(w.withdrawSigFinishChan)
