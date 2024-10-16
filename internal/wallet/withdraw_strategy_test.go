@@ -69,7 +69,7 @@ func TestSelectOptimalUTXOs(t *testing.T) {
 	}
 
 	// valid selection of UTXOs
-	selectedUtxos, totalSelectedAmount, withdrawAmount, changeAmount, estimatedFee, err := wallet.SelectOptimalUTXOs(utxos, 40000000, 100, 1)
+	selectedUtxos, totalSelectedAmount, withdrawAmount, changeAmount, estimatedFee, err := wallet.SelectOptimalUTXOs(utxos, []string{types.WALLET_TYPE_P2WPKH}, 40000000, 100, 1)
 	assert.NoError(t, err)
 	assert.NotNil(t, selectedUtxos)
 	assert.Greater(t, totalSelectedAmount, int64(0))
@@ -78,7 +78,7 @@ func TestSelectOptimalUTXOs(t *testing.T) {
 	assert.Greater(t, estimatedFee, int64(0))
 
 	// when not enough UTXOs
-	_, _, _, _, estimatedFee, err = wallet.SelectOptimalUTXOs(utxos, 150000000, 100, 1)
+	_, _, _, _, estimatedFee, err = wallet.SelectOptimalUTXOs(utxos, []string{types.WALLET_TYPE_P2WPKH}, 150000000, 100, 1)
 	assert.Error(t, err)
 	assert.EqualError(t, err, fmt.Sprintf("not enough utxos to satisfy the withdrawal amount and network fee, withdraw amount: 150000000, selected amount: 115000000, estimated fee: %d", estimatedFee))
 }
@@ -94,15 +94,15 @@ func TestSelectWithdrawals(t *testing.T) {
 	}
 
 	// valid withdrawal selection
-	selectedWithdrawals, withdrawAmount, minTxFee, err := wallet.SelectWithdrawals(withdrawals, 100, 2)
-	t.Logf("SelectWithdrawals returns selectedWithdrawals len %d, withdrawAmount %d, minTxFee %d, err %v", len(selectedWithdrawals), withdrawAmount, minTxFee, err)
+	selectedWithdrawals, receiverTypes, withdrawAmount, minTxFee, err := wallet.SelectWithdrawals(withdrawals, 100, 2, types.GetBTCNetwork("regtest"))
+	t.Logf("SelectWithdrawals returns selectedWithdrawals len %d, receiverTypes %v, withdrawAmount %d, minTxFee %d, err %v", len(selectedWithdrawals), receiverTypes, withdrawAmount, minTxFee, err)
 	assert.NoError(t, err)
 	assert.NotNil(t, selectedWithdrawals)
 	assert.Greater(t, withdrawAmount, int64(0))
 	assert.Greater(t, minTxFee, int64(0))
 
 	// when network fee is too high
-	_, _, _, err = wallet.SelectWithdrawals(withdrawals, 600, 2)
+	_, _, _, _, err = wallet.SelectWithdrawals(withdrawals, 600, 2, types.GetBTCNetwork("regtest"))
 	assert.Error(t, err)
 	assert.EqualError(t, err, "network fee too high, no withdrawals allowed")
 }
@@ -117,15 +117,15 @@ func TestCreateRawTransaction(t *testing.T) {
 
 	// mock Withdrawals for testing
 	withdrawals := []*db.Withdraw{
-		{Amount: 20000000, To: "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", ID: 1},
-		{Amount: 10000000, To: "bc1q254g9ax097y04erwjesrrce8nv3t7k0ajwylwu", ID: 2},
+		{Amount: 20000000, To: "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", TxPrice: 20, ID: 1},
+		{Amount: 10000000, To: "bc1q254g9ax097y04erwjesrrce8nv3t7k0ajwylwu", TxPrice: 10, ID: 2},
 	}
 
 	// bitcoin mainnet params
 	net := &chaincfg.MainNetParams
 
 	// valid transaction creation
-	tx, dustWithdraw, err := wallet.CreateRawTransaction(utxos, withdrawals, "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", 5000000, 1000, net)
+	tx, dustWithdraw, err := wallet.CreateRawTransaction(utxos, withdrawals, "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", 5000000, 1000, 10, net)
 	assert.NoError(t, err)
 	assert.NotNil(t, tx)
 	assert.Equal(t, uint(0), dustWithdraw)
@@ -153,7 +153,7 @@ func TestCreateRawTransaction(t *testing.T) {
 
 	// when withdrawal amount is too small (dust)
 	withdrawals[0].Amount = 500 // less than dust limit
-	_, dustWithdraw, err = wallet.CreateRawTransaction(utxos, withdrawals, "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", 5000000, 1000, net)
+	_, dustWithdraw, err = wallet.CreateRawTransaction(utxos, withdrawals, "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", 5000000, 1000, 10, net)
 	assert.Error(t, err)
 	assert.Equal(t, uint(1), dustWithdraw) // the ID of the withdrawal with the small amount
 	assert.EqualError(t, err, fmt.Sprintf("withdrawal amount too small after fee deduction: %d", withdrawals[0].Amount-1000/3))

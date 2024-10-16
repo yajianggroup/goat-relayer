@@ -313,7 +313,7 @@ func (s *State) UpdateSendOrderInitlized(txid string, externalTxId string) error
 		if err != nil {
 			return err
 		}
-		err = s.updateOtherStatusByOrder(tx, order.OrderId, db.ORDER_STATUS_INIT)
+		err = s.updateOtherStatusByOrder(tx, order.OrderId, db.ORDER_STATUS_INIT, false)
 		if err != nil {
 			return err
 		}
@@ -346,7 +346,7 @@ func (s *State) UpdateSendOrderPending(txid string, externalTxId string) error {
 		if err != nil {
 			return err
 		}
-		err = s.updateOtherStatusByOrder(tx, order.OrderId, db.ORDER_STATUS_PENDING)
+		err = s.updateOtherStatusByOrder(tx, order.OrderId, db.ORDER_STATUS_PENDING, false)
 		if err != nil {
 			return err
 		}
@@ -380,7 +380,7 @@ func (s *State) UpdateSendOrderConfirmed(txid string, btcBlock uint64) error {
 			if err != nil {
 				return err
 			}
-			err = s.updateOtherStatusByOrder(tx, order.OrderId, db.ORDER_STATUS_CONFIRMED)
+			err = s.updateOtherStatusByOrder(tx, order.OrderId, db.ORDER_STATUS_CONFIRMED, false)
 			if err != nil {
 				return err
 			}
@@ -429,7 +429,7 @@ func (s *State) UpdateWithdrawInitialized(txid string) error {
 			if err != nil {
 				return err
 			}
-			err = s.updateOtherStatusByOrder(tx, order.OrderId, db.ORDER_STATUS_INIT)
+			err = s.updateOtherStatusByOrder(tx, order.OrderId, db.ORDER_STATUS_INIT, false)
 			if err != nil {
 				return err
 			}
@@ -464,7 +464,7 @@ func (s *State) UpdateWithdrawFinalized(txid string) error {
 			if err != nil {
 				return err
 			}
-			err = s.updateOtherStatusByOrder(tx, order.OrderId, db.ORDER_STATUS_PROCESSED)
+			err = s.updateOtherStatusByOrder(tx, order.OrderId, db.ORDER_STATUS_PROCESSED, false)
 			if err != nil {
 				return err
 			}
@@ -526,7 +526,13 @@ func (s *State) CleanProcessingWithdraw() error {
 					}
 				}
 
-				err = s.updateOtherStatusByOrder(tx, order.OrderId, db.ORDER_STATUS_CLOSED)
+				err = s.updateOtherStatusByOrder(tx, order.OrderId, db.ORDER_STATUS_CLOSED, true)
+				if err != nil {
+					return err
+				}
+
+				// restore withdraw from aggregating to create
+				err = s.updateWithdrawStatusByOrderId(tx, db.WITHDRAW_STATUS_CREATE, order.OrderId, db.WITHDRAW_STATUS_AGGREGATING)
 				if err != nil {
 					return err
 				}
@@ -779,14 +785,17 @@ func (s *State) saveOrder(tx *gorm.DB, order *db.SendOrder) error {
 	return nil
 }
 
-func (s *State) updateOtherStatusByOrder(tx *gorm.DB, orderId string, status string) error {
+func (s *State) updateOtherStatusByOrder(tx *gorm.DB, orderId string, status string, excludeWithdraw bool) error {
 	if tx == nil {
 		tx = s.dbm.GetWalletDB()
 	}
-	err := tx.Model(&db.Withdraw{}).Where("order_id = ?", orderId).Updates(&db.Withdraw{Status: status, UpdatedAt: time.Now()}).Error
-	if err != nil {
-		log.Errorf("State updateOtherStatusByOrder Withdraw by order id: %s, status: %s, error: %v", orderId, status, err)
-		return err
+	var err error
+	if !excludeWithdraw {
+		err = tx.Model(&db.Withdraw{}).Where("order_id = ?", orderId).Updates(&db.Withdraw{Status: status, UpdatedAt: time.Now()}).Error
+		if err != nil {
+			log.Errorf("State updateOtherStatusByOrder Withdraw by order id: %s, status: %s, error: %v", orderId, status, err)
+			return err
+		}
 	}
 	err = tx.Model(&db.Vin{}).Where("order_id = ?", orderId).Updates(&db.Vin{Status: status, UpdatedAt: time.Now()}).Error
 	if err != nil {
@@ -808,6 +817,18 @@ func (s *State) updateWithdrawStatusByStatuses(tx *gorm.DB, newStatus string, ra
 	err := tx.Model(&db.Withdraw{}).Where("status in (?)", rawStatuses).Updates(&db.Withdraw{Status: newStatus, UpdatedAt: time.Now()}).Error
 	if err != nil {
 		log.Errorf("State updateWithdrawStatusByStatuses Withdraw by raw status: %v, new status: %s, error: %v", rawStatuses, newStatus, err)
+		return err
+	}
+	return nil
+}
+
+func (s *State) updateWithdrawStatusByOrderId(tx *gorm.DB, status string, orderId string, rawStatuses ...string) error {
+	if tx == nil {
+		tx = s.dbm.GetWalletDB()
+	}
+	err := tx.Model(&db.Withdraw{}).Where("order_id = ? and status in (?)", orderId, rawStatuses).Updates(&db.Withdraw{Status: status, UpdatedAt: time.Now()}).Error
+	if err != nil {
+		log.Errorf("State updateOtherStatusByOrder Withdraw by order id: %s, status: %s, error: %v", orderId, status, err)
 		return err
 	}
 	return nil

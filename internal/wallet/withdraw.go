@@ -147,6 +147,24 @@ func (w *WalletServer) initWithdrawSig() {
 	// 4. do consolidation
 	// 5. start bls sig
 
+	// get pubkey
+	pubkey, err := w.state.GetDepositKeyByBtcBlock(0)
+	if err != nil {
+		log.Fatalf("WalletServer get current change or consolidation key by btc height current err %v", err)
+	}
+
+	network := types.GetBTCNetwork(config.AppConfig.BTCNetworkType)
+
+	// get vin
+	pubkeyBytes, err := base64.StdEncoding.DecodeString(pubkey.PubKey)
+	if err != nil {
+		log.Fatalf("Base64 decode pubkey %s err %v", pubkey.PubKey, err)
+	}
+	p2wpkhAddress, err := types.GenerateP2WPKHAddress(pubkeyBytes, network)
+	if err != nil {
+		log.Fatalf("Gen P2WPKH address from pubkey %s err %v", pubkey.PubKey, err)
+	}
+
 	// step 3
 	withdraws, err := w.state.GetWithdrawsCanStart()
 	if err != nil {
@@ -157,7 +175,9 @@ func (w *WalletServer) initWithdrawSig() {
 		log.Infof("WalletServer initWithdrawSig no withdraw from db can start, count: %d", len(withdraws))
 		return
 	}
-	selectedWithdraws, withdrawAmount, actualPrice, err := SelectWithdrawals(withdraws, int64(btcState.NetworkFee), 150)
+
+	networkFee := int64(btcState.NetworkFee)
+	selectedWithdraws, receiverTypes, withdrawAmount, actualPrice, err := SelectWithdrawals(withdraws, networkFee, 150, network)
 	if err != nil {
 		log.Warnf("WalletServer initWithdrawSig SelectWithdrawals error: %v", err)
 		return
@@ -190,24 +210,6 @@ func (w *WalletServer) initWithdrawSig() {
 		}
 	}
 
-	// get pubkey
-	pubkey, err := w.state.GetDepositKeyByBtcBlock(0)
-	if err != nil {
-		log.Fatalf("WalletServer get current change or consolidation key by btc height current err %v", err)
-	}
-
-	network := types.GetBTCNetwork(config.AppConfig.BTCNetworkType)
-
-	// get vin
-	pubkeyBytes, err := base64.StdEncoding.DecodeString(pubkey.PubKey)
-	if err != nil {
-		log.Fatalf("Base64 decode pubkey %s err %v", pubkey.PubKey, err)
-	}
-	p2wpkhAddress, err := types.GenerateP2WPKHAddress(pubkeyBytes, network)
-	if err != nil {
-		log.Fatalf("Gen P2WPKH address from pubkey %s err %v", pubkey.PubKey, err)
-	}
-
 	utxos, err := w.state.GetUtxoCanSpend()
 	if err != nil {
 		log.Errorf("WalletServer initWithdrawSig GetUtxoCanSpend error: %v", err)
@@ -219,7 +221,7 @@ func (w *WalletServer) initWithdrawSig() {
 	if !startBls {
 		log.Infof("WalletServer initWithdrawSig withdraw not start bls, count: %d, next to check consolidation", wCount)
 
-		selectedUtxos, totalAmount, finalAmount, err := ConsolidateSmallUTXOs(utxos, int64(currNetworkFee), 5*1e7, 50, 0)
+		selectedUtxos, totalAmount, finalAmount, err := ConsolidateSmallUTXOs(utxos, int64(currNetworkFee), types.SMALL_UTXO_DEFINE, 50, 0)
 		if err != nil {
 			log.Errorf("WalletServer initWithdrawSig ConsolidateSmallUTXOs error: %v", err)
 			return
@@ -229,7 +231,7 @@ func (w *WalletServer) initWithdrawSig() {
 		startBls = true
 
 		// create SendOrder for selectedUtxos consolidation
-		tx, _, err := CreateRawTransaction(selectedUtxos, nil, p2wpkhAddress.EncodeAddress(), finalAmount, 0, network)
+		tx, _, err := CreateRawTransaction(selectedUtxos, nil, p2wpkhAddress.EncodeAddress(), finalAmount, 0, networkFee, network)
 		if err != nil {
 			log.Errorf("WalletServer initWithdrawSig CreateRawTransaction for consolidation error: %v", err)
 			return
@@ -243,14 +245,14 @@ func (w *WalletServer) initWithdrawSig() {
 		}
 	} else {
 		// create SendOrder for selectedWithdraws
-		selectOptimalUTXOs, totalSelectedAmount, _, changeAmount, estimateFee, err := SelectOptimalUTXOs(utxos, withdrawAmount, actualPrice, len(selectedWithdraws))
+		selectOptimalUTXOs, totalSelectedAmount, _, changeAmount, estimateFee, err := SelectOptimalUTXOs(utxos, receiverTypes, withdrawAmount, actualPrice, len(selectedWithdraws))
 		if err != nil {
 			log.Errorf("WalletServer initWithdrawSig SelectOptimalUTXOs error: %v", err)
 			return
 		}
 		log.Infof("WalletServer initWithdrawSig SelectOptimalUTXOs, totalSelectedAmount: %d, withdrawAmount: %d, changeAmount: %d, selectedUtxos: %d", totalSelectedAmount, withdrawAmount, changeAmount, len(selectOptimalUTXOs))
 
-		tx, dustWithdrawId, err := CreateRawTransaction(selectOptimalUTXOs, selectedWithdraws, p2wpkhAddress.EncodeAddress(), changeAmount, estimateFee, network)
+		tx, dustWithdrawId, err := CreateRawTransaction(selectOptimalUTXOs, selectedWithdraws, p2wpkhAddress.EncodeAddress(), changeAmount, estimateFee, networkFee, network)
 		if err != nil {
 			log.Errorf("WalletServer initWithdrawSig CreateRawTransaction for withdraw error: %v", err)
 			if dustWithdrawId > 0 {

@@ -258,14 +258,14 @@ func (b *BaseOrderBroadcaster) broadcastOrders() {
 	}
 
 	// 2. check if there is a sig in progress
-	if b.txBroadcastStatus {
-		log.Debug("WalletServer broadcastOrders ignore, there is a broadcast in progress")
-		return
-	}
-	if l2Info.LatestBtcHeight <= b.txBroadcastFinishBtcHeight+1 {
-		log.Debugf("WalletServer broadcastOrders ignore, last finish broadcast in this block: %d", b.txBroadcastFinishBtcHeight)
-		return
-	}
+	// if b.txBroadcastStatus {
+	// 	log.Debug("WalletServer broadcastOrders ignore, there is a broadcast in progress")
+	// 	return
+	// }
+	// if l2Info.LatestBtcHeight <= b.txBroadcastFinishBtcHeight+1 {
+	// 	log.Debugf("WalletServer broadcastOrders ignore, last finish broadcast in this block: %d", b.txBroadcastFinishBtcHeight)
+	// 	return
+	// }
 
 	// TODO: limit the number of orders to broadcast
 	sendOrders, err := b.state.GetSendOrderInitlized()

@@ -248,6 +248,10 @@ func (bn *BTCNotifier) checkConfirmations(ctx context.Context) {
 				bn.syncStatus.UpdatedAt = time.Now()
 				bn.cache.db.Save(bn.syncStatus)
 				bn.syncMu.Unlock()
+
+				if newSyncHeight >= confirmedHeight {
+					bn.poller.state.UpdateBtcSyncing(false)
+				}
 			}
 		}
 	}

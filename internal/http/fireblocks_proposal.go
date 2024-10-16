@@ -32,12 +32,19 @@ type FireblocksProposal struct {
 }
 
 func NewFireblocksProposal() *FireblocksProposal {
-	// TODO: set Bip44AddressIndex|Bip44Change from config
+	// use HDWallet 44/1/1/0/0, VaultAccountId:1
+	assetId := "BTC_TEST"
+	if types.GetBTCNetwork(config.AppConfig.BTCNetworkType).Name == "mainnet" {
+		assetId = "BTC"
+	}
 	return &FireblocksProposal{
-		Bip44AddressIndex: 0,
+		Bip44AddressIndex: 1,
 		Bip44Change:       0,
-		DerivationPath:    [5]uint32{44, 0, 0, 0, 0},
-		httpClient:        &http.Client{},
+		DerivationPath:    [5]uint32{44, 1, 1, 0, 0},
+		VaultAccountId:    "1",
+		AssetId:           assetId,
+
+		httpClient: &http.Client{},
 	}
 }
 
