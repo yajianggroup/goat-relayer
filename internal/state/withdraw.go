@@ -487,7 +487,7 @@ func (s *State) UpdateWithdrawFinalized(txid string) error {
 			if err != nil {
 				return err
 			}
-			if order.Status != db.ORDER_STATUS_INIT && order.Status != db.ORDER_STATUS_PENDING {
+			if order.Status != db.ORDER_STATUS_INIT && order.Status != db.ORDER_STATUS_PENDING && order.Status != db.ORDER_STATUS_CONFIRMED {
 				continue
 			}
 
