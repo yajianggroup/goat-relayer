@@ -13,7 +13,6 @@ import (
 	"github.com/cosmos/cosmos-sdk/std"
 	sdktypes "github.com/cosmos/cosmos-sdk/types"
 	bitcointypes "github.com/goatnetwork/goat/x/bitcoin/types"
-	lockingtypes "github.com/goatnetwork/goat/x/locking/types"
 	relayertypes "github.com/goatnetwork/goat/x/relayer/types"
 
 	"github.com/go-errors/errors"
@@ -45,7 +44,6 @@ func makeEncodingConfig() EncodingConfig {
 	std.RegisterInterfaces(interfaceRegistry)
 	relayertypes.RegisterInterfaces(interfaceRegistry)
 	bitcointypes.RegisterInterfaces(interfaceRegistry)
-	lockingtypes.RegisterInterfaces(interfaceRegistry)
 	marshaler := codec.NewProtoCodec(interfaceRegistry)
 
 	return EncodingConfig{
