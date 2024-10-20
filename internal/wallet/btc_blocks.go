@@ -92,7 +92,7 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 							log.Debugf("Detect coinbase tx")
 							break
 						} else {
-							log.Warnf("Error extracting input address nil")
+							log.Debugf("Extracting input address nil, txid: %s", tx.TxID())
 							continue
 						}
 					}
@@ -144,7 +144,7 @@ func (w *WalletServer) blockScanLoop(ctx context.Context) {
 						continue
 					}
 					if len(addresses) == 0 {
-						log.Debugf("Extracting output address nil")
+						log.Debugf("Extracting output address nil, txid: %s", tx.TxID())
 						continue
 					}
 					receiver = addresses[0].EncodeAddress()

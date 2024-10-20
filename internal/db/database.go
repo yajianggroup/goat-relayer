@@ -57,7 +57,7 @@ func (dm *DatabaseManager) initDB() {
 func (dm *DatabaseManager) connectDatabase(dbPath string, dbRef **gorm.DB, dbName string) error {
 	// open database and set WAL mode
 	db, err := gorm.Open(sqlite.Open(dbPath+"?_journal_mode=WAL"), &gorm.Config{
-		Logger: gormlogger.Default.LogMode(gormlogger.Warn),
+		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to connect to %s: %w", dbName, err)

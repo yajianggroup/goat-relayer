@@ -161,7 +161,7 @@ func (s *State) GetBtcBlockForSign(size int) ([]*db.BtcBlock, error) {
 	s.btcHeadMu.RLock()
 	defer s.btcHeadMu.RUnlock()
 
-	from := s.btcHeadState.Latest.Height
+	from := s.GetL2Info().LatestBtcHeight
 	var btcBlocks []*db.BtcBlock
 	result := s.dbm.GetBtcLightDB().Where("height > ?", from).Order("height asc").Limit(size).Find(&btcBlocks)
 	if result.Error != nil {

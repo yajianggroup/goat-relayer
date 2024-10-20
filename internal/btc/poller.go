@@ -277,7 +277,7 @@ func (p *BTCPoller) initSig() {
 		return
 	}
 
-	if blocks[0].Height <= p.lastStartHeight {
+	if blocks[0].Height < p.lastStartHeight {
 		log.Debugf("BTCPoller initSig ignore, btc block height %d smaller than last sig queue start height %d", blocks[0].Height, p.lastStartHeight)
 		return
 	}
