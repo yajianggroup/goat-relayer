@@ -63,7 +63,7 @@ func NewBTCNotifier(client *rpcclient.Client, cache *BTCCache, poller *BTCPoller
 		if err != nil {
 			log.Warnf("New btc notify sync status GetLatestConfirmedBtcBlock error: %v", err)
 		}
-		if confirmedBlock.Height < uint64(syncStatus.ConfirmedHeight) {
+		if confirmedBlock != nil && confirmedBlock.Height < uint64(syncStatus.ConfirmedHeight) {
 			syncStatus.ConfirmedHeight = int64(confirmedBlock.Height)
 			syncStatus.UpdatedAt = time.Now()
 			log.Warnf("New btc notify sync status set confirmed height to %d", confirmedBlock.Height)
