@@ -4,12 +4,14 @@ import (
 	"encoding/hex"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/txscript"
+	"github.com/goatnetwork/goat-relayer/internal/config"
 	"github.com/goatnetwork/goat-relayer/internal/db"
 	"github.com/goatnetwork/goat-relayer/internal/types"
 	"github.com/goatnetwork/goat-relayer/internal/wallet"
@@ -19,6 +21,7 @@ import (
 
 // Test ConsolidateSmallUTXOs function
 func TestConsolidateSmallUTXOs(t *testing.T) {
+	config.AppConfig.BTCMaxNetworkFee = 200
 	// mock UTXOs for testing
 	utxos := []*db.Utxo{
 		{Amount: 20000000, ReceiverType: types.WALLET_TYPE_P2PKH},
@@ -85,16 +88,21 @@ func TestSelectOptimalUTXOs(t *testing.T) {
 
 // Test SelectWithdrawals function
 func TestSelectWithdrawals(t *testing.T) {
+	config.AppConfig.BTCMaxNetworkFee = 500
 	// mock Withdrawals for testing
 	withdrawals := []*db.Withdraw{
-		{Amount: 70000000, TxPrice: 300},
-		{Amount: 50000000, TxPrice: 200},
-		{Amount: 30000000, TxPrice: 100},
-		{Amount: 15000000, TxPrice: 50},
+		{Amount: 70000000, TxPrice: 300, CreatedAt: time.Now().Add(-time.Minute * 20)},
+		{Amount: 50000000, TxPrice: 200, CreatedAt: time.Now().Add(-time.Minute * 20)},
+		{Amount: 30000000, TxPrice: 100, CreatedAt: time.Now().Add(-time.Minute * 20)},
+		{Amount: 15000000, TxPrice: 50, CreatedAt: time.Now().Add(-time.Minute * 20)},
 	}
 
 	// valid withdrawal selection
-	selectedWithdrawals, receiverTypes, withdrawAmount, minTxFee, err := wallet.SelectWithdrawals(withdrawals, 100, 2, types.GetBTCNetwork("regtest"))
+	selectedWithdrawals, receiverTypes, withdrawAmount, minTxFee, err := wallet.SelectWithdrawals(withdrawals, types.BtcNetworkFee{
+		FastestFee:  100,
+		HalfHourFee: 50,
+		HourFee:     20,
+	}, 2, 150, types.GetBTCNetwork("regtest"))
 	t.Logf("SelectWithdrawals returns selectedWithdrawals len %d, receiverTypes %v, withdrawAmount %d, minTxFee %d, err %v", len(selectedWithdrawals), receiverTypes, withdrawAmount, minTxFee, err)
 	assert.NoError(t, err)
 	assert.NotNil(t, selectedWithdrawals)
@@ -102,7 +110,11 @@ func TestSelectWithdrawals(t *testing.T) {
 	assert.Greater(t, minTxFee, int64(0))
 
 	// when network fee is too high
-	_, _, _, _, err = wallet.SelectWithdrawals(withdrawals, 600, 2, types.GetBTCNetwork("regtest"))
+	_, _, _, _, err = wallet.SelectWithdrawals(withdrawals, types.BtcNetworkFee{
+		FastestFee:  600,
+		HalfHourFee: 300,
+		HourFee:     100,
+	}, 2, 150, types.GetBTCNetwork("regtest"))
 	assert.Error(t, err)
 	assert.EqualError(t, err, "network fee too high, no withdrawals allowed")
 }
@@ -160,7 +172,7 @@ func TestCreateRawTransaction(t *testing.T) {
 }
 
 // Test SignTransactionByPrivKey function
-func TestSignTransactionByPrivKey(t *testing.T) {
+func TestSpentP2wpkh(t *testing.T) {
 	privKeyHex := "e9ccd0ec6bb77c263dc46c0f81962c0b378a67befe089e90ef81e96a4a4c5bc5"
 	privKeyBytes, err := hex.DecodeString(privKeyHex)
 	require.NoError(t, err)
@@ -187,6 +199,45 @@ func TestSignTransactionByPrivKey(t *testing.T) {
 	// sign transaction
 	err = wallet.SignTransactionByPrivKey(privKey, tx, []*db.Utxo{utxo1, utxo2}, &chaincfg.RegressionNetParams)
 	require.NoError(t, err)
+}
+
+func TestSpentP2wsh(t *testing.T) {
+	privKeyHex := "e9ccd0ec6bb77c263dc46c0f81962c0b378a67befe089e90ef81e96a4a4c5bc5"
+	privKeyBytes, err := hex.DecodeString(privKeyHex)
+	require.NoError(t, err)
+	privKey, _ := btcec.PrivKeyFromBytes(privKeyBytes)
+
+	noWitnessHex := "01000000014add7aad09a9584b477124474ff29e81b00fda7f43176278e4028e7dac7e74a20000000000ffffffff02c84b000000000000220020adee3cac019d80f80c5cbb368948f89bb90b93e01cb83b30b5f69b3f98fdebd5c84b000000000000160014d210b97931bebefa754ade28ead2c70bee9f1f2700000000"
+	noWitnessBytes, err := hex.DecodeString(noWitnessHex)
+	require.NoError(t, err)
+
+	evmAddress := "29cF29d4b2CD6Db07f6db43243e8E43fE3DC468e"
+	evmAddressBytes, err := hex.DecodeString(evmAddress)
+	require.NoError(t, err)
+
+	tx, err := types.DeserializeTransaction(noWitnessBytes)
+	require.NoError(t, err)
+
+	subScript, err := txscript.NewScriptBuilder().
+		AddData(evmAddressBytes).
+		AddOp(txscript.OP_DROP).
+		AddData(privKey.PubKey().SerializeCompressed()).
+		AddOp(txscript.OP_CHECKSIG).Script()
+	require.NoError(t, err)
+
+	utxo := &db.Utxo{
+		ReceiverType: "P2WSH",
+		Receiver:     "tb1q4hhretqpnkq0srzuhvmgjj8cnwushylqrjurkv9476dnlx8aa02s8r565l",
+		SubScript:    subScript,
+		Amount:       100000,
+	}
+
+	// sign transaction
+	err = wallet.SignTransactionByPrivKey(privKey, tx, []*db.Utxo{utxo}, &chaincfg.TestNet3Params)
+	require.NoError(t, err)
+	txBytes, err := types.SerializeTransaction(tx)
+	assert.NoError(t, err)
+	t.Logf("txBytes: %s", hex.EncodeToString(txBytes))
 }
 
 // Test GenerateRawMeessageToFireblocks function

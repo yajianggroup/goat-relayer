@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/goatnetwork/goat-relayer/internal/db"
+	"github.com/goatnetwork/goat-relayer/internal/types"
 	log "github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 )
@@ -80,13 +81,15 @@ func InitializeState(dbm *db.DatabaseManager) *State {
 			log.Warnf("Failed to load L2Info: %v", err)
 
 			l2Info = db.L2Info{
-				Height:          0,
-				Syncing:         false,
-				Threshold:       "2/3",
-				DepositKey:      "",
-				StartBtcHeight:  0,
-				LatestBtcHeight: 0,
-				UpdatedAt:       time.Now(),
+				Height:           0,
+				Syncing:          false,
+				Threshold:        "2/3",
+				DepositKey:       "",
+				DepositMagic:     []byte{},
+				MinDepositAmount: 1,
+				StartBtcHeight:   0,
+				LatestBtcHeight:  0,
+				UpdatedAt:        time.Now(),
 			}
 		}
 	}()
@@ -181,6 +184,11 @@ func InitializeState(dbm *db.DatabaseManager) *State {
 			Latest:         latestBtcBlock,
 			UnconfirmQueue: unconfirmBtcQueue,
 			SigQueue:       sigBtcQueue,
+			NetworkFee: types.BtcNetworkFee{
+				FastestFee:  0,
+				HalfHourFee: 0,
+				HourFee:     0,
+			},
 		},
 		walletState: WalletState{
 			SendOrderQueue: sendOrderQueue,

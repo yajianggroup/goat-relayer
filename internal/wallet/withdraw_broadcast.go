@@ -16,6 +16,7 @@ import (
 	"github.com/goatnetwork/goat-relayer/internal/config"
 	"github.com/goatnetwork/goat-relayer/internal/db"
 	"github.com/goatnetwork/goat-relayer/internal/http"
+	"github.com/goatnetwork/goat-relayer/internal/p2p"
 	"github.com/goatnetwork/goat-relayer/internal/state"
 	"github.com/goatnetwork/goat-relayer/internal/types"
 	log "github.com/sirupsen/logrus"
@@ -39,15 +40,18 @@ type BtcClient struct {
 
 type FireblocksClient struct {
 	client *http.FireblocksProposal
+	btcRpc *rpcclient.Client
+	state  *state.State
 }
 
 type BaseOrderBroadcaster struct {
 	remoteClient RemoteClient
 	state        *state.State
 
-	txBroadcastMu              sync.Mutex
-	txBroadcastStatus          bool
-	txBroadcastFinishBtcHeight uint64
+	txBroadcastMu sync.Mutex
+	txBroadcastCh chan interface{}
+	// txBroadcastStatus          bool
+	// txBroadcastFinishBtcHeight uint64
 }
 
 var (
@@ -59,7 +63,10 @@ var (
 
 func (c *BtcClient) SendRawTransaction(tx *wire.MsgTx, utxos []*db.Utxo, orderType string) (txHash string, exist bool, err error) {
 	txid := tx.TxHash().String()
-	privKeyBytes, err := hex.DecodeString(config.AppConfig.FireblocksPrivKey)
+	if len(config.AppConfig.FireblocksSecret) == 0 {
+		return txid, false, fmt.Errorf("privKey is not set")
+	}
+	privKeyBytes, err := hex.DecodeString(config.AppConfig.FireblocksSecret)
 	if err != nil {
 		return txid, false, fmt.Errorf("decode privKey error: %v", err)
 	}
@@ -164,6 +171,9 @@ func (c *FireblocksClient) SendRawTransaction(tx *wire.MsgTx, utxos []*db.Utxo, 
 	if err != nil {
 		return txid, false, fmt.Errorf("post raw signing request error: %v", err)
 	}
+	if resp.Code != 0 {
+		return txid, false, fmt.Errorf("post raw signing request error: %v, txid: %s", resp.Message, txid)
+	}
 	log.Debugf("PostRawSigningRequest resp: %+v", resp)
 
 	return resp.ID, false, nil
@@ -183,6 +193,43 @@ func (c *FireblocksClient) CheckPending(txid string, externalTxId string, update
 		}
 	}
 
+	// if tx is completed, broadcast to BTC chain
+	if txDetails.Status == "COMPLETED" {
+		if len(txDetails.SignedMessages) == 0 {
+			log.Errorf("No signed messages found for completed tx, txid: %s, fbId: %s", txid, txDetails.ID)
+			return true, 0, 0, nil
+		}
+		// find the send order
+		sendOrder, err := c.state.GetSendOrderByTxIdOrExternalId(txid)
+		if err != nil {
+			return false, 0, 0, fmt.Errorf("get send order error: %v, txid: %s", err, txid)
+		}
+		// deserialize the tx
+		tx, err := types.DeserializeTransaction(sendOrder.NoWitnessTx)
+		if err != nil {
+			return false, 0, 0, fmt.Errorf("deserialize tx error: %v, txid: %s", err, sendOrder.Txid)
+		}
+		utxos, err := c.state.GetUtxoByOrderId(sendOrder.OrderId)
+		if err != nil {
+			return false, 0, 0, fmt.Errorf("get utxos error: %v, txid: %s", err, sendOrder.Txid)
+		}
+		err = ApplyFireblocksSignaturesToTx(tx, utxos, txDetails.SignedMessages, types.GetBTCNetwork(config.AppConfig.BTCNetworkType))
+		if err != nil {
+			return false, 0, 0, fmt.Errorf("apply fireblocks signatures to tx error: %v, txid: %s", err, txid)
+		}
+		_, err = c.btcRpc.SendRawTransaction(tx, false)
+		if err != nil {
+			if rpcErr, ok := err.(*btcjson.RPCError); ok {
+				switch rpcErr.Code {
+				case btcjson.ErrRPCTxAlreadyInChain:
+					return false, 0, 0, nil
+				}
+			}
+			return false, 0, 0, fmt.Errorf("send raw transaction error: %v, txid: %s", err, txid)
+		}
+		return false, 0, 0, nil
+	}
+
 	blockHeight, err = strconv.ParseUint(txDetails.BlockInfo.BlockHeight, 10, 64)
 	if err != nil {
 		return false, 0, 0, fmt.Errorf("parse block height error: %v, txid: %s", err, txid)
@@ -193,7 +240,8 @@ func (c *FireblocksClient) CheckPending(txid string, externalTxId string, update
 
 func NewOrderBroadcaster(btcClient *rpcclient.Client, state *state.State) OrderBroadcaster {
 	orderBroadcaster := &BaseOrderBroadcaster{
-		state: state,
+		state:         state,
+		txBroadcastCh: make(chan interface{}, 100),
 	}
 	if config.AppConfig.BTCNetworkType == "regtest" {
 		orderBroadcaster.remoteClient = &BtcClient{
@@ -202,6 +250,8 @@ func NewOrderBroadcaster(btcClient *rpcclient.Client, state *state.State) OrderB
 	} else {
 		orderBroadcaster.remoteClient = &FireblocksClient{
 			client: http.NewFireblocksProposal(),
+			btcRpc: btcClient,
+			state:  state,
 		}
 	}
 	return orderBroadcaster
@@ -211,6 +261,7 @@ func NewOrderBroadcaster(btcClient *rpcclient.Client, state *state.State) OrderB
 // check orders pending status, if it is failed, broadcast it again
 func (b *BaseOrderBroadcaster) Start(ctx context.Context) {
 	log.Debug("BaseOrderBroadcaster start")
+	b.state.EventBus.Subscribe(state.SendOrderBroadcasted, b.txBroadcastCh)
 
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
@@ -220,6 +271,17 @@ func (b *BaseOrderBroadcaster) Start(ctx context.Context) {
 		case <-ctx.Done():
 			b.Stop()
 			return
+		case msg := <-b.txBroadcastCh:
+			sendOrder, ok := msg.(types.MsgSendOrderBroadcasted)
+			if !ok {
+				log.Errorf("Invalid send order data type")
+				continue
+			}
+			err := b.state.UpdateSendOrderPending(sendOrder.TxId, sendOrder.ExternalTxId)
+			if err != nil {
+				log.Errorf("Failed to update send order status: %v", err)
+				continue
+			}
 		case <-ticker.C:
 			b.broadcastOrders()
 			b.broadcastPendingCheck()
@@ -243,8 +305,8 @@ func (b *BaseOrderBroadcaster) broadcastOrders() {
 		log.Infof("OrderBroadcaster broadcastOrders ignore, btc is catching up")
 		return
 	}
-	if btcState.NetworkFee > 500 {
-		log.Infof("OrderBroadcaster broadcastOrders ignore, btc network fee too high: %d", btcState.NetworkFee)
+	if btcState.NetworkFee.FastestFee > uint64(config.AppConfig.BTCMaxNetworkFee) {
+		log.Infof("OrderBroadcaster broadcastOrders ignore, btc network fee too high: %v", btcState.NetworkFee)
 		return
 	}
 
@@ -295,7 +357,7 @@ func (b *BaseOrderBroadcaster) broadcastOrders() {
 		}
 
 		// broadcast the transaction and update sendOrder status
-		txHash, exist, err := b.remoteClient.SendRawTransaction(tx, utxos, sendOrder.OrderType)
+		externalTxId, exist, err := b.remoteClient.SendRawTransaction(tx, utxos, sendOrder.OrderType)
 		if err != nil {
 			log.Errorf("OrderBroadcaster broadcastOrders send raw transaction error: %v, txid: %s", err, sendOrder.Txid)
 			if exist {
@@ -305,13 +367,23 @@ func (b *BaseOrderBroadcaster) broadcastOrders() {
 		}
 
 		// update sendOrder status to pending
-		err = b.state.UpdateSendOrderPending(sendOrder.Txid, txHash)
+		err = b.state.UpdateSendOrderPending(sendOrder.Txid, externalTxId)
 		if err != nil {
 			log.Errorf("OrderBroadcaster broadcastOrders update sendOrder status error: %v, txid: %s", err, sendOrder.Txid)
 			continue
 		}
 
-		log.Infof("WalletServer broadcastOrders tx broadcast success, txid: %s", txHash)
+		p2p.PublishMessage(context.Background(), p2p.Message{
+			MessageType: p2p.MessageTypeSendOrderBroadcasted,
+			RequestId:   fmt.Sprintf("TXBROADCAST:%s:%s", config.AppConfig.RelayerAddress, sendOrder.Txid),
+			DataType:    "MsgSendOrderBroadcasted",
+			Data: types.MsgSendOrderBroadcasted{
+				TxId:         sendOrder.Txid,
+				ExternalTxId: externalTxId,
+			},
+		})
+
+		log.Infof("OrderBroadcaster broadcastOrders tx broadcast success, txid: %s", sendOrder.Txid)
 	}
 }
 

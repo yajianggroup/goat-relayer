@@ -26,10 +26,6 @@ func (w *WalletServer) finalizeWithdrawSig() {
 		log.Infof("WalletServer finalizeWithdrawSig ignore, btc is catching up")
 		return
 	}
-	if btcState.NetworkFee > 500 {
-		log.Infof("WalletServer finalizeWithdrawSig ignore, btc network fee too high: %d", btcState.NetworkFee)
-		return
-	}
 
 	w.finalizeWithdrawMu.Lock()
 	defer w.finalizeWithdrawMu.Unlock()
