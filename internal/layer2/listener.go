@@ -391,7 +391,7 @@ func (lis *Layer2Listener) getGoatBlock(ctx context.Context, height uint64) erro
 				log.Debugf("Success to decode transaction: %v", decodedTx.GetMsgs())
 				for _, msg := range decodedTx.GetMsgs() {
 					switch msg := msg.(type) {
-					case *bitcointypes.MsgInitializeWithdrawal:
+					case *bitcointypes.MsgProcessWithdrawal:
 						if err := lis.processMsgInitializeWithdrawal(msg); err != nil {
 							return fmt.Errorf("failed to process msg InitializeWithdrawal: %v", err)
 						}

@@ -36,17 +36,17 @@ func (lis *Layer2Listener) processEvent(block uint64, event abcitypes.Event) err
 	case bitcointypes.EventTypeNewDeposit:
 		return lis.processNewDeposit(block, event.Attributes)
 
-	case bitcointypes.EventTypeWithdrawalCancellation:
+	case bitcointypes.EventTypeWithdrawalUserCancel:
 		return lis.processUserCancelWithdrawal(block, event.Attributes)
-	case bitcointypes.EventTypeWithdrawalRequest:
+	case bitcointypes.EventTypeWithdrawalInit:
 		return lis.processUserRequestWithdrawal(block, event.Attributes)
-	case bitcointypes.EventTypeWithdrawalReplace:
+	case bitcointypes.EventTypeWithdrawalUserReplace:
 		return lis.processUserReplaceWithdrawal(block, event.Attributes)
-	case bitcointypes.EventTypeInitializeWithdrawal:
+	case bitcointypes.EventTypeWithdrawalProcessing:
 		return lis.processWithdrawalInitialized(block, event.Attributes)
-	case bitcointypes.EventTypeApproveCancellation:
+	case bitcointypes.EventTypeWithdrawalRelayerCancel:
 		return lis.processWithdrawalCancelApproved(block, event.Attributes)
-	case bitcointypes.EventTypeFinalizeWithdrawal:
+	case bitcointypes.EventTypeWithdrawalFinalized:
 		return lis.processWithdrawalFinalized(block, event.Attributes)
 
 	case bitcointypes.EventTypeNewConsolidation:

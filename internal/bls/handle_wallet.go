@@ -284,14 +284,12 @@ func (s *Signer) makeSigSendOrder(orderType string, withdrawIds []uint64, noWitn
 	}
 	epochVoter := s.state.GetEpochVoter()
 	if orderType == db.ORDER_TYPE_WITHDRAWAL {
-		msg := bitcointypes.MsgInitializeWithdrawal{
-			Proposer: "",
-			Vote:     votes,
-			Proposal: &bitcointypes.WithdrawalProposal{
-				Id:          withdrawIds,
-				NoWitnessTx: noWitnessTx,
-				TxFee:       txFee,
-			},
+		msg := bitcointypes.MsgProcessWithdrawal{
+			Proposer:    "",
+			Vote:        votes,
+			Id:          withdrawIds,
+			NoWitnessTx: noWitnessTx,
+			TxFee:       txFee,
 		}
 		sigDoc := relayertypes.VoteSignDoc(msg.MethodName(), config.AppConfig.GoatChainID, epochVoter.Proposer, epochVoter.Sequence, uint64(epochVoter.Epoch), msg.VoteSigDoc())
 		return goatcryp.Sign(s.sk, sigDoc)
@@ -384,14 +382,12 @@ func (s *Signer) aggSigSendOrder(requestId string) (interface{}, error) {
 	}
 
 	if orderType == db.ORDER_TYPE_WITHDRAWAL {
-		msgWithdrawal := bitcointypes.MsgInitializeWithdrawal{
-			Proposer: proposer,
-			Vote:     votes,
-			Proposal: &bitcointypes.WithdrawalProposal{
-				Id:          withdrawIds,
-				NoWitnessTx: noWitnessTx,
-				TxFee:       txFee,
-			},
+		msgWithdrawal := bitcointypes.MsgProcessWithdrawal{
+			Proposer:    proposer,
+			Vote:        votes,
+			Id:          withdrawIds,
+			NoWitnessTx: noWitnessTx,
+			TxFee:       txFee,
 		}
 		return &msgWithdrawal, nil
 	} else {

@@ -192,18 +192,18 @@ func (lis *Layer2Listener) SubmitToConsensus(ctx context.Context, msg interface{
 	return resultTx, nil
 }
 
-func (lis *Layer2Listener) convertToTypes(msg interface{}) (*bitcointypes.MsgNewDeposits, *bitcointypes.MsgNewBlockHashes, *bitcointypes.MsgInitializeWithdrawal, *bitcointypes.MsgFinalizeWithdrawal, error) {
+func (lis *Layer2Listener) convertToTypes(msg interface{}) (*bitcointypes.MsgNewDeposits, *bitcointypes.MsgNewBlockHashes, *bitcointypes.MsgProcessWithdrawal, *bitcointypes.MsgFinalizeWithdrawal, error) {
 	if msgNewDeposits, ok := msg.(*bitcointypes.MsgNewDeposits); ok {
 		return msgNewDeposits, nil, nil, nil, nil
 	}
 	if msgNewBlockHashes, ok := msg.(*bitcointypes.MsgNewBlockHashes); ok {
 		return nil, msgNewBlockHashes, nil, nil, nil
 	}
-	if msgInitializeWithdrawal, ok := msg.(*bitcointypes.MsgInitializeWithdrawal); ok {
-		return nil, nil, msgInitializeWithdrawal, nil, nil
+	if msgProcessWithdrawal, ok := msg.(*bitcointypes.MsgProcessWithdrawal); ok {
+		return nil, nil, msgProcessWithdrawal, nil, nil
 	}
 	if msgFinalizeWithdrawal, ok := msg.(*bitcointypes.MsgFinalizeWithdrawal); ok {
 		return nil, nil, nil, msgFinalizeWithdrawal, nil
 	}
-	return nil, nil, nil, nil, errors.New("type assertion failed: not type MsgNewDeposits or MsgNewBlockHashes or MsgInitializeWithdrawal or MsgFinalizeWithdrawal")
+	return nil, nil, nil, nil, errors.New("type assertion failed: not type MsgNewDeposits or MsgNewBlockHashes or MsgProcessWithdrawal or MsgFinalizeWithdrawal")
 }

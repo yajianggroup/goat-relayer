@@ -23,13 +23,13 @@ func (lis *Layer2Listener) QueryRelayer(ctx context.Context) (*relayertypes.Quer
 	return response, nil
 }
 
-func (lis *Layer2Listener) QueryVotersOfRelayer(ctx context.Context) (*relayertypes.QueryVotersResponse, error) {
+func (lis *Layer2Listener) QueryVotersOfRelayer(ctx context.Context) (*relayertypes.QueryVoterResponse, error) {
 	if err := lis.checkAndReconnect(); err != nil {
 		log.Errorf("check and reconnect goat client faild: %v", err)
 		return nil, err
 	}
 	client := relayertypes.NewQueryClient(lis.goatGrpcConn)
-	response, err := client.Voters(ctx, &relayertypes.QueryVotersRequest{})
+	response, err := client.Voter(ctx, &relayertypes.QueryVoterRequest{})
 	if err != nil {
 		log.Errorf("Error while querying voters status: %v", err)
 		return nil, err
