@@ -3,6 +3,7 @@ package layer2
 import (
 	"context"
 	"encoding/base64"
+	"math/big"
 	"strconv"
 	"time"
 
@@ -215,7 +216,12 @@ func (lis *Layer2Listener) processUserRequestWithdrawal(block uint64, attributes
 		}
 	}
 	log.Infof("Abci RequestWithdrawal, address: %s, block: %d, id: %d, txPrice: %d, amount: %d", address, block, id, txPrice, amount)
-	err := lis.state.CreateWithdrawal(address, block, id, txPrice, amount)
+	sender, err := lis.GetWithdrawalSenderAddress(big.NewInt(int64(id)))
+	if err != nil {
+		log.Errorf("Abci RequestWithdrawal GetWithdrawalSenderAddress error: %v", err)
+		return err
+	}
+	err = lis.state.CreateWithdrawal(sender.Hex(), address, block, id, txPrice, amount)
 	if err != nil {
 		log.Errorf("Abci RequestWithdrawal CreateWithdrawal error: %v", err)
 		return err

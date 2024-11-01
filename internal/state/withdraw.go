@@ -12,7 +12,7 @@ import (
 type WithdrawStateStore interface {
 	CleanProcessingWithdraw() error
 	CloseWithdraw(id uint, reason string) error
-	CreateWithdrawal(address string, block, id, txPrice, amount uint64) error
+	CreateWithdrawal(sender string, receiver string, block, id, txPrice, amount uint64) error
 	CreateSendOrder(order *db.SendOrder, selectedUtxos []*db.Utxo, selectedWithdraws []*db.Withdraw, vins []*db.Vin, vouts []*db.Vout, isProposer bool) error
 	RecoverSendOrder(order *db.SendOrder, vins []*db.Vin, vouts []*db.Vout, withdrawIds []uint64) error
 	UpdateWithdrawInitialized(txid string) error
@@ -37,7 +37,7 @@ type WithdrawStateStore interface {
 //	id - request id
 //	txPrice - user set txPrice for withdraw
 //	amount - user request withdraw amount of btc (unit satoshis)
-func (s *State) CreateWithdrawal(address string, block, id, txPrice, amount uint64) error {
+func (s *State) CreateWithdrawal(sender string, receiver string, block, id, txPrice, amount uint64) error {
 	s.walletMu.Lock()
 	defer s.walletMu.Unlock()
 
@@ -54,8 +54,8 @@ func (s *State) CreateWithdrawal(address string, block, id, txPrice, amount uint
 	withdraw := &db.Withdraw{
 		RequestId: id,
 		GoatBlock: block,
-		From:      "",
-		To:        address,
+		From:      sender,
+		To:        receiver,
 		Amount:    amount,
 		TxPrice:   txPrice,
 		TxFee:     0,
