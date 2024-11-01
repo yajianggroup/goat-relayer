@@ -65,7 +65,7 @@ func (w *WalletServer) finalizeWithdrawSig() {
 
 	btcBlockData, err := w.state.QueryBtcBlockDataByHeight(sendOrder.BtcBlock)
 	if err != nil {
-		log.Errorf("WalletServer finalizeWithdrawSig query btc block data by height error: %v", err)
+		log.Errorf("WalletServer finalizeWithdrawSig query btc block data by height %d error: %v", sendOrder.BtcBlock, err)
 		return
 	}
 	txhash, err := chainhash.NewHashFromStr(sendOrder.Txid)
@@ -89,6 +89,7 @@ func (w *WalletServer) finalizeWithdrawSig() {
 			RequestId:    requestId,
 			VoterAddress: epochVoter.Proposer,
 		},
+		Pid:               sendOrder.Pid,
 		Txid:              txhash.CloneBytes(),
 		BlockNumber:       uint64(sendOrder.BtcBlock),
 		TxIndex:           uint32(txIndex),

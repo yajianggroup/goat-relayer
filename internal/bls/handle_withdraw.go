@@ -34,6 +34,7 @@ func (s *Signer) handleSigStartWithdrawFinalize(ctx context.Context, e types.Msg
 	// build sign
 	rpcMsg := &bitcointypes.MsgFinalizeWithdrawal{
 		Proposer:          e.MsgSign.VoterAddress,
+		Pid:               e.Pid,
 		Txid:              e.Txid,
 		BlockNumber:       e.BlockNumber,
 		TxIndex:           e.TxIndex,

@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"math/big"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/goatnetwork/goat-relayer/internal/db"
@@ -196,7 +197,7 @@ func (lis *Layer2Listener) processUserReplaceWithdrawal(block uint64, attributes
 }
 
 func (lis *Layer2Listener) processUserRequestWithdrawal(block uint64, attributes []abcitypes.EventAttribute) error {
-	var address string
+	var from, to string
 	var id, txPrice, amount uint64
 	for _, attr := range attributes {
 		key := attr.Key
@@ -206,7 +207,7 @@ func (lis *Layer2Listener) processUserRequestWithdrawal(block uint64, attributes
 			id, _ = strconv.ParseUint(value, 10, 64)
 		}
 		if key == "address" {
-			address = value
+			to = value
 		}
 		if key == "tx_price" {
 			txPrice, _ = strconv.ParseUint(value, 10, 64)
@@ -215,13 +216,14 @@ func (lis *Layer2Listener) processUserRequestWithdrawal(block uint64, attributes
 			amount, _ = strconv.ParseUint(value, 10, 64)
 		}
 	}
-	log.Infof("Abci RequestWithdrawal, address: %s, block: %d, id: %d, txPrice: %d, amount: %d", address, block, id, txPrice, amount)
+	log.Infof("Abci RequestWithdrawal, address: %s, block: %d, id: %d, txPrice: %d, amount: %d", to, block, id, txPrice, amount)
 	sender, err := lis.GetWithdrawalSenderAddress(big.NewInt(int64(id)))
 	if err != nil {
 		log.Errorf("Abci RequestWithdrawal GetWithdrawalSenderAddress error: %v", err)
 		return err
 	}
-	err = lis.state.CreateWithdrawal(sender.Hex(), address, block, id, txPrice, amount)
+	from = strings.ToLower(strings.TrimPrefix(sender.Hex(), "0x"))
+	err = lis.state.CreateWithdrawal(from, to, block, id, txPrice, amount)
 	if err != nil {
 		log.Errorf("Abci RequestWithdrawal CreateWithdrawal error: %v", err)
 		return err
@@ -274,6 +276,7 @@ func (lis *Layer2Listener) processWithdrawalCancelApproved(block uint64, attribu
 
 func (lis *Layer2Listener) processWithdrawalInitialized(block uint64, attributes []abcitypes.EventAttribute) error {
 	var txid string
+	var pid uint64
 	for _, attr := range attributes {
 		key := attr.Key
 		value := attr.Value
@@ -282,13 +285,16 @@ func (lis *Layer2Listener) processWithdrawalInitialized(block uint64, attributes
 			// BE hash
 			txid = value
 		}
+		if key == "pid" {
+			pid, _ = strconv.ParseUint(value, 10, 64)
+		}
 	}
-	log.Infof("Abci WithdrawalInitialized, block: %d, txid: %s", block, txid)
+	log.Infof("Abci WithdrawalInitialized, block: %d, txid: %s, pid: %d", block, txid, pid)
 
 	if txid == "" {
 		return nil
 	}
-	err := lis.state.UpdateWithdrawInitialized(txid)
+	err := lis.state.UpdateWithdrawInitialized(txid, pid)
 	if err != nil {
 		log.Errorf("Abci WithdrawalInitialized UpdateWithdrawInitialized error: %v", err)
 		return err
@@ -307,13 +313,13 @@ func (lis *Layer2Listener) processNewConsolidation(block uint64, attributes []ab
 			txid = value
 		}
 	}
-	log.Infof("Abci NewConsolidation, block: %d, txid: %s", block, txid)
+	log.Infof("Abci NewConsolidation, block: %d, txid: %s, pid: %d", block, txid)
 
 	if txid == "" {
 		return nil
 	}
 	// call the same method as withdrawal initialized to update send order
-	err := lis.state.UpdateWithdrawInitialized(txid)
+	err := lis.state.UpdateWithdrawInitialized(txid, 0)
 	if err != nil {
 		log.Errorf("Abci NewConsolidation UpdateWithdrawInitialized error: %v", err)
 		return err

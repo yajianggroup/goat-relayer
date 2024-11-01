@@ -55,6 +55,7 @@ type MsgSignSendOrder struct {
 type MsgSignFinalizeWithdraw struct {
 	MsgSign
 
+	Pid               uint64 `json:"pid"`
 	Txid              []byte `json:"txid"`
 	TxIndex           uint32 `json:"tx_index"`
 	BlockNumber       uint64 `json:"block_number"`

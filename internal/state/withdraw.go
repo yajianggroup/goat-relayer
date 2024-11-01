@@ -15,7 +15,7 @@ type WithdrawStateStore interface {
 	CreateWithdrawal(sender string, receiver string, block, id, txPrice, amount uint64) error
 	CreateSendOrder(order *db.SendOrder, selectedUtxos []*db.Utxo, selectedWithdraws []*db.Withdraw, vins []*db.Vin, vouts []*db.Vout, isProposer bool) error
 	RecoverSendOrder(order *db.SendOrder, vins []*db.Vin, vouts []*db.Vout, withdrawIds []uint64) error
-	UpdateWithdrawInitialized(txid string) error
+	UpdateWithdrawInitialized(txid string, pid uint64) error
 	UpdateWithdrawFinalized(txid string) error
 	UpdateWithdrawReplace(id, txPrice uint64) error
 	UpdateWithdrawCancel(id uint64) error
@@ -406,7 +406,7 @@ func (s *State) UpdateSendOrderConfirmed(txid string, btcBlock uint64) error {
 	return err
 }
 
-func (s *State) UpdateWithdrawInitialized(txid string) error {
+func (s *State) UpdateWithdrawInitialized(txid string, pid uint64) error {
 	s.walletMu.Lock()
 	defer s.walletMu.Unlock()
 
@@ -432,6 +432,7 @@ func (s *State) UpdateWithdrawInitialized(txid string) error {
 				order.Status = db.ORDER_STATUS_CLOSED
 			}
 			order.UpdatedAt = time.Now()
+			order.Pid = pid
 			err = s.saveOrder(tx, order)
 			if err != nil {
 				return err
