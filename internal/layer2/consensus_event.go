@@ -233,20 +233,25 @@ func (lis *Layer2Listener) processUserRequestWithdrawal(block uint64, attributes
 
 func (lis *Layer2Listener) processWithdrawalFinalized(block uint64, attributes []abcitypes.EventAttribute) error {
 	var txid string
+	var pid uint64
 	for _, attr := range attributes {
 		key := attr.Key
 		value := attr.Value
 
+		if key == "pid" {
+			pid, _ = strconv.ParseUint(value, 10, 64)
+		}
 		if key == "txid" {
 			// BE hash
 			txid = value
 		}
 	}
-	log.Infof("Abci FinalizeWithdrawal, block: %d, txid: %s", block, txid)
+	log.Infof("Abci FinalizeWithdrawal, block: %d, pid: %d, txid: %s", block, pid, txid)
 	if txid == "" {
 		return nil
 	}
-	err := lis.state.UpdateWithdrawFinalized(txid)
+
+	err := lis.state.UpdateWithdrawFinalized(txid, pid)
 	if err != nil {
 		log.Errorf("Abci FinalizeWithdrawal UpdateWithdrawFinalized error: %v", err)
 		return err

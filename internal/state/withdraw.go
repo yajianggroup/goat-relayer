@@ -16,7 +16,7 @@ type WithdrawStateStore interface {
 	CreateSendOrder(order *db.SendOrder, selectedUtxos []*db.Utxo, selectedWithdraws []*db.Withdraw, vins []*db.Vin, vouts []*db.Vout, isProposer bool) error
 	RecoverSendOrder(order *db.SendOrder, vins []*db.Vin, vouts []*db.Vout, withdrawIds []uint64) error
 	UpdateWithdrawInitialized(txid string, pid uint64) error
-	UpdateWithdrawFinalized(txid string) error
+	UpdateWithdrawFinalized(txid string, pid uint64) error
 	UpdateWithdrawReplace(id, txPrice uint64) error
 	UpdateWithdrawCancel(id uint64) error
 	UpdateSendOrderInitlized(txid string, externalTxId string) error
@@ -468,11 +468,21 @@ func (s *State) UpdateWithdrawInitialized(txid string, pid uint64) error {
 	return err
 }
 
-func (s *State) UpdateWithdrawFinalized(txid string) error {
+func (s *State) UpdateWithdrawFinalized(txid string, pid uint64) error {
 	s.walletMu.Lock()
 	defer s.walletMu.Unlock()
 
-	err := s.dbm.GetWalletDB().Transaction(func(tx *gorm.DB) error {
+	sendOrder, err := s.getSendOrderByPid(pid)
+	if err != nil {
+		log.Errorf("State UpdateWithdrawFinalized cannot find send order by pid: %d", pid)
+		return nil
+	}
+	if sendOrder.Txid != txid {
+		log.Errorf("State UpdateWithdrawFinalized txid mismatch, pid: %d, txid: %s", pid, txid)
+		return nil
+	}
+
+	err = s.dbm.GetWalletDB().Transaction(func(tx *gorm.DB) error {
 		orders, err := s.getAllOrdersByTxid(tx, txid)
 		if err != nil {
 			return err
@@ -703,6 +713,15 @@ func (s *State) getWithdraw(evmTxId string) (*db.Withdraw, error) {
 func (s *State) getSendOrder(orderId string) (*db.SendOrder, error) {
 	var order db.SendOrder
 	result := s.dbm.GetWalletDB().Where("order_id=?", orderId).Order("id desc").First(&order)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return &order, nil
+}
+
+func (s *State) getSendOrderByPid(pid uint64) (*db.SendOrder, error) {
+	var order db.SendOrder
+	result := s.dbm.GetWalletDB().Where("pid = ?", pid).Order("id desc").First(&order)
 	if result.Error != nil {
 		return nil, result.Error
 	}
