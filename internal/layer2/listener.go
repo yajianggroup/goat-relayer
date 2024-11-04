@@ -66,6 +66,9 @@ type Layer2Listener struct {
 	state     *state.State
 	ethClient *ethclient.Client
 
+	hasVoterUpdate bool
+	voterUpdateMu  sync.Mutex
+
 	contractBitcoin *abis.BitcoinContract
 	contractBridge  *abis.BridgeContract
 	contractRelayer *abis.RelayerContract
@@ -212,7 +215,6 @@ func (lis *Layer2Listener) Start(ctx context.Context) {
 	l2MaxBlockRange := uint64(config.AppConfig.L2MaxBlockRange)
 	// clientTimeout := time.Second * 10
 	var l2LatestBlock uint64
-	hasVoterUpdate := false
 
 	for {
 		select {
@@ -293,14 +295,17 @@ func (lis *Layer2Listener) Start(ctx context.Context) {
 					"toBlock":   toBlock,
 				}).Info("Syncing L2 goat events")
 
-				if !hasVoterUpdate && fromBlock > 1 {
+				lis.voterUpdateMu.Lock()
+				if !lis.hasVoterUpdate && fromBlock > 1 {
 					err := lis.processBlockVoters(fromBlock)
 					if err != nil {
 						log.Errorf("Error processBlockVoters at block %d: %v", fromBlock, err)
+						lis.voterUpdateMu.Unlock()
 						time.Sleep(l2RequestInterval)
 						continue
 					} else {
-						hasVoterUpdate = true
+						lis.hasVoterUpdate = true
+						lis.voterUpdateMu.Unlock()
 						log.Infof("Goat chain voters synced at block %d", fromBlock)
 					}
 				}

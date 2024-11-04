@@ -61,9 +61,9 @@ type EpochVoter struct {
 // VoterQueue model (for adding/removing voters)
 type VoterQueue struct {
 	ID        uint      `gorm:"primaryKey" json:"id"`
-	VoteAddr  string    `gorm:"not null" json:"vote_addr"`
+	VoteAddr  string    `gorm:"not null;index:voter_queue_vote_addr_index" json:"vote_addr"`
 	VoteKey   string    `gorm:"not null" json:"vote_key"`
-	Epoch     uint64    `gorm:"not null" json:"epoch"`
+	Epoch     uint64    `gorm:"not null;index:voter_queue_epoch_index" json:"epoch"`
 	Action    string    `gorm:"not null" json:"action"` // "add" or "remove"
 	Status    string    `gorm:"not null" json:"status"` // "init", "pending", "processed"
 	UpdatedAt time.Time `gorm:"not null" json:"updated_at"`

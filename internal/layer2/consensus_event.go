@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-errors/errors"
 	"github.com/goatnetwork/goat-relayer/internal/db"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -534,6 +535,17 @@ func (lis *Layer2Listener) processAcceptedProposerEvent(block uint64, attributes
 
 // Voter events
 func (lis *Layer2Listener) processVoterEvent(block uint64, eventType string, attributes []abcitypes.EventAttribute) error {
+	if eventType == relayertypes.EventVoterActivated || eventType == relayertypes.EventVoterDischarged {
+		log.Infof("Abci %s, block: %d", eventType, block)
+		// notify listener to update voter state
+		lis.voterUpdateMu.Lock()
+		lis.hasVoterUpdate = false
+		lis.voterUpdateMu.Unlock()
+		// abort getGoatBlock loop by return error
+		return errors.New("voter update should abort getGoatBlock loop")
+	}
+
+	var voter string
 	for _, attr := range attributes {
 		key := attr.Key
 		value := attr.Value
@@ -546,34 +558,37 @@ func (lis *Layer2Listener) processVoterEvent(block uint64, eventType string, att
 		// Relayer voter should calculate from secp256k1 private key,
 		// then derive the public key, convert pk to address
 
-		// means next epoch valid
-		// if key == "voter_pending" {
+		if key == "voter" {
+			voter = value
+		}
+		// NOTE: proposer is not used now
+		// if key == "proposer" {
+		// 	proposer = value
 		// }
+	}
 
-		if key == "voter_on_boarding" {
-			// TODO should pass event, notify voter to accept boarding
-			// Call event bus, send block, voterAddr
-			// Push state queue
+	// means next epoch valid
+	if eventType == relayertypes.EventVoterPending {
+		// boarding step 1: new voter should send online proof to proposer
+		// proposer should verify the proof
+		// if valid, proposer should send onboarding tx
+		err := lis.state.AddVoterQueue(voter)
+		if err != nil {
+			log.Errorf("Abci processVoterEvent AddVoterQueue error: %v", err)
+			return err
 		}
+	}
 
-		if key == "voter_boarded" {
-			// TODO should pass event, notify voter to mark boarded
-			// Call event bus, send block, voterAddr
-			// Update state queue status
+	if eventType == relayertypes.EventVoterOnBoarding {
+		// ignore
+	}
 
-			// TODO query voter
-		}
-
-		if key == "voter_activated" {
-			// TODO should pass event, notify voter to add to list
-			// Call event bus, send block, voterAddr
-			// Update state status (state -> db)
-		}
-
-		if key == "voter_discharged" {
-			// TODO should pass event, notify voter to remove from list
-			// Call event bus, send block, voterAddr
-			// Update state status (state -> db)
+	if eventType == relayertypes.EventVoterBoarded {
+		// boarding step 2: notify all voters to mark new voter boarded, proposer should not accept other online proof again
+		err := lis.state.UpdateVoterQueueProcessed(voter)
+		if err != nil {
+			log.Errorf("Abci processVoterEvent UpdateVoterQueueProcessed error: %v", err)
+			return err
 		}
 	}
 	return nil
