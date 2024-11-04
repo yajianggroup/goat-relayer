@@ -63,6 +63,11 @@ func (s *Signer) handleSigStart(ctx context.Context, event interface{}) {
 			// feedback SigFailed
 			s.state.EventBus.Publish(state.SigFailed, e)
 		}
+	case types.MsgSignNewVoter:
+		log.Debugf("Event handleSigStartNewVoter is of type MsgSignNewVoter, request id %s", e.RequestId)
+		if err := s.handleSigStartNewVoter(ctx, e); err != nil {
+			log.Errorf("Error handleSigStart MsgSignNewVoter, %v", err)
+		}
 	default:
 		log.Debug("Unknown event handleSigStart type")
 	}
@@ -84,6 +89,14 @@ func (s *Signer) handleSigReceive(ctx context.Context, event interface{}) {
 		log.Debugf("Event handleSigReceive is of type MsgSignSendOrder, request id %s", e.RequestId)
 		if err := s.handleSigReceiveSendOrder(ctx, e); err != nil {
 			log.Errorf("Error handleSigReceive MsgSignSendOrder, %v", err)
+			// feedback SigFailed
+			s.state.EventBus.Publish(state.SigFailed, e)
+		}
+	case types.MsgSignNewVoter:
+		// only proposer will process new voter sig and broadcast to consensus
+		log.Debugf("Event handleSigReceive is of type MsgSignNewVoter, request id %s", e.RequestId)
+		if err := s.handleSigReceiveNewVoter(ctx, e); err != nil {
+			log.Errorf("Error handleSigReceive MsgSignNewVoter, %v", err)
 			// feedback SigFailed
 			s.state.EventBus.Publish(state.SigFailed, e)
 		}
@@ -136,18 +149,4 @@ func (s *Signer) removeSigMap(requestId string, reportTimeout bool) {
 	}
 	delete(s.sigMap, requestId)
 	delete(s.sigTimeoutMap, requestId)
-}
-
-func indexOfSlice(sl []string, s string) int {
-	for i, addr := range sl {
-		if addr == s {
-			return i
-		}
-	}
-	return -1
-}
-
-func Threshold(total int) int {
-	// >= 2/3
-	return (total*2 + 2) / 3
 }

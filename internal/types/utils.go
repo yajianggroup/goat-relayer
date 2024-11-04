@@ -310,3 +310,17 @@ func ParseRSAPrivateKeyFromPEM(privKeyPEM string) (*rsa.PrivateKey, error) {
 
 	return privKey, nil
 }
+
+func IndexOfSlice(sl []string, s string) int {
+	for i, addr := range sl {
+		if addr == s {
+			return i
+		}
+	}
+	return -1
+}
+
+func Threshold(total int) int {
+	// >= 2/3
+	return (total*2 + 2) / 3
+}

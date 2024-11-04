@@ -576,7 +576,7 @@ func (lis *Layer2Listener) processVoterEvent(block uint64, eventType string, att
 		// boarding step 1: new voter should send online proof to proposer
 		// proposer should verify the proof
 		// if valid, proposer should send onboarding tx
-		err := lis.state.AddVoterQueue(voter)
+		err := lis.state.AddVoterQueue(voter, block)
 		if err != nil {
 			log.Errorf("Abci processVoterEvent AddVoterQueue error: %v", err)
 			return err

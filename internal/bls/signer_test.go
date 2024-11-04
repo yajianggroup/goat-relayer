@@ -1,4 +1,4 @@
-package bls
+package bls_test
 
 import (
 	"encoding/hex"

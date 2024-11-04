@@ -18,6 +18,13 @@ func (s *State) GetEpochVoter() db.EpochVoter {
 	return *s.layer2State.EpochVoter
 }
 
+func (s *State) GetL2VoterQueue() []*db.VoterQueue {
+	s.layer2Mu.RLock()
+	defer s.layer2Mu.RUnlock()
+
+	return s.layer2State.VoterQueue
+}
+
 func (s *State) GetDepositKeyByBtcBlock(block uint64) (*db.DepositPubKey, error) {
 	s.layer2Mu.RLock()
 	defer s.layer2Mu.RUnlock()
@@ -282,7 +289,7 @@ func (s *State) UpdateL2InfoSequence(block uint64, sequence uint64) error {
 	return nil
 }
 
-func (s *State) AddVoterQueue(voterAddr string) error {
+func (s *State) AddVoterQueue(voterAddr string, block uint64) error {
 	if voterAddr == "" {
 		return errors.New("invalid voter queue")
 	}
@@ -292,7 +299,7 @@ func (s *State) AddVoterQueue(voterAddr string) error {
 
 	voterQueue := &db.VoterQueue{
 		VoteAddr: voterAddr,
-		Epoch:    s.layer2State.CurrentEpoch,
+		Epoch:    block, // block instead of epoch
 	}
 	// check if exists
 	var exists db.VoterQueue

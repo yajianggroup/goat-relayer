@@ -243,7 +243,7 @@ func (s *Signer) aggSigNewBlock(requestId string) (*bitcointypes.MsgNewBlockHash
 			hashs = msgNewBlock.BlockHash
 			proposerSig = msgNewBlock.SigData
 		} else {
-			pos := indexOfSlice(voterAll, address) // voter address
+			pos := types.IndexOfSlice(voterAll, address) // voter address
 			log.Debugf("Bitmap check, pos: %d, address: %s, all: %s", pos, address, epochVoter.VoteAddrList)
 			if pos >= 0 {
 				bmp.Set(uint32(pos))
@@ -266,7 +266,7 @@ func (s *Signer) aggSigNewBlock(requestId string) (*bitcointypes.MsgNewBlockHash
 	voteSig = append([][]byte{proposerSig}, voteSig...)
 
 	// check threshold
-	threshold := Threshold(len(voterAll))
+	threshold := types.Threshold(len(voterAll))
 	if len(voteSig) < threshold {
 		return nil, fmt.Errorf("threshold not reach, request id: %s, has sig: %d, threshold: %d", requestId, len(voteSig), threshold)
 	}

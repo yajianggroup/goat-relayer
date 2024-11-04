@@ -1,5 +1,7 @@
 package types
 
+import "context"
+
 type MsgSign struct {
 	RequestId    string `json:"request_id"`
 	Sequence     uint64 `json:"sequence"`
@@ -72,4 +74,25 @@ type MsgSignCancelWithdraw struct {
 	MsgSign
 
 	WithdrawIds []uint64 `json:"withdraw_ids"`
+}
+
+type MsgSignNewVoter struct {
+	MsgSign
+
+	Proposer         string `json:"proposer"`
+	VoterBlsKey      []byte `json:"voter_bls_key"`
+	VoterTxKey       []byte `json:"voter_tx_key"`
+	VoterTxKeyProof  []byte `json:"voter_tx_key_proof"`
+	VoterBlsKeyProof []byte `json:"voter_bls_key_proof"`
+}
+
+// BlsSignProcessor defines the interface for the BLS signature processor
+type BlsSignProcessor interface {
+	BeginSig()
+	HandleSigFinish(msgSign interface{})
+	HandleSigFailed(msgSign interface{})
+	HandleSigTimeout(msgSign interface{})
+
+	Start(ctx context.Context)
+	Stop()
 }
