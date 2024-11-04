@@ -62,3 +62,9 @@ type MsgSignFinalizeWithdraw struct {
 	BlockHeader       []byte `json:"block_header"`
 	IntermediateProof []byte `json:"intermediate_proof"`
 }
+
+type MsgSignCancelWithdraw struct {
+	MsgSign
+
+	WithdrawIds []uint64 `json:"withdraw_ids"`
+}

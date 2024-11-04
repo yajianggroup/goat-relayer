@@ -22,13 +22,13 @@ type WalletServer struct {
 	orderBroadcaster OrderBroadcaster
 
 	// after sig, it can start a new sig 2 blocks later
-	sigMu           sync.Mutex
-	sigStatus       bool
-	sigFinishHeight uint64
-
-	finalizeWithdrawMu           sync.Mutex
+	sigMu                        sync.Mutex
+	sigStatus                    bool
+	sigFinishHeight              uint64
 	finalizeWithdrawStatus       bool
 	finalizeWithdrawFinishHeight uint64
+	cancelWithdrawStatus         bool
+	cancelWithdrawFinishHeight   uint64
 
 	blockCh chan interface{}
 

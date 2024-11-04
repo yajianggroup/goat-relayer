@@ -34,6 +34,7 @@ const (
 	WITHDRAW_STATUS_PENDING     = "pending"
 	WITHDRAW_STATUS_UNCONFIRM   = "unconfirm"
 	WITHDRAW_STATUS_CONFIRMED   = "confirmed"
+	WITHDRAW_STATUS_CANCELING   = "canceling"
 	WITHDRAW_STATUS_PROCESSED   = "processed"
 	WITHDRAW_STATUS_CLOSED      = "closed"
 

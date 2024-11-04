@@ -162,9 +162,9 @@ func (lis *Layer2Listener) processUserCancelWithdrawal(block uint64, attributes 
 	if id == 0 {
 		return nil
 	}
-	err := lis.state.UpdateWithdrawCancel(id)
+	err := lis.state.UpdateWithdrawCanceling(id)
 	if err != nil {
-		log.Errorf("Abci RequestCancelWithdrawal UpdateWithdrawCancel error: %v", err)
+		log.Errorf("Abci RequestCancelWithdrawal UpdateWithdrawCanceling error: %v", err)
 		return err
 	}
 	return nil
@@ -275,7 +275,11 @@ func (lis *Layer2Listener) processWithdrawalCancelApproved(block uint64, attribu
 		return nil
 	}
 
-	// NOTE not implement EventTypeApproveCancellation
+	err := lis.state.CloseWithdraw(uint(id), "canceled")
+	if err != nil {
+		log.Errorf("Abci ApproveCancelWithdrawal close withdraw error: %v", err)
+		return err
+	}
 	return nil
 }
 
