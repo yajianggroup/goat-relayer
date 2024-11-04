@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -251,20 +250,18 @@ func (b *BaseDepositProcessor) initDepositSig() {
 		log.Errorf("QueryBtcBlockDataByBlockHashes error: %v", err)
 		return
 	}
-	blockHeaders := make(map[uint64][]byte)
+	msgBlockHeaders := make([]types.MsgBlockHeader, 0)
 	for _, blockData := range blockData {
-		blockHeaders[blockData.BlockHeight] = blockData.Header
+		msgBlockHeaders = append(msgBlockHeaders, types.MsgBlockHeader{
+			Raw:    blockData.Header,
+			Height: blockData.BlockHeight,
+		})
 		log.Debugf("WalletServer initDepositSig blockHeaders[%d] %d", blockData.BlockHeight, len(blockData.Header))
 	}
 	proposer := b.state.GetEpochVoter().Proposer
-	headersBytes, err := json.Marshal(blockHeaders)
-	if err != nil {
-		log.Errorf("Failed to marshal headers: %v", err)
-		return
-	}
 
 	requestId := fmt.Sprintf("DEPOSIT:%s:%s", config.AppConfig.RelayerAddress, deposits[0].TxHash)
-	msgDepositTXs := make([]types.DepositTX, len(verifiedDeposits))
+	msgDeposits := make([]types.MsgDeposit, len(verifiedDeposits))
 	for i, verifiedDeposit := range verifiedDeposits {
 		txHash, err := chainhash.NewHashFromStr(verifiedDeposit.TxHash)
 		if err != nil {
@@ -291,7 +288,7 @@ func (b *BaseDepositProcessor) initDepositSig() {
 			log.Errorf("SerializeTransactionNoWitness err: %v", err)
 			continue
 		}
-		msgDepositTXs[i] = types.DepositTX{
+		msgDeposits[i] = types.MsgDeposit{
 			Version:           verifiedDeposit.SignVersion,
 			BlockNumber:       verifiedDeposit.BlockHeight,
 			TxHash:            txHash.CloneBytes(),
@@ -307,8 +304,8 @@ func (b *BaseDepositProcessor) initDepositSig() {
 		MsgSign: types.MsgSign{
 			RequestId: requestId,
 		},
-		BlockHeader:   headersBytes,
-		DepositTX:     msgDepositTXs,
+		BlockHeaders:  msgBlockHeaders,
+		Deposits:      msgDeposits,
 		Proposer:      proposer,
 		RelayerPubkey: pubkeyBytes,
 	}

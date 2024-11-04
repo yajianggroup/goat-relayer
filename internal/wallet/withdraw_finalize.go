@@ -27,8 +27,8 @@ func (w *WalletServer) finalizeWithdrawSig() {
 		return
 	}
 
-	w.finalizeWithdrawMu.Lock()
-	defer w.finalizeWithdrawMu.Unlock()
+	w.sigMu.Lock()
+	defer w.sigMu.Unlock()
 
 	epochVoter := w.state.GetEpochVoter()
 	if epochVoter.Proposer != config.AppConfig.RelayerAddress {

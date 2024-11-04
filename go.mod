@@ -14,7 +14,7 @@ require (
 	github.com/ethereum/go-ethereum v1.14.11
 	github.com/gin-gonic/gin v1.10.0
 	github.com/go-errors/errors v1.4.2
-	github.com/goatnetwork/goat v0.0.1-testnet-rc3.0.20241029101302-95e358c6d543
+	github.com/goatnetwork/goat v0.0.1-testnet-rc3.0.20241104061444-75aa6bcafc11
 	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1

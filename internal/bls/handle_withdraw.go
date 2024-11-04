@@ -64,3 +64,37 @@ func (s *Signer) handleSigStartWithdrawFinalize(ctx context.Context, e types.Msg
 
 	return nil
 }
+
+// handleSigStartWithdrawCancel handle start withdraw cancel sig event
+func (s *Signer) handleSigStartWithdrawCancel(ctx context.Context, e types.MsgSignCancelWithdraw) error {
+	canSign := s.CanSign()
+	isProposer := s.IsProposer()
+	if !canSign || !isProposer {
+		log.Debugf("Ignore SigStart WithdrawCancel request id %s, canSign: %v, isProposer: %v", e.RequestId, canSign, isProposer)
+		log.Debugf("Current l2 context, catching up: %v, self address: %s, proposer: %s", s.state.GetL2Info().Syncing, s.address, s.state.GetEpochVoter().Proposer)
+		return fmt.Errorf("cannot start sig %s in current l2 context, catching up: %v, is proposer: %v", e.RequestId, !canSign, isProposer)
+	}
+
+	// request id format: SENDORDER:VoterAddr:OrderId
+	// check map
+	_, ok := s.sigExists(e.RequestId)
+	if ok {
+		return fmt.Errorf("sig exists: %s", e.RequestId)
+	}
+
+	// build sign
+	rpcMsg := &bitcointypes.MsgApproveCancellation{
+		Proposer: e.MsgSign.VoterAddress,
+		Id:       e.WithdrawIds,
+	}
+	err := s.RetrySubmit(ctx, e.RequestId, rpcMsg, config.AppConfig.L2SubmitRetry)
+	if err != nil {
+		log.Errorf("Proposer submit ApproveCancellation to consensus error, request id: %s, err: %v", e.RequestId, err)
+		// feedback SigFailed, deposit should module subscribe it to save UTXO or mark confirm
+		s.state.EventBus.Publish(state.SigFailed, e)
+		return err
+	}
+	s.removeSigMap(e.RequestId, false)
+
+	return nil
+}

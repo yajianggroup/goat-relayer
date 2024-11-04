@@ -18,11 +18,12 @@ type WithdrawStateStore interface {
 	UpdateWithdrawInitialized(txid string, pid uint64) error
 	UpdateWithdrawFinalized(txid string, pid uint64) error
 	UpdateWithdrawReplace(id, txPrice uint64) error
-	UpdateWithdrawCancel(id uint64) error
+	UpdateWithdrawCanceling(id uint64) error
 	UpdateSendOrderInitlized(txid string, externalTxId string) error
 	UpdateSendOrderPending(txid string, externalTxId string) error
 	UpdateSendOrderConfirmed(txid string, blockHeight uint64) error
 	GetWithdrawsCanStart() ([]*db.Withdraw, error)
+	GetWithdrawsCanceling() ([]*db.Withdraw, error)
 	GetSendOrderInitlized() ([]*db.SendOrder, error)
 	GetSendOrderPending(limit int) ([]*db.SendOrder, error)
 	GetLatestSendOrderConfirmed() (*db.SendOrder, error)
@@ -267,7 +268,7 @@ func (s *State) UpdateWithdrawReplace(id, txPrice uint64) error {
 	return s.saveWithdraw(withdraw)
 }
 
-func (s *State) UpdateWithdrawCancel(id uint64) error {
+func (s *State) UpdateWithdrawCanceling(id uint64) error {
 	s.walletMu.Lock()
 	defer s.walletMu.Unlock()
 
@@ -281,7 +282,7 @@ func (s *State) UpdateWithdrawCancel(id uint64) error {
 		return nil
 	}
 
-	withdraw.Status = db.WITHDRAW_STATUS_CLOSED
+	withdraw.Status = db.WITHDRAW_STATUS_CANCELING
 	withdraw.UpdatedAt = time.Now()
 
 	// TODO notify stop aggregating if it is aggregating status, set to closed
@@ -623,6 +624,20 @@ func (s *State) GetWithdrawsCanStart() ([]*db.Withdraw, error) {
 		return nil, nil
 	}
 
+	return withdraws, nil
+}
+
+func (s *State) GetWithdrawsCanceling() ([]*db.Withdraw, error) {
+	s.walletMu.RLock()
+	defer s.walletMu.RUnlock()
+
+	withdraws, err := s.getWithdrawByStatuses(nil, "id asc", db.WITHDRAW_STATUS_CANCELING)
+	if err != nil {
+		if err != gorm.ErrRecordNotFound {
+			return nil, err
+		}
+		return nil, nil
+	}
 	return withdraws, nil
 }
 

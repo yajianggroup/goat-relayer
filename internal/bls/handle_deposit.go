@@ -34,7 +34,7 @@ func (s *Signer) handleSigStartNewDeposit(ctx context.Context, e types.MsgSignDe
 	pubKey := relayertypes.DecodePublicKey(newKey)
 	deposits := make([]*bitcointypes.Deposit, 0)
 
-	for _, tx := range e.DepositTX {
+	for _, tx := range e.Deposits {
 		if bitcointypes.VerifyMerkelProof(tx.TxHash, tx.MerkleRoot, tx.IntermediateProof, uint32(tx.TxIndex)) {
 			deposits = append(deposits, &bitcointypes.Deposit{
 				Version:           tx.Version,
@@ -49,9 +49,16 @@ func (s *Signer) handleSigStartNewDeposit(ctx context.Context, e types.MsgSignDe
 		}
 	}
 
+	blockHeaders := make([]*bitcointypes.BlockHeader, 0)
+	for _, header := range e.BlockHeaders {
+		blockHeaders = append(blockHeaders, &bitcointypes.BlockHeader{
+			Raw:    header.Raw,
+			Height: header.Height,
+		})
+	}
 	rpcMsg := &bitcointypes.MsgNewDeposits{
 		Proposer:     e.Proposer,
-		BlockHeaders: e.BlockHeader,
+		BlockHeaders: blockHeaders,
 		Deposits:     deposits,
 	}
 	err := s.RetrySubmit(ctx, e.RequestId, rpcMsg, config.AppConfig.L2SubmitRetry)

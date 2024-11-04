@@ -361,6 +361,8 @@ github.com/go-task/slim-sprig/v3 v3.0.0 h1:sUs3vkvUymDpBKi3qH1YSqBQk9+9D/8M2mN1v
 github.com/go-task/slim-sprig/v3 v3.0.0/go.mod h1:W848ghGpv3Qj3dhTPRyJypKRiqCdHZiAzKg9hl15HA8=
 github.com/goatnetwork/goat v0.0.1-testnet-rc3.0.20241029101302-95e358c6d543 h1:tcFoSaujYO3EAXuLlxp2/yzxXMvrEyMhnlZ3XV0PCMA=
 github.com/goatnetwork/goat v0.0.1-testnet-rc3.0.20241029101302-95e358c6d543/go.mod h1:AHryoXP9xw7QFTFIJFTd4yvrJ8NVt5PhRAltIl9S7WI=
+github.com/goatnetwork/goat v0.0.1-testnet-rc3.0.20241104061444-75aa6bcafc11 h1:6IT4IMFY8cTvWqiWldlGvS5BI+HpyW5nlfxE5hBV/sY=
+github.com/goatnetwork/goat v0.0.1-testnet-rc3.0.20241104061444-75aa6bcafc11/go.mod h1:DZQe/h0x/6uOSZ9SnnmRMsRvYZx7/ypgk90IHpBZNkk=
 github.com/gobwas/httphead v0.0.0-20180130184737-2c6c146eadee h1:s+21KNqlpePfkah2I+gwHF8xmJWRjooY+5248k6m4A0=
 github.com/gobwas/httphead v0.0.0-20180130184737-2c6c146eadee/go.mod h1:L0fX3K22YWvt/FAX9NnzrNzcI4wNYi9Yku4O0LKYflo=
 github.com/gobwas/pool v0.2.0 h1:QEmUOlnSjWtnpRGHF3SauEiOsy82Cup83Vf2LcMlnc8=

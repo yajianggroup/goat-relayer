@@ -56,6 +56,13 @@ func (s *Signer) handleSigStart(ctx context.Context, event interface{}) {
 			// feedback SigFailed
 			s.state.EventBus.Publish(state.SigFailed, e)
 		}
+	case types.MsgSignCancelWithdraw:
+		log.Debugf("Event handleSigStartCancelWithdraw is of type MsgSignCancelWithdraw, request id %s", e.RequestId)
+		if err := s.handleSigStartWithdrawCancel(ctx, e); err != nil {
+			log.Errorf("Error handleSigStart MsgSignCancelWithdraw, %v", err)
+			// feedback SigFailed
+			s.state.EventBus.Publish(state.SigFailed, e)
+		}
 	default:
 		log.Debug("Unknown event handleSigStart type")
 	}
