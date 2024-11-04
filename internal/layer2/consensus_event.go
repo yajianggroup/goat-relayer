@@ -318,7 +318,7 @@ func (lis *Layer2Listener) processNewConsolidation(block uint64, attributes []ab
 			txid = value
 		}
 	}
-	log.Infof("Abci NewConsolidation, block: %d, txid: %s, pid: %d", block, txid)
+	log.Infof("Abci NewConsolidation, block: %d, txid: %s", block, txid)
 
 	if txid == "" {
 		return nil
