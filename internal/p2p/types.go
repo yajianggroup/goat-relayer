@@ -22,4 +22,5 @@ const (
 	MessageTypeDepositReceive
 	MessageTypeWithdrawFinalize
 	MessageTypeSendOrderBroadcasted
+	MessageTypeNewVoter
 )
