@@ -305,31 +305,10 @@ func (lis *Layer2Listener) Start(ctx context.Context) {
 						continue
 					} else {
 						lis.hasVoterUpdate = true
-						lis.voterUpdateMu.Unlock()
 						log.Infof("Goat chain voters synced at block %d", fromBlock)
 					}
 				}
-
-				//// Filter evm event
-				// filterQuery := ethereum.FilterQuery{
-				// 	FromBlock: big.NewInt(int64(fromBlock)),
-				// 	ToBlock:   big.NewInt(int64(toBlock)),
-				// 	Addresses: []common.Address{abis.BridgeAddress, abis.BitcoinAddress, abis.RelayerAddress},
-				// }
-
-				// logs, err := lis.ethClient.FilterLogs(ctx, filterQuery)
-				// if err != nil {
-				// 	log.Errorf("Failed to filter logs: %v", err)
-				// 	time.Sleep(l2RequestInterval)
-				// 	continue
-				// }
-
-				// for _, vLog := range logs {
-				// 	lis.processGoatLogs(vLog)
-				// 	// if syncStatus.LastSyncBlock < vLog.BlockNumber {
-				// 	// 	syncStatus.LastSyncBlock = vLog.BlockNumber
-				// 	// }
-				// }
+				lis.voterUpdateMu.Unlock()
 
 				// Query cosmos tx or event
 				goatRpcAbort := false
