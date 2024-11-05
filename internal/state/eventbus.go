@@ -22,10 +22,12 @@ const (
 	WithdrawRequest
 	WithdrawFinalize
 	SendOrderBroadcasted
+	NewVoter
 )
 
 func (e EventType) String() string {
-	return [...]string{"EventUnkown", "SigStart", "SigReceive", "SigFinish", "SigFailed", "SigTimeout", "DepositReceive", "BlockScanned", "WithdrawRequest", "WithdrawFinalize", "SendOrderBroadcasted"}[e]
+	return [...]string{"EventUnkown", "SigStart", "SigReceive", "SigFinish", "SigFailed", "SigTimeout", "DepositReceive",
+		"BlockScanned", "WithdrawRequest", "WithdrawFinalize", "SendOrderBroadcasted", "NewVoter"}[e]
 }
 
 type EventBus struct {
@@ -51,37 +53,32 @@ func (eb *EventBus) Subscribe(eventType EventType, ch chan interface{}) {
 
 func (eb *EventBus) Publish(eventType EventType, data interface{}) {
 	eb.mu.RLock()
+	defer eb.mu.RUnlock()
+
 	subscribers, ok := eb.subscribers[eventType.String()]
 	if !ok {
-		eb.mu.RUnlock()
 		return
 	}
-	originLen := len(subscribers)
-	removeIndexes := make(map[int]bool)
-	for i := 0; i < originLen; i++ {
+
+	for i := 0; i < len(subscribers); i++ {
 		ch := subscribers[i]
 		select {
 		case ch <- data:
 			// Success
 		default:
 			// If cannot receive or closed, remove the subscriber
-			removeIndexes[i] = true
-		}
-	}
-	eb.mu.RUnlock()
-
-	if len(removeIndexes) > 0 {
-		eb.mu.Lock()
-		if originLen == len(eb.subscribers[eventType.String()]) {
-			var newSubscribers []chan interface{}
-			for index, ch := range eb.subscribers[eventType.String()] {
-				if _, is := removeIndexes[index]; !is {
-					newSubscribers = append(newSubscribers, ch)
-				}
+			eb.mu.Lock()
+			if i < len(eb.subscribers[eventType.String()])-1 {
+				eb.subscribers[eventType.String()] = append(eb.subscribers[eventType.String()][:i], eb.subscribers[eventType.String()][i+1:]...)
+			} else {
+				eb.subscribers[eventType.String()] = eb.subscribers[eventType.String()][:i]
 			}
-			eb.subscribers[eventType.String()] = newSubscribers
+			eb.mu.Unlock()
+
+			if i > 0 {
+				i--
+			}
 		}
-		eb.mu.Unlock()
 	}
 }
 
