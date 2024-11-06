@@ -359,10 +359,6 @@ func (lis *Layer2Listener) processNewDeposit(block uint64, attributes []abcitype
 		if key == "amount" {
 			amount, _ = strconv.ParseUint(value, 10, 64)
 		}
-		// TODO goat emit event with block hash, should match deposit with height
-		// if key == "block_hash" {
-		// 	blockHash = value
-		// }
 	}
 
 	// NOTE: DB operate: insert if not exist, if P2WSH, should query from BTC client,

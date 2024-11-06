@@ -390,7 +390,6 @@ func (b *BaseOrderBroadcaster) broadcastOrders() {
 // broadcastPendingCheck is a function that checks the pending status of the orders
 // if it is failed, broadcast it again
 func (b *BaseOrderBroadcaster) broadcastPendingCheck() {
-	// TODO: start id
 	// Assume limit 50 pending orders at a time
 	pendingOrders, err := b.state.GetSendOrderPending(50)
 	if err != nil {

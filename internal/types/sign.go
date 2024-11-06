@@ -20,7 +20,6 @@ type MsgSignNewBlock struct {
 	BlockHash        [][]byte `json:"block_hash"`
 }
 
-// TODO need more fields
 type MsgSignDeposit struct {
 	MsgSign
 	Deposits      []MsgDeposit     `json:"deposits"`

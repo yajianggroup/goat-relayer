@@ -3,10 +3,12 @@ package bls
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/goatnetwork/goat-relayer/internal/config"
 	"github.com/goatnetwork/goat-relayer/internal/p2p"
 	"github.com/goatnetwork/goat-relayer/internal/state"
@@ -166,7 +168,29 @@ func (s *Signer) handleSigReceiveNewBlock(ctx context.Context, e types.MsgSignNe
 			log.Warnf("SigReceive MsgSignNewBlock epoch does not match, request id %s, msg epoch: %d, current epoch: %d", e.RequestId, e.Epoch, epochVoter.Epoch)
 			return fmt.Errorf("cannot handle receive sig %s with epoch %d, expect: %d", e.RequestId, e.Epoch, epochVoter.Epoch)
 		}
-		// TODO hash comparation
+		blockHashSize := len(e.BlockHash)
+		if blockHashSize > 16 {
+			return fmt.Errorf("block hash size is too long, request id: %s, block hash size: %d", e.RequestId, blockHashSize)
+		}
+		if blockHashSize == 0 {
+			return fmt.Errorf("block hash size is 0, request id: %s", e.RequestId)
+		}
+		// query from db, hash comparation
+		blockHashStrs := make([]string, blockHashSize)
+		for i, hash := range e.BlockHash {
+			blockHash, err := chainhash.NewHash(hash)
+			if err != nil {
+				return fmt.Errorf("block hash convert to string error, request id: %s, hash index: %d, block hash: %s, err: %v", e.RequestId, i, hex.EncodeToString(hash), err)
+			}
+			blockHashStrs[i] = blockHash.String()
+		}
+		foundCount, err := s.state.CheckBtcBlockSignCount(blockHashStrs)
+		if err != nil {
+			return fmt.Errorf("check block hash sign count error, request id: %s, err: %v", e.RequestId, err)
+		}
+		if foundCount != int64(blockHashSize) {
+			return fmt.Errorf("block hash sign count does not match, request id: %s, found: %d, expect: %d", e.RequestId, foundCount, blockHashSize)
+		}
 
 		newSign := &types.MsgSignNewBlock{
 			MsgSign: types.MsgSign{

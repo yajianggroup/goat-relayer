@@ -247,8 +247,6 @@ func (s *State) UpdateL2InfoEpoch(block uint64, epoch uint64, proposer string) e
 		epochVoter.Epoch = epoch
 		if proposer != "" {
 			epochVoter.Proposer = proposer
-
-			// TODO check the voters change or not?
 		}
 
 		err := s.saveEpochVoter(epochVoter)
@@ -258,10 +256,6 @@ func (s *State) UpdateL2InfoEpoch(block uint64, epoch uint64, proposer string) e
 
 		s.layer2State.EpochVoter = epochVoter
 		s.layer2State.CurrentEpoch = epoch
-
-		if proposer != "" {
-			// TODO call event pulish
-		}
 	}
 
 	return nil

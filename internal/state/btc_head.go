@@ -175,6 +175,18 @@ func (s *State) GetBtcBlockForSign(size int) ([]*db.BtcBlock, error) {
 	return btcBlocks, nil
 }
 
+func (s *State) CheckBtcBlockSignCount(blockHashes []string) (int64, error) {
+	s.btcHeadMu.RLock()
+	defer s.btcHeadMu.RUnlock()
+
+	var count int64
+	err := s.dbm.GetBtcLightDB().Model(&db.BtcBlock{}).Where("hash IN (?) and status <> ?", blockHashes, db.BTC_BLOCK_STATUS_PROCESSED).Count(&count).Error
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
 // GetCurrentBtcBlock
 func (s *State) GetCurrentBtcBlock() (db.BtcBlock, error) {
 	s.btcHeadMu.RLock()

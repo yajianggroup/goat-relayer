@@ -69,6 +69,7 @@ func (app *Application) Run() {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 
+	blockDoneCh := make(chan struct{})
 	var wg sync.WaitGroup
 
 	wg.Add(1)
@@ -98,7 +99,7 @@ func (app *Application) Run() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		app.BTCListener.Start(ctx)
+		app.BTCListener.Start(ctx, blockDoneCh)
 	}()
 
 	wg.Add(1)
@@ -110,7 +111,7 @@ func (app *Application) Run() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		app.WalletService.Start(ctx)
+		app.WalletService.Start(ctx, blockDoneCh)
 	}()
 
 	wg.Add(1)
@@ -121,6 +122,7 @@ func (app *Application) Run() {
 
 	<-stop
 	log.Info("Receiving exit signal...")
+	close(blockDoneCh)
 
 	cancel()
 

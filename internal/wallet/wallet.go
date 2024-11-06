@@ -38,7 +38,7 @@ type WalletServer struct {
 }
 
 func NewWalletServer(libp2p *p2p.LibP2PService, st *state.State, signer *bls.Signer) *WalletServer {
-	// TODO: create bitcoin client using btc module connection
+	// create bitcoin client using btc module connection
 	connConfig := &rpcclient.ConnConfig{
 		Host:         config.AppConfig.BTCRPC,
 		User:         config.AppConfig.BTCRPC_USER,
@@ -65,10 +65,10 @@ func NewWalletServer(libp2p *p2p.LibP2PService, st *state.State, signer *bls.Sig
 	}
 }
 
-func (w *WalletServer) Start(ctx context.Context) {
+func (w *WalletServer) Start(ctx context.Context, blockDoneCh chan struct{}) {
 	w.state.EventBus.Subscribe(state.BlockScanned, w.blockCh)
 
-	go w.blockScanLoop(ctx)
+	go w.blockScanLoop(ctx, blockDoneCh)
 	go w.withdrawLoop(ctx)
 
 	go w.depositProcessor.Start(ctx)

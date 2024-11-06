@@ -66,7 +66,7 @@ func (s *HTTPServer) handleFireblocksWebhook(c *gin.Context) {
 	log.Infof("Fireblocks webhook received, Type: %s, TenantId: %s, Timestamp: %d, Data: %v",
 		req.Type, req.TenantId, req.Timestamp, req.Data)
 
-	// TODO: record
+	// record
 	if req.Type == "TRANSACTION_CREATED" {
 		var trans TransactionDetails
 		if err := json.Unmarshal(req.Data, &trans); err == nil {
@@ -80,7 +80,7 @@ func (s *HTTPServer) handleFireblocksWebhook(c *gin.Context) {
 		if err := json.Unmarshal(req.Data, &trans); err == nil {
 			log.Infof("Transaction status updated detect, txId %s, txHash %s, status %s, subStatus %s, assetType %s, amount %s", trans.ExternalTxID, trans.TxHash, trans.Status, trans.SubStatus, trans.AssetType, trans.AmountInfo.Amount)
 			if trans.Operation == "TRANSFER" && trans.Status == "COMPLETED" && trans.SubStatus == "CONFIRMED" {
-				// TODO: withdraw filter (sourceAddress, destinationAddress, assetType)
+				// withdraw filter (sourceAddress, destinationAddress, assetType)
 				log.Infof("Fireblocks webhook transaction confirmed, txId %s, txHash %s, sourceAddress %s, destinationAddress %s, assetType %s, amount %s", trans.ExternalTxID, trans.TxHash, trans.SourceAddress, trans.DestinationAddress, trans.AssetType, trans.AmountInfo.Amount)
 			}
 		} else {

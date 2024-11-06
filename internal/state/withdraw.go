@@ -263,7 +263,7 @@ func (s *State) UpdateWithdrawReplace(id, txPrice uint64) error {
 	withdraw.TxPrice = txPrice
 	withdraw.UpdatedAt = time.Now()
 
-	// TODO notify stop aggregating if it is aggregating status, set to closed
+	// RBF will with higher txPrice, so no need to notify stop aggregating
 
 	return s.saveWithdraw(withdraw)
 }
@@ -285,7 +285,7 @@ func (s *State) UpdateWithdrawCanceling(id uint64) error {
 	withdraw.Status = db.WITHDRAW_STATUS_CANCELING
 	withdraw.UpdatedAt = time.Now()
 
-	// TODO notify stop aggregating if it is aggregating status, set to closed
+	// NOTE check stop aggregating order if there is aggregating status withdraw, set to closed
 
 	return s.saveWithdraw(withdraw)
 }

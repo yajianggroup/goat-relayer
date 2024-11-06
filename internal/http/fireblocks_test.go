@@ -69,7 +69,7 @@ BQIDAQAB
 func TestFireblocksWebhookData(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.Default()
-	// TODO args cannot be nil
+	// args cannot be nil
 	server := NewHTTPServer(nil, nil, nil)
 	router.POST("/api/fireblocks/webhook", server.handleFireblocksWebhook)
 
