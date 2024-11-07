@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/goatnetwork/goat-relayer/internal/config"
+	"github.com/goatnetwork/goat-relayer/internal/layer2"
 	"github.com/goatnetwork/goat-relayer/internal/p2p"
 	"github.com/goatnetwork/goat-relayer/internal/state"
 	"github.com/goatnetwork/goat-relayer/internal/types"
@@ -41,7 +42,8 @@ func (s *Signer) handleSigStartWithdrawFinalize(ctx context.Context, e types.Msg
 		IntermediateProof: e.IntermediateProof,
 		BlockHeader:       e.BlockHeader,
 	}
-	err := s.RetrySubmit(ctx, e.RequestId, rpcMsg, config.AppConfig.L2SubmitRetry)
+	newProposal := layer2.NewProposal[*bitcointypes.MsgFinalizeWithdrawal](s.layer2Listener)
+	err := newProposal.RetrySubmit(ctx, e.RequestId, rpcMsg, config.AppConfig.L2SubmitRetry)
 	if err != nil {
 		log.Errorf("Proposer submit FinalizeWithdrawal to consensus error, request id: %s, err: %v", e.RequestId, err)
 		// feedback SigFailed, deposit should module subscribe it to save UTXO or mark confirm
@@ -87,7 +89,8 @@ func (s *Signer) handleSigStartWithdrawCancel(ctx context.Context, e types.MsgSi
 		Proposer: e.MsgSign.VoterAddress,
 		Id:       e.WithdrawIds,
 	}
-	err := s.RetrySubmit(ctx, e.RequestId, rpcMsg, config.AppConfig.L2SubmitRetry)
+	newProposal := layer2.NewProposal[*bitcointypes.MsgApproveCancellation](s.layer2Listener)
+	err := newProposal.RetrySubmit(ctx, e.RequestId, rpcMsg, config.AppConfig.L2SubmitRetry)
 	if err != nil {
 		log.Errorf("Proposer submit ApproveCancellation to consensus error, request id: %s, err: %v", e.RequestId, err)
 		// feedback SigFailed, deposit should module subscribe it to save UTXO or mark confirm

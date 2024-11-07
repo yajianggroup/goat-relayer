@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/goatnetwork/goat-relayer/internal/config"
+	"github.com/goatnetwork/goat-relayer/internal/layer2"
 	"github.com/goatnetwork/goat-relayer/internal/p2p"
 	"github.com/goatnetwork/goat-relayer/internal/state"
 	"github.com/goatnetwork/goat-relayer/internal/types"
@@ -94,7 +95,8 @@ func (s *Signer) handleSigReceiveNewVoter(ctx context.Context, e types.MsgSignNe
 		VoterBlsKeyProof: e.VoterBlsKeyProof,
 	}
 
-	err := s.RetrySubmit(ctx, e.RequestId, rpcMsg, config.AppConfig.L2SubmitRetry)
+	newProposal := layer2.NewProposal[*relayertypes.MsgNewVoterRequest](s.layer2Listener)
+	err := newProposal.RetrySubmit(ctx, e.RequestId, rpcMsg, config.AppConfig.L2SubmitRetry)
 	if err != nil {
 		log.Errorf("SigReceive proposer submit NewBlock to RPC error, request id: %s, err: %v", e.RequestId, err)
 		s.removeSigMap(e.RequestId, false)

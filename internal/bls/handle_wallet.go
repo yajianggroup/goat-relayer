@@ -11,6 +11,7 @@ import (
 
 	"github.com/goatnetwork/goat-relayer/internal/config"
 	"github.com/goatnetwork/goat-relayer/internal/db"
+	"github.com/goatnetwork/goat-relayer/internal/layer2"
 	"github.com/goatnetwork/goat-relayer/internal/p2p"
 	"github.com/goatnetwork/goat-relayer/internal/state"
 	"github.com/goatnetwork/goat-relayer/internal/types"
@@ -86,14 +87,24 @@ func (s *Signer) handleSigStartSendOrder(ctx context.Context, e types.MsgSignSen
 	log.Infof("SigStart broadcast MsgSignSendOrder ok, request id: %s", e.RequestId)
 
 	// If voters count is 1, should submit soon
-	rpcMsg, err := s.aggSigSendOrder(e.RequestId)
+	msgWithdrawal, msgConsolidation, err := s.aggSigSendOrder(e.RequestId)
 	if err != nil {
 		log.Warnf("SigStart proposer process MsgSignSendOrder aggregate sig, request id: %s, err: %v", e.RequestId, err)
 		return nil
 	}
 
-	if order.OrderType == db.ORDER_TYPE_WITHDRAWAL {
-		err = s.RetrySubmit(ctx, e.RequestId, rpcMsg, config.AppConfig.L2SubmitRetry)
+	if order.OrderType == db.ORDER_TYPE_WITHDRAWAL && msgWithdrawal != nil {
+		newProposal := layer2.NewProposal[*bitcointypes.MsgProcessWithdrawal](s.layer2Listener)
+		err = newProposal.RetrySubmit(ctx, e.RequestId, msgWithdrawal, config.AppConfig.L2SubmitRetry)
+		if err != nil {
+			log.Errorf("SigStart proposer submit MsgSignSendOrder to RPC error, request id: %s, err: %v", e.RequestId, err)
+			s.removeSigMap(e.RequestId, false)
+			return err
+		}
+		log.Infof("SigStart proposer submit MsgSignSendOrder to RPC ok, request id: %s", e.RequestId)
+	} else if msgConsolidation != nil {
+		newProposal := layer2.NewProposal[*bitcointypes.MsgNewConsolidation](s.layer2Listener)
+		err = newProposal.RetrySubmit(ctx, e.RequestId, msgConsolidation, config.AppConfig.L2SubmitRetry)
 		if err != nil {
 			log.Errorf("SigStart proposer submit MsgSignSendOrder to RPC error, request id: %s, err: %v", e.RequestId, err)
 			s.removeSigMap(e.RequestId, false)
@@ -141,21 +152,30 @@ func (s *Signer) handleSigReceiveSendOrder(ctx context.Context, e types.MsgSignS
 		s.sigMu.Unlock()
 
 		// UNCHECK aggregate
-		rpcMsg, err := s.aggSigSendOrder(e.RequestId)
+		msgWithdrawal, msgConsolidation, err := s.aggSigSendOrder(e.RequestId)
 		if err != nil {
 			log.Warnf("SigReceive send order proposer process aggregate sig, request id: %s, err: %v", e.RequestId, err)
 			return nil
 		}
 
-		// if _, ok := rpcMsg.(bitcointypes.MsgInitializeWithdrawal); ok {
 		// withdrawal && consolidation both submit to layer2, this
-		err = s.RetrySubmit(ctx, e.RequestId, rpcMsg, config.AppConfig.L2SubmitRetry)
-		if err != nil {
-			log.Errorf("SigReceive send order proposer submit NewBlock to RPC error, request id: %s, err: %v", e.RequestId, err)
-			s.removeSigMap(e.RequestId, false)
-			return err
+		if msgWithdrawal != nil {
+			newProposal := layer2.NewProposal[*bitcointypes.MsgProcessWithdrawal](s.layer2Listener)
+			err = newProposal.RetrySubmit(ctx, e.RequestId, msgWithdrawal, config.AppConfig.L2SubmitRetry)
+			if err != nil {
+				log.Errorf("SigReceive send withdrawal proposer submit NewBlock to RPC error, request id: %s, err: %v", e.RequestId, err)
+				s.removeSigMap(e.RequestId, false)
+				return err
+			}
+		} else if msgConsolidation != nil {
+			newProposal := layer2.NewProposal[*bitcointypes.MsgNewConsolidation](s.layer2Listener)
+			err = newProposal.RetrySubmit(ctx, e.RequestId, msgConsolidation, config.AppConfig.L2SubmitRetry)
+			if err != nil {
+				log.Errorf("SigReceive send consolidation proposer submit NewBlock to RPC error, request id: %s, err: %v", e.RequestId, err)
+				s.removeSigMap(e.RequestId, false)
+				return err
+			}
 		}
-		// }
 
 		s.removeSigMap(e.RequestId, false)
 
@@ -304,12 +324,12 @@ func (s *Signer) makeSigSendOrder(orderType string, withdrawIds []uint64, noWitn
 	}
 }
 
-func (s *Signer) aggSigSendOrder(requestId string) (interface{}, error) {
+func (s *Signer) aggSigSendOrder(requestId string) (*bitcointypes.MsgProcessWithdrawal, *bitcointypes.MsgNewConsolidation, error) {
 	epochVoter := s.state.GetEpochVoter()
 
 	voteMap, ok := s.sigExists(requestId)
 	if !ok {
-		return nil, fmt.Errorf("no sig found of send order, request id: %s", requestId)
+		return nil, nil, fmt.Errorf("no sig found of send order, request id: %s", requestId)
 	}
 	voterAll := strings.Split(epochVoter.VoteAddrList, ",")
 	proposer := ""
@@ -327,7 +347,7 @@ func (s *Signer) aggSigSendOrder(requestId string) (interface{}, error) {
 		err := json.Unmarshal(msgSendOrder.SendOrder, &order)
 		if err != nil {
 			log.Debug("Cannot unmarshal send order from vote msg")
-			return nil, err
+			return nil, nil, err
 		}
 		if msgSendOrder.IsProposer {
 			proposer = address // proposer address
@@ -350,14 +370,14 @@ func (s *Signer) aggSigSendOrder(requestId string) (interface{}, error) {
 	}
 
 	if proposer == "" {
-		return nil, fmt.Errorf("missing proposer sig msg of send order, request id: %s", requestId)
+		return nil, nil, fmt.Errorf("missing proposer sig msg of send order, request id: %s", requestId)
 	}
 
 	if epoch != epochVoter.Epoch {
-		return nil, fmt.Errorf("incorrect epoch of send order, request id: %s, msg epoch: %d, current epoch: %d", requestId, epoch, epochVoter.Epoch)
+		return nil, nil, fmt.Errorf("incorrect epoch of send order, request id: %s, msg epoch: %d, current epoch: %d", requestId, epoch, epochVoter.Epoch)
 	}
 	if sequence != epochVoter.Sequence {
-		return nil, fmt.Errorf("incorrect sequence of send order, request id: %s, msg sequence: %d, current sequence: %d", requestId, sequence, epochVoter.Sequence)
+		return nil, nil, fmt.Errorf("incorrect sequence of send order, request id: %s, msg sequence: %d, current sequence: %d", requestId, sequence, epochVoter.Sequence)
 	}
 
 	voteSig = append([][]byte{proposerSig}, voteSig...)
@@ -365,13 +385,13 @@ func (s *Signer) aggSigSendOrder(requestId string) (interface{}, error) {
 	// check threshold
 	threshold := types.Threshold(len(voterAll))
 	if len(voteSig) < threshold {
-		return nil, fmt.Errorf("threshold not reach of send order, request id: %s, has sig: %d, threshold: %d", requestId, len(voteSig), threshold)
+		return nil, nil, fmt.Errorf("threshold not reach of send order, request id: %s, has sig: %d, threshold: %d", requestId, len(voteSig), threshold)
 	}
 
 	// aggregate
 	aggSig, err := goatcryp.AggregateSignatures(voteSig)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	votes := &relayertypes.Votes{
@@ -389,13 +409,13 @@ func (s *Signer) aggSigSendOrder(requestId string) (interface{}, error) {
 			NoWitnessTx: noWitnessTx,
 			TxFee:       txFee,
 		}
-		return &msgWithdrawal, nil
+		return &msgWithdrawal, nil, nil
 	} else {
 		msgConsolidation := bitcointypes.MsgNewConsolidation{
 			Proposer:    proposer,
 			Vote:        votes,
 			NoWitnessTx: noWitnessTx,
 		}
-		return &msgConsolidation, nil
+		return nil, &msgConsolidation, nil
 	}
 }

@@ -61,7 +61,7 @@ func (w *WalletServer) cancelWithdrawSig() {
 
 	withdrawIds := make([]uint64, len(withdraws))
 	for i, withdraw := range withdraws {
-		withdrawIds[i] = uint64(withdraw.ID)
+		withdrawIds[i] = uint64(withdraw.RequestId)
 	}
 	requestId := fmt.Sprintf("WITHDRAWCANCEL:%s:%d", config.AppConfig.RelayerAddress, l2Info.Height)
 	msgSignCancel := types.MsgSignCancelWithdraw{

@@ -2,7 +2,6 @@ package bls
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/goatnetwork/goat-relayer/internal/state"
@@ -104,29 +103,6 @@ func (s *Signer) handleSigReceive(ctx context.Context, event interface{}) {
 		// check e['msg_type'] from libp2p
 		log.Debugf("Unknown event handleSigReceive type, %v", e)
 	}
-}
-
-func (s *Signer) RetrySubmit(ctx context.Context, requestId string, msg interface{}, retries int) error {
-	var err error
-	for i := 0; i <= retries; i++ {
-		resultTx, err := s.layer2Listener.SubmitToConsensus(ctx, msg)
-		if err == nil {
-			if resultTx.TxResult.Code != 0 {
-				return fmt.Errorf("tx execute error, %v", resultTx.TxResult.Log)
-			}
-			return nil
-		} else if i == retries {
-			return err
-		}
-		log.Warnf("Retrying to submit msg to RPC, attempt %d, request id: %s", i+1, requestId)
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(time.Second * 2):
-		}
-	}
-	return err
 }
 
 func (s *Signer) sigExists(requestId string) (map[string]interface{}, bool) {

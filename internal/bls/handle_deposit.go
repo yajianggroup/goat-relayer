@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/goatnetwork/goat-relayer/internal/config"
+	"github.com/goatnetwork/goat-relayer/internal/layer2"
 	"github.com/goatnetwork/goat-relayer/internal/state"
 	"github.com/goatnetwork/goat-relayer/internal/types"
 	bitcointypes "github.com/goatnetwork/goat/x/bitcoin/types"
@@ -61,7 +62,8 @@ func (s *Signer) handleSigStartNewDeposit(ctx context.Context, e types.MsgSignDe
 		BlockHeaders: blockHeaders,
 		Deposits:     deposits,
 	}
-	err := s.RetrySubmit(ctx, e.RequestId, rpcMsg, config.AppConfig.L2SubmitRetry)
+	newProposal := layer2.NewProposal[*bitcointypes.MsgNewDeposits](s.layer2Listener)
+	err := newProposal.RetrySubmit(ctx, e.RequestId, rpcMsg, config.AppConfig.L2SubmitRetry)
 	if err != nil {
 		log.Errorf("Proposer submit NewDeposit to consensus error, request id: %s, err: %v", e.RequestId, err)
 		// feedback SigFailed, deposit should module subscribe it to save UTXO or mark confirm
