@@ -373,7 +373,7 @@ func (b *BaseOrderBroadcaster) broadcastOrders() {
 			continue
 		}
 
-		p2p.PublishMessage(context.Background(), p2p.Message{
+		p2p.PublishMessage(context.Background(), p2p.Message[any]{
 			MessageType: p2p.MessageTypeSendOrderBroadcasted,
 			RequestId:   fmt.Sprintf("TXBROADCAST:%s:%s", config.AppConfig.RelayerAddress, sendOrder.Txid),
 			DataType:    "MsgSendOrderBroadcasted",
@@ -390,7 +390,6 @@ func (b *BaseOrderBroadcaster) broadcastOrders() {
 // broadcastPendingCheck is a function that checks the pending status of the orders
 // if it is failed, broadcast it again
 func (b *BaseOrderBroadcaster) broadcastPendingCheck() {
-	// TODO: start id
 	// Assume limit 50 pending orders at a time
 	pendingOrders, err := b.state.GetSendOrderPending(50)
 	if err != nil {

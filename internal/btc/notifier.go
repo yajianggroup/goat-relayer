@@ -85,13 +85,13 @@ func NewBTCNotifier(client *rpcclient.Client, cache *BTCCache, poller *BTCPoller
 	}
 }
 
-func (bn *BTCNotifier) Start(ctx context.Context) {
+func (bn *BTCNotifier) Start(ctx context.Context, blockDoneCh chan struct{}) {
 	bn.cache.Start(ctx)
 	go bn.poller.Start(ctx)
-	go bn.checkConfirmations(ctx)
+	go bn.checkConfirmations(ctx, blockDoneCh)
 }
 
-func (bn *BTCNotifier) checkConfirmations(ctx context.Context) {
+func (bn *BTCNotifier) checkConfirmations(ctx context.Context, blockDoneCh chan struct{}) {
 	checkInterval := 30 * time.Second
 	catchUpInterval := 1 * time.Second
 	ticker := time.NewTicker(checkInterval)
@@ -145,7 +145,7 @@ func (bn *BTCNotifier) checkConfirmations(ctx context.Context) {
 			log.Infof("BTC sync started: best height=%d, from=%d, to=%d", bestHeight, syncConfirmedHeight+1, confirmedHeight)
 
 			for height := syncConfirmedHeight + 1; height <= confirmedHeight; height++ {
-				if err := bn.processBlockAtHeight(height); err != nil {
+				if err := bn.processBlockAtHeight(height, blockDoneCh); err != nil {
 					break
 				}
 				newSyncHeight = height
@@ -196,7 +196,7 @@ func (bn *BTCNotifier) updateNetworkFee() error {
 }
 
 // process block at height
-func (bn *BTCNotifier) processBlockAtHeight(height int64) error {
+func (bn *BTCNotifier) processBlockAtHeight(height int64, blockDoneCh chan struct{}) error {
 	block, err := bn.getBlockAtHeight(height)
 	if err != nil {
 		log.Errorf("Error fetching block at height %d: %v", height, err)
@@ -204,6 +204,9 @@ func (bn *BTCNotifier) processBlockAtHeight(height int64) error {
 	}
 	bn.cache.blockChan <- BlockWithHeight{Block: block, Height: uint64(height)}
 	bn.poller.confirmChan <- &types.BtcBlockExt{MsgBlock: *block, BlockNumber: uint64(height)}
+
+	<-blockDoneCh
+	log.Infof("Confirmed block %d fully processed", height)
 	return nil
 }
 

@@ -1,12 +1,14 @@
 package state
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/goatnetwork/goat-relayer/internal/db"
 	log "github.com/sirupsen/logrus"
+	"gorm.io/gorm"
 )
 
 func (s *State) GetEpochVoter() db.EpochVoter {
@@ -14,6 +16,13 @@ func (s *State) GetEpochVoter() db.EpochVoter {
 	defer s.layer2Mu.RUnlock()
 
 	return *s.layer2State.EpochVoter
+}
+
+func (s *State) GetL2VoterQueue() []*db.VoterQueue {
+	s.layer2Mu.RLock()
+	defer s.layer2Mu.RUnlock()
+
+	return s.layer2State.VoterQueue
 }
 
 func (s *State) GetDepositKeyByBtcBlock(block uint64) (*db.DepositPubKey, error) {
@@ -238,8 +247,6 @@ func (s *State) UpdateL2InfoEpoch(block uint64, epoch uint64, proposer string) e
 		epochVoter.Epoch = epoch
 		if proposer != "" {
 			epochVoter.Proposer = proposer
-
-			// TODO check the voters change or not?
 		}
 
 		err := s.saveEpochVoter(epochVoter)
@@ -249,10 +256,6 @@ func (s *State) UpdateL2InfoEpoch(block uint64, epoch uint64, proposer string) e
 
 		s.layer2State.EpochVoter = epochVoter
 		s.layer2State.CurrentEpoch = epoch
-
-		if proposer != "" {
-			// TODO call event pulish
-		}
 	}
 
 	return nil
@@ -275,6 +278,99 @@ func (s *State) UpdateL2InfoSequence(block uint64, sequence uint64) error {
 		}
 
 		s.layer2State.EpochVoter = epochVoter
+	}
+
+	return nil
+}
+
+func (s *State) AddVoterQueue(voterAddr string, block uint64) error {
+	if voterAddr == "" {
+		return errors.New("invalid voter queue")
+	}
+
+	s.layer2Mu.Lock()
+	defer s.layer2Mu.Unlock()
+
+	voterQueue := &db.VoterQueue{
+		VoteAddr: voterAddr,
+		Epoch:    block, // block instead of epoch
+	}
+	// check if exists
+	var exists db.VoterQueue
+	result := s.dbm.GetL2InfoDB().Where("vote_addr = ? AND epoch = ?", voterQueue.VoteAddr, voterQueue.Epoch).First(&exists)
+	if result.Error == nil {
+		log.Infof("Voter queue of epoch %d already exists: %v", voterQueue.Epoch, voterQueue)
+		return nil
+	}
+	if result.Error != nil && result.Error != gorm.ErrRecordNotFound {
+		log.Errorf("State AddVoterQueue check exists error: %v", result.Error)
+		return result.Error
+	}
+
+	voterQueue.Action = "add"
+	voterQueue.Status = "init"
+	voterQueue.UpdatedAt = time.Now()
+	result = s.dbm.GetL2InfoDB().Create(voterQueue)
+	if result.Error != nil {
+		log.Errorf("State AddVoterQueue error: %v", result.Error)
+		return result.Error
+	}
+
+	s.layer2State.VoterQueue = append(s.layer2State.VoterQueue, voterQueue)
+	return nil
+}
+
+func (s *State) UpdateVoterQueuePending(voterAddr string) error {
+	s.layer2Mu.Lock()
+	defer s.layer2Mu.Unlock()
+
+	var voterQueue db.VoterQueue
+	result := s.dbm.GetL2InfoDB().Where("vote_addr = ? AND status = 'init'", voterAddr).Order("id DESC").First(&voterQueue)
+	if result.Error != nil && result.Error != gorm.ErrRecordNotFound {
+		log.Errorf("State UpdateVoterQueuePending error: %v", result.Error)
+		return result.Error
+	}
+	if result.Error == gorm.ErrRecordNotFound {
+		return nil
+	}
+	voterQueue.Status = "pending"
+	voterQueue.UpdatedAt = time.Now()
+	result = s.dbm.GetL2InfoDB().Save(&voterQueue)
+	if result.Error != nil {
+		log.Errorf("State UpdateVoterQueuePending error: %v", result.Error)
+		return result.Error
+	}
+	return nil
+}
+
+func (s *State) UpdateVoterQueueProcessed(voterAddr string) error {
+	s.layer2Mu.Lock()
+	defer s.layer2Mu.Unlock()
+
+	// remove from voter queue
+	newVoterQueue := make([]*db.VoterQueue, 0)
+	for _, voterQueue := range s.layer2State.VoterQueue {
+		if voterQueue.VoteAddr != voterAddr {
+			newVoterQueue = append(newVoterQueue, voterQueue)
+		}
+	}
+	s.layer2State.VoterQueue = newVoterQueue
+
+	var voterQueue db.VoterQueue
+	result := s.dbm.GetL2InfoDB().Where("vote_addr = ? AND status <> 'processed'", voterAddr).Order("id DESC").First(&voterQueue)
+	if result.Error != nil && result.Error != gorm.ErrRecordNotFound {
+		log.Errorf("State UpdateVoterQueueProcessed error: %v", result.Error)
+		return result.Error
+	}
+	if result.Error == gorm.ErrRecordNotFound {
+		return nil
+	}
+	voterQueue.Status = "processed"
+	voterQueue.UpdatedAt = time.Now()
+	result = s.dbm.GetL2InfoDB().Save(&voterQueue)
+	if result.Error != nil {
+		log.Errorf("State UpdateVoterQueueProcessed error: %v", result.Error)
+		return result.Error
 	}
 
 	return nil

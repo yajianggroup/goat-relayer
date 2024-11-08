@@ -31,7 +31,7 @@ var (
 
 // BridgeContractMetaData contains all meta data concerning the BridgeContract contract.
 var BridgeContractMetaData = &bind.MetaData{
-	ABI: "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"inputs\":[],\"name\":\"AccessDenied\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"account\",\"type\":\"address\"}],\"name\":\"AddressInsufficientBalance\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"FailedInnerCall\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"Forbidden\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"InvalidAddress\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"MalformedTax\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"OwnableInvalidOwner\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"account\",\"type\":\"address\"}],\"name\":\"OwnableUnauthorizedAccount\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"RateLimitExceeded\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"TaxTooHigh\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"id\",\"type\":\"uint256\"}],\"name\":\"Canceled\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"id\",\"type\":\"uint256\"}],\"name\":\"Canceling\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"target\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"bytes32\",\"name\":\"txid\",\"type\":\"bytes32\"},{\"indexed\":false,\"internalType\":\"uint32\",\"name\":\"txout\",\"type\":\"uint32\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"tax\",\"type\":\"uint256\"}],\"name\":\"Deposit\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint16\",\"name\":\"rate\",\"type\":\"uint16\"},{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"max\",\"type\":\"uint64\"}],\"name\":\"DepositTaxUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"id\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"bytes32\",\"name\":\"txid\",\"type\":\"bytes32\"},{\"indexed\":false,\"internalType\":\"uint32\",\"name\":\"txout\",\"type\":\"uint32\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"value\",\"type\":\"uint256\"}],\"name\":\"Paid\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"id\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"maxTxPrice\",\"type\":\"uint256\"}],\"name\":\"RBF\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint16\",\"name\":\"\",\"type\":\"uint16\"}],\"name\":\"RateLimitUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"id\",\"type\":\"uint256\"}],\"name\":\"Refund\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"id\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"from\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"tax\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"maxTxPrice\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"receiver\",\"type\":\"string\"}],\"name\":\"Withdraw\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint16\",\"name\":\"rate\",\"type\":\"uint16\"},{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"max\",\"type\":\"uint64\"}],\"name\":\"WithdrawalTaxUpdated\",\"type\":\"event\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_wid\",\"type\":\"uint256\"}],\"name\":\"cancel1\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_wid\",\"type\":\"uint256\"}],\"name\":\"cancel2\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_txid\",\"type\":\"bytes32\"},{\"internalType\":\"uint32\",\"name\":\"_txout\",\"type\":\"uint32\"},{\"internalType\":\"address\",\"name\":\"_target\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"_amount\",\"type\":\"uint256\"}],\"name\":\"deposit\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"tax\",\"type\":\"uint256\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"_txid\",\"type\":\"bytes32\"},{\"internalType\":\"uint32\",\"name\":\"_txout\",\"type\":\"uint32\"}],\"name\":\"isDeposited\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_wid\",\"type\":\"uint256\"},{\"internalType\":\"bytes32\",\"name\":\"_txid\",\"type\":\"bytes32\"},{\"internalType\":\"uint32\",\"name\":\"_txout\",\"type\":\"uint32\"},{\"internalType\":\"uint256\",\"name\":\"_received\",\"type\":\"uint256\"}],\"name\":\"paid\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"param\",\"outputs\":[{\"internalType\":\"uint16\",\"name\":\"rateLimit\",\"type\":\"uint16\"},{\"internalType\":\"uint16\",\"name\":\"depositTaxBP\",\"type\":\"uint16\"},{\"internalType\":\"uint64\",\"name\":\"maxDepositTax\",\"type\":\"uint64\"},{\"internalType\":\"uint16\",\"name\":\"withdrawalTaxBP\",\"type\":\"uint16\"},{\"internalType\":\"uint64\",\"name\":\"maxWithdrawalTax\",\"type\":\"uint64\"},{\"internalType\":\"uint16\",\"name\":\"_res1\",\"type\":\"uint16\"},{\"internalType\":\"uint64\",\"name\":\"_res2\",\"type\":\"uint64\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"id\",\"type\":\"uint256\"}],\"name\":\"receipts\",\"outputs\":[{\"internalType\":\"bytes32\",\"name\":\"txid\",\"type\":\"bytes32\"},{\"internalType\":\"uint32\",\"name\":\"txout\",\"type\":\"uint32\"},{\"internalType\":\"uint256\",\"name\":\"received\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_wid\",\"type\":\"uint256\"}],\"name\":\"refund\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"_wid\",\"type\":\"uint256\"},{\"internalType\":\"uint16\",\"name\":\"_maxTxPrice\",\"type\":\"uint16\"}],\"name\":\"replaceByFee\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint16\",\"name\":\"_bp\",\"type\":\"uint16\"},{\"internalType\":\"uint64\",\"name\":\"_max\",\"type\":\"uint64\"}],\"name\":\"setDepositTax\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint16\",\"name\":\"_sec\",\"type\":\"uint16\"}],\"name\":\"setRateLimit\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint16\",\"name\":\"_bp\",\"type\":\"uint16\"},{\"internalType\":\"uint64\",\"name\":\"_max\",\"type\":\"uint64\"}],\"name\":\"setWithdrawalTax\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes4\",\"name\":\"id\",\"type\":\"bytes4\"}],\"name\":\"supportsInterface\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"string\",\"name\":\"_receiver\",\"type\":\"string\"},{\"internalType\":\"uint16\",\"name\":\"_maxTxPrice\",\"type\":\"uint16\"}],\"name\":\"withdraw\",\"outputs\":[],\"stateMutability\":\"payable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"name\":\"withdrawals\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"sender\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"tax\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"maxTxPrice\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"updatedAt\",\"type\":\"uint256\"},{\"internalType\":\"string\",\"name\":\"receiver\",\"type\":\"string\"},{\"internalType\":\"enumIBridge.WithdrawalStatus\",\"name\":\"status\",\"type\":\"uint8\"}],\"stateMutability\":\"view\",\"type\":\"function\"}]",
+	ABI: "[{\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"stateMutability\":\"nonpayable\",\"type\":\"constructor\"},{\"inputs\":[],\"name\":\"AccessDenied\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"FailedCall\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"Forbidden\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"balance\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"needed\",\"type\":\"uint256\"}],\"name\":\"InsufficientBalance\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"InvalidAddress\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"MalformedTax\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"owner\",\"type\":\"address\"}],\"name\":\"OwnableInvalidOwner\",\"type\":\"error\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"account\",\"type\":\"address\"}],\"name\":\"OwnableUnauthorizedAccount\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"RateLimitExceeded\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"RequestTooFrequent\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"TaxTooHigh\",\"type\":\"error\"},{\"inputs\":[],\"name\":\"TooManyRequest\",\"type\":\"error\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"id\",\"type\":\"uint256\"}],\"name\":\"Canceled\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"id\",\"type\":\"uint256\"}],\"name\":\"Canceling\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"target\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"bytes32\",\"name\":\"txid\",\"type\":\"bytes32\"},{\"indexed\":false,\"internalType\":\"uint32\",\"name\":\"txout\",\"type\":\"uint32\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"tax\",\"type\":\"uint256\"}],\"name\":\"Deposit\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint16\",\"name\":\"rate\",\"type\":\"uint16\"},{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"max\",\"type\":\"uint64\"}],\"name\":\"DepositTaxUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"\",\"type\":\"uint64\"}],\"name\":\"MinWithdrawalUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"address\",\"name\":\"previousOwner\",\"type\":\"address\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"OwnershipTransferred\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"id\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"bytes32\",\"name\":\"txid\",\"type\":\"bytes32\"},{\"indexed\":false,\"internalType\":\"uint32\",\"name\":\"txout\",\"type\":\"uint32\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"value\",\"type\":\"uint256\"}],\"name\":\"Paid\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"id\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint16\",\"name\":\"maxTxPrice\",\"type\":\"uint16\"}],\"name\":\"RBF\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint16\",\"name\":\"\",\"type\":\"uint16\"}],\"name\":\"RateLimitUpdated\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"id\",\"type\":\"uint256\"}],\"name\":\"Refund\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":true,\"internalType\":\"uint256\",\"name\":\"id\",\"type\":\"uint256\"},{\"indexed\":true,\"internalType\":\"address\",\"name\":\"from\",\"type\":\"address\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint256\",\"name\":\"tax\",\"type\":\"uint256\"},{\"indexed\":false,\"internalType\":\"uint16\",\"name\":\"maxTxPrice\",\"type\":\"uint16\"},{\"indexed\":false,\"internalType\":\"string\",\"name\":\"receiver\",\"type\":\"string\"}],\"name\":\"Withdraw\",\"type\":\"event\"},{\"anonymous\":false,\"inputs\":[{\"indexed\":false,\"internalType\":\"uint16\",\"name\":\"rate\",\"type\":\"uint16\"},{\"indexed\":false,\"internalType\":\"uint64\",\"name\":\"max\",\"type\":\"uint64\"}],\"name\":\"WithdrawalTaxUpdated\",\"type\":\"event\"},{\"inputs\":[],\"name\":\"REQUEST_PER_BLOCK\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"wid\",\"type\":\"uint256\"}],\"name\":\"cancel1\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"wid\",\"type\":\"uint256\"}],\"name\":\"cancel2\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"txid\",\"type\":\"bytes32\"},{\"internalType\":\"uint32\",\"name\":\"txout\",\"type\":\"uint32\"},{\"internalType\":\"address\",\"name\":\"target\",\"type\":\"address\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"}],\"name\":\"deposit\",\"outputs\":[{\"internalType\":\"uint256\",\"name\":\"tax\",\"type\":\"uint256\"}],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes32\",\"name\":\"txid\",\"type\":\"bytes32\"},{\"internalType\":\"uint32\",\"name\":\"txout\",\"type\":\"uint32\"}],\"name\":\"isDeposited\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"owner\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"\",\"type\":\"address\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"wid\",\"type\":\"uint256\"},{\"internalType\":\"bytes32\",\"name\":\"txid\",\"type\":\"bytes32\"},{\"internalType\":\"uint32\",\"name\":\"txout\",\"type\":\"uint32\"},{\"internalType\":\"uint256\",\"name\":\"received\",\"type\":\"uint256\"}],\"name\":\"paid\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"param\",\"outputs\":[{\"internalType\":\"uint16\",\"name\":\"depositTaxBP\",\"type\":\"uint16\"},{\"internalType\":\"uint64\",\"name\":\"maxDepositTax\",\"type\":\"uint64\"},{\"internalType\":\"uint16\",\"name\":\"withdrawalTaxBP\",\"type\":\"uint16\"},{\"internalType\":\"uint64\",\"name\":\"maxWithdrawalTax\",\"type\":\"uint64\"},{\"internalType\":\"uint64\",\"name\":\"minWithdrawal\",\"type\":\"uint64\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"wid\",\"type\":\"uint256\"}],\"name\":\"refund\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[],\"name\":\"renounceOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"wid\",\"type\":\"uint256\"},{\"internalType\":\"uint16\",\"name\":\"maxTxPrice\",\"type\":\"uint16\"}],\"name\":\"replaceByFee\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint16\",\"name\":\"bp\",\"type\":\"uint16\"},{\"internalType\":\"uint64\",\"name\":\"max\",\"type\":\"uint64\"}],\"name\":\"setDepositTax\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint64\",\"name\":\"amount\",\"type\":\"uint64\"}],\"name\":\"setMinWithdrawal\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint16\",\"name\":\"bp\",\"type\":\"uint16\"},{\"internalType\":\"uint64\",\"name\":\"max\",\"type\":\"uint64\"}],\"name\":\"setWithdrawalTax\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"bytes4\",\"name\":\"id\",\"type\":\"bytes4\"}],\"name\":\"supportsInterface\",\"outputs\":[{\"internalType\":\"bool\",\"name\":\"\",\"type\":\"bool\"}],\"stateMutability\":\"view\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"address\",\"name\":\"newOwner\",\"type\":\"address\"}],\"name\":\"transferOwnership\",\"outputs\":[],\"stateMutability\":\"nonpayable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"string\",\"name\":\"receiver\",\"type\":\"string\"},{\"internalType\":\"uint16\",\"name\":\"maxTxPrice\",\"type\":\"uint16\"}],\"name\":\"withdraw\",\"outputs\":[],\"stateMutability\":\"payable\",\"type\":\"function\"},{\"inputs\":[{\"internalType\":\"uint256\",\"name\":\"\",\"type\":\"uint256\"}],\"name\":\"withdrawals\",\"outputs\":[{\"internalType\":\"address\",\"name\":\"sender\",\"type\":\"address\"},{\"internalType\":\"uint16\",\"name\":\"maxTxPrice\",\"type\":\"uint16\"},{\"internalType\":\"enumIBridge.WithdrawalStatus\",\"name\":\"status\",\"type\":\"uint8\"},{\"internalType\":\"uint256\",\"name\":\"amount\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"tax\",\"type\":\"uint256\"},{\"internalType\":\"uint256\",\"name\":\"updatedAt\",\"type\":\"uint256\"}],\"stateMutability\":\"view\",\"type\":\"function\"}]",
 }
 
 // BridgeContractABI is the input ABI used to generate the binding from.
@@ -180,12 +180,43 @@ func (_BridgeContract *BridgeContractTransactorRaw) Transact(opts *bind.Transact
 	return _BridgeContract.Contract.contract.Transact(opts, method, params...)
 }
 
+// REQUESTPERBLOCK is a free data retrieval call binding the contract method 0x3396c809.
+//
+// Solidity: function REQUEST_PER_BLOCK() view returns(uint256)
+func (_BridgeContract *BridgeContractCaller) REQUESTPERBLOCK(opts *bind.CallOpts) (*big.Int, error) {
+	var out []interface{}
+	err := _BridgeContract.contract.Call(opts, &out, "REQUEST_PER_BLOCK")
+
+	if err != nil {
+		return *new(*big.Int), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new(*big.Int)).(**big.Int)
+
+	return out0, err
+
+}
+
+// REQUESTPERBLOCK is a free data retrieval call binding the contract method 0x3396c809.
+//
+// Solidity: function REQUEST_PER_BLOCK() view returns(uint256)
+func (_BridgeContract *BridgeContractSession) REQUESTPERBLOCK() (*big.Int, error) {
+	return _BridgeContract.Contract.REQUESTPERBLOCK(&_BridgeContract.CallOpts)
+}
+
+// REQUESTPERBLOCK is a free data retrieval call binding the contract method 0x3396c809.
+//
+// Solidity: function REQUEST_PER_BLOCK() view returns(uint256)
+func (_BridgeContract *BridgeContractCallerSession) REQUESTPERBLOCK() (*big.Int, error) {
+	return _BridgeContract.Contract.REQUESTPERBLOCK(&_BridgeContract.CallOpts)
+}
+
 // IsDeposited is a free data retrieval call binding the contract method 0x1ccc92c7.
 //
-// Solidity: function isDeposited(bytes32 _txid, uint32 _txout) view returns(bool)
-func (_BridgeContract *BridgeContractCaller) IsDeposited(opts *bind.CallOpts, _txid [32]byte, _txout uint32) (bool, error) {
+// Solidity: function isDeposited(bytes32 txid, uint32 txout) view returns(bool)
+func (_BridgeContract *BridgeContractCaller) IsDeposited(opts *bind.CallOpts, txid [32]byte, txout uint32) (bool, error) {
 	var out []interface{}
-	err := _BridgeContract.contract.Call(opts, &out, "isDeposited", _txid, _txout)
+	err := _BridgeContract.contract.Call(opts, &out, "isDeposited", txid, txout)
 
 	if err != nil {
 		return *new(bool), err
@@ -199,16 +230,16 @@ func (_BridgeContract *BridgeContractCaller) IsDeposited(opts *bind.CallOpts, _t
 
 // IsDeposited is a free data retrieval call binding the contract method 0x1ccc92c7.
 //
-// Solidity: function isDeposited(bytes32 _txid, uint32 _txout) view returns(bool)
-func (_BridgeContract *BridgeContractSession) IsDeposited(_txid [32]byte, _txout uint32) (bool, error) {
-	return _BridgeContract.Contract.IsDeposited(&_BridgeContract.CallOpts, _txid, _txout)
+// Solidity: function isDeposited(bytes32 txid, uint32 txout) view returns(bool)
+func (_BridgeContract *BridgeContractSession) IsDeposited(txid [32]byte, txout uint32) (bool, error) {
+	return _BridgeContract.Contract.IsDeposited(&_BridgeContract.CallOpts, txid, txout)
 }
 
 // IsDeposited is a free data retrieval call binding the contract method 0x1ccc92c7.
 //
-// Solidity: function isDeposited(bytes32 _txid, uint32 _txout) view returns(bool)
-func (_BridgeContract *BridgeContractCallerSession) IsDeposited(_txid [32]byte, _txout uint32) (bool, error) {
-	return _BridgeContract.Contract.IsDeposited(&_BridgeContract.CallOpts, _txid, _txout)
+// Solidity: function isDeposited(bytes32 txid, uint32 txout) view returns(bool)
+func (_BridgeContract *BridgeContractCallerSession) IsDeposited(txid [32]byte, txout uint32) (bool, error) {
+	return _BridgeContract.Contract.IsDeposited(&_BridgeContract.CallOpts, txid, txout)
 }
 
 // Owner is a free data retrieval call binding the contract method 0x8da5cb5b.
@@ -244,39 +275,33 @@ func (_BridgeContract *BridgeContractCallerSession) Owner() (common.Address, err
 
 // Param is a free data retrieval call binding the contract method 0x883d87b1.
 //
-// Solidity: function param() view returns(uint16 rateLimit, uint16 depositTaxBP, uint64 maxDepositTax, uint16 withdrawalTaxBP, uint64 maxWithdrawalTax, uint16 _res1, uint64 _res2)
+// Solidity: function param() view returns(uint16 depositTaxBP, uint64 maxDepositTax, uint16 withdrawalTaxBP, uint64 maxWithdrawalTax, uint64 minWithdrawal)
 func (_BridgeContract *BridgeContractCaller) Param(opts *bind.CallOpts) (struct {
-	RateLimit        uint16
 	DepositTaxBP     uint16
 	MaxDepositTax    uint64
 	WithdrawalTaxBP  uint16
 	MaxWithdrawalTax uint64
-	Res1             uint16
-	Res2             uint64
+	MinWithdrawal    uint64
 }, error) {
 	var out []interface{}
 	err := _BridgeContract.contract.Call(opts, &out, "param")
 
 	outstruct := new(struct {
-		RateLimit        uint16
 		DepositTaxBP     uint16
 		MaxDepositTax    uint64
 		WithdrawalTaxBP  uint16
 		MaxWithdrawalTax uint64
-		Res1             uint16
-		Res2             uint64
+		MinWithdrawal    uint64
 	})
 	if err != nil {
 		return *outstruct, err
 	}
 
-	outstruct.RateLimit = *abi.ConvertType(out[0], new(uint16)).(*uint16)
-	outstruct.DepositTaxBP = *abi.ConvertType(out[1], new(uint16)).(*uint16)
-	outstruct.MaxDepositTax = *abi.ConvertType(out[2], new(uint64)).(*uint64)
-	outstruct.WithdrawalTaxBP = *abi.ConvertType(out[3], new(uint16)).(*uint16)
-	outstruct.MaxWithdrawalTax = *abi.ConvertType(out[4], new(uint64)).(*uint64)
-	outstruct.Res1 = *abi.ConvertType(out[5], new(uint16)).(*uint16)
-	outstruct.Res2 = *abi.ConvertType(out[6], new(uint64)).(*uint64)
+	outstruct.DepositTaxBP = *abi.ConvertType(out[0], new(uint16)).(*uint16)
+	outstruct.MaxDepositTax = *abi.ConvertType(out[1], new(uint64)).(*uint64)
+	outstruct.WithdrawalTaxBP = *abi.ConvertType(out[2], new(uint16)).(*uint16)
+	outstruct.MaxWithdrawalTax = *abi.ConvertType(out[3], new(uint64)).(*uint64)
+	outstruct.MinWithdrawal = *abi.ConvertType(out[4], new(uint64)).(*uint64)
 
 	return *outstruct, err
 
@@ -284,82 +309,28 @@ func (_BridgeContract *BridgeContractCaller) Param(opts *bind.CallOpts) (struct 
 
 // Param is a free data retrieval call binding the contract method 0x883d87b1.
 //
-// Solidity: function param() view returns(uint16 rateLimit, uint16 depositTaxBP, uint64 maxDepositTax, uint16 withdrawalTaxBP, uint64 maxWithdrawalTax, uint16 _res1, uint64 _res2)
+// Solidity: function param() view returns(uint16 depositTaxBP, uint64 maxDepositTax, uint16 withdrawalTaxBP, uint64 maxWithdrawalTax, uint64 minWithdrawal)
 func (_BridgeContract *BridgeContractSession) Param() (struct {
-	RateLimit        uint16
 	DepositTaxBP     uint16
 	MaxDepositTax    uint64
 	WithdrawalTaxBP  uint16
 	MaxWithdrawalTax uint64
-	Res1             uint16
-	Res2             uint64
+	MinWithdrawal    uint64
 }, error) {
 	return _BridgeContract.Contract.Param(&_BridgeContract.CallOpts)
 }
 
 // Param is a free data retrieval call binding the contract method 0x883d87b1.
 //
-// Solidity: function param() view returns(uint16 rateLimit, uint16 depositTaxBP, uint64 maxDepositTax, uint16 withdrawalTaxBP, uint64 maxWithdrawalTax, uint16 _res1, uint64 _res2)
+// Solidity: function param() view returns(uint16 depositTaxBP, uint64 maxDepositTax, uint16 withdrawalTaxBP, uint64 maxWithdrawalTax, uint64 minWithdrawal)
 func (_BridgeContract *BridgeContractCallerSession) Param() (struct {
-	RateLimit        uint16
 	DepositTaxBP     uint16
 	MaxDepositTax    uint64
 	WithdrawalTaxBP  uint16
 	MaxWithdrawalTax uint64
-	Res1             uint16
-	Res2             uint64
+	MinWithdrawal    uint64
 }, error) {
 	return _BridgeContract.Contract.Param(&_BridgeContract.CallOpts)
-}
-
-// Receipts is a free data retrieval call binding the contract method 0x0f7ee1ec.
-//
-// Solidity: function receipts(uint256 id) view returns(bytes32 txid, uint32 txout, uint256 received)
-func (_BridgeContract *BridgeContractCaller) Receipts(opts *bind.CallOpts, id *big.Int) (struct {
-	Txid     [32]byte
-	Txout    uint32
-	Received *big.Int
-}, error) {
-	var out []interface{}
-	err := _BridgeContract.contract.Call(opts, &out, "receipts", id)
-
-	outstruct := new(struct {
-		Txid     [32]byte
-		Txout    uint32
-		Received *big.Int
-	})
-	if err != nil {
-		return *outstruct, err
-	}
-
-	outstruct.Txid = *abi.ConvertType(out[0], new([32]byte)).(*[32]byte)
-	outstruct.Txout = *abi.ConvertType(out[1], new(uint32)).(*uint32)
-	outstruct.Received = *abi.ConvertType(out[2], new(*big.Int)).(**big.Int)
-
-	return *outstruct, err
-
-}
-
-// Receipts is a free data retrieval call binding the contract method 0x0f7ee1ec.
-//
-// Solidity: function receipts(uint256 id) view returns(bytes32 txid, uint32 txout, uint256 received)
-func (_BridgeContract *BridgeContractSession) Receipts(id *big.Int) (struct {
-	Txid     [32]byte
-	Txout    uint32
-	Received *big.Int
-}, error) {
-	return _BridgeContract.Contract.Receipts(&_BridgeContract.CallOpts, id)
-}
-
-// Receipts is a free data retrieval call binding the contract method 0x0f7ee1ec.
-//
-// Solidity: function receipts(uint256 id) view returns(bytes32 txid, uint32 txout, uint256 received)
-func (_BridgeContract *BridgeContractCallerSession) Receipts(id *big.Int) (struct {
-	Txid     [32]byte
-	Txout    uint32
-	Received *big.Int
-}, error) {
-	return _BridgeContract.Contract.Receipts(&_BridgeContract.CallOpts, id)
 }
 
 // SupportsInterface is a free data retrieval call binding the contract method 0x01ffc9a7.
@@ -395,39 +366,36 @@ func (_BridgeContract *BridgeContractCallerSession) SupportsInterface(id [4]byte
 
 // Withdrawals is a free data retrieval call binding the contract method 0x5cc07076.
 //
-// Solidity: function withdrawals(uint256 ) view returns(address sender, uint256 amount, uint256 tax, uint256 maxTxPrice, uint256 updatedAt, string receiver, uint8 status)
+// Solidity: function withdrawals(uint256 ) view returns(address sender, uint16 maxTxPrice, uint8 status, uint256 amount, uint256 tax, uint256 updatedAt)
 func (_BridgeContract *BridgeContractCaller) Withdrawals(opts *bind.CallOpts, arg0 *big.Int) (struct {
 	Sender     common.Address
+	MaxTxPrice uint16
+	Status     uint8
 	Amount     *big.Int
 	Tax        *big.Int
-	MaxTxPrice *big.Int
 	UpdatedAt  *big.Int
-	Receiver   string
-	Status     uint8
 }, error) {
 	var out []interface{}
 	err := _BridgeContract.contract.Call(opts, &out, "withdrawals", arg0)
 
 	outstruct := new(struct {
 		Sender     common.Address
+		MaxTxPrice uint16
+		Status     uint8
 		Amount     *big.Int
 		Tax        *big.Int
-		MaxTxPrice *big.Int
 		UpdatedAt  *big.Int
-		Receiver   string
-		Status     uint8
 	})
 	if err != nil {
 		return *outstruct, err
 	}
 
 	outstruct.Sender = *abi.ConvertType(out[0], new(common.Address)).(*common.Address)
-	outstruct.Amount = *abi.ConvertType(out[1], new(*big.Int)).(**big.Int)
-	outstruct.Tax = *abi.ConvertType(out[2], new(*big.Int)).(**big.Int)
-	outstruct.MaxTxPrice = *abi.ConvertType(out[3], new(*big.Int)).(**big.Int)
-	outstruct.UpdatedAt = *abi.ConvertType(out[4], new(*big.Int)).(**big.Int)
-	outstruct.Receiver = *abi.ConvertType(out[5], new(string)).(*string)
-	outstruct.Status = *abi.ConvertType(out[6], new(uint8)).(*uint8)
+	outstruct.MaxTxPrice = *abi.ConvertType(out[1], new(uint16)).(*uint16)
+	outstruct.Status = *abi.ConvertType(out[2], new(uint8)).(*uint8)
+	outstruct.Amount = *abi.ConvertType(out[3], new(*big.Int)).(**big.Int)
+	outstruct.Tax = *abi.ConvertType(out[4], new(*big.Int)).(**big.Int)
+	outstruct.UpdatedAt = *abi.ConvertType(out[5], new(*big.Int)).(**big.Int)
 
 	return *outstruct, err
 
@@ -435,137 +403,135 @@ func (_BridgeContract *BridgeContractCaller) Withdrawals(opts *bind.CallOpts, ar
 
 // Withdrawals is a free data retrieval call binding the contract method 0x5cc07076.
 //
-// Solidity: function withdrawals(uint256 ) view returns(address sender, uint256 amount, uint256 tax, uint256 maxTxPrice, uint256 updatedAt, string receiver, uint8 status)
+// Solidity: function withdrawals(uint256 ) view returns(address sender, uint16 maxTxPrice, uint8 status, uint256 amount, uint256 tax, uint256 updatedAt)
 func (_BridgeContract *BridgeContractSession) Withdrawals(arg0 *big.Int) (struct {
 	Sender     common.Address
+	MaxTxPrice uint16
+	Status     uint8
 	Amount     *big.Int
 	Tax        *big.Int
-	MaxTxPrice *big.Int
 	UpdatedAt  *big.Int
-	Receiver   string
-	Status     uint8
 }, error) {
 	return _BridgeContract.Contract.Withdrawals(&_BridgeContract.CallOpts, arg0)
 }
 
 // Withdrawals is a free data retrieval call binding the contract method 0x5cc07076.
 //
-// Solidity: function withdrawals(uint256 ) view returns(address sender, uint256 amount, uint256 tax, uint256 maxTxPrice, uint256 updatedAt, string receiver, uint8 status)
+// Solidity: function withdrawals(uint256 ) view returns(address sender, uint16 maxTxPrice, uint8 status, uint256 amount, uint256 tax, uint256 updatedAt)
 func (_BridgeContract *BridgeContractCallerSession) Withdrawals(arg0 *big.Int) (struct {
 	Sender     common.Address
+	MaxTxPrice uint16
+	Status     uint8
 	Amount     *big.Int
 	Tax        *big.Int
-	MaxTxPrice *big.Int
 	UpdatedAt  *big.Int
-	Receiver   string
-	Status     uint8
 }, error) {
 	return _BridgeContract.Contract.Withdrawals(&_BridgeContract.CallOpts, arg0)
 }
 
 // Cancel1 is a paid mutator transaction binding the contract method 0x84a64c12.
 //
-// Solidity: function cancel1(uint256 _wid) returns()
-func (_BridgeContract *BridgeContractTransactor) Cancel1(opts *bind.TransactOpts, _wid *big.Int) (*types.Transaction, error) {
-	return _BridgeContract.contract.Transact(opts, "cancel1", _wid)
+// Solidity: function cancel1(uint256 wid) returns()
+func (_BridgeContract *BridgeContractTransactor) Cancel1(opts *bind.TransactOpts, wid *big.Int) (*types.Transaction, error) {
+	return _BridgeContract.contract.Transact(opts, "cancel1", wid)
 }
 
 // Cancel1 is a paid mutator transaction binding the contract method 0x84a64c12.
 //
-// Solidity: function cancel1(uint256 _wid) returns()
-func (_BridgeContract *BridgeContractSession) Cancel1(_wid *big.Int) (*types.Transaction, error) {
-	return _BridgeContract.Contract.Cancel1(&_BridgeContract.TransactOpts, _wid)
+// Solidity: function cancel1(uint256 wid) returns()
+func (_BridgeContract *BridgeContractSession) Cancel1(wid *big.Int) (*types.Transaction, error) {
+	return _BridgeContract.Contract.Cancel1(&_BridgeContract.TransactOpts, wid)
 }
 
 // Cancel1 is a paid mutator transaction binding the contract method 0x84a64c12.
 //
-// Solidity: function cancel1(uint256 _wid) returns()
-func (_BridgeContract *BridgeContractTransactorSession) Cancel1(_wid *big.Int) (*types.Transaction, error) {
-	return _BridgeContract.Contract.Cancel1(&_BridgeContract.TransactOpts, _wid)
+// Solidity: function cancel1(uint256 wid) returns()
+func (_BridgeContract *BridgeContractTransactorSession) Cancel1(wid *big.Int) (*types.Transaction, error) {
+	return _BridgeContract.Contract.Cancel1(&_BridgeContract.TransactOpts, wid)
 }
 
 // Cancel2 is a paid mutator transaction binding the contract method 0xc19dd320.
 //
-// Solidity: function cancel2(uint256 _wid) returns()
-func (_BridgeContract *BridgeContractTransactor) Cancel2(opts *bind.TransactOpts, _wid *big.Int) (*types.Transaction, error) {
-	return _BridgeContract.contract.Transact(opts, "cancel2", _wid)
+// Solidity: function cancel2(uint256 wid) returns()
+func (_BridgeContract *BridgeContractTransactor) Cancel2(opts *bind.TransactOpts, wid *big.Int) (*types.Transaction, error) {
+	return _BridgeContract.contract.Transact(opts, "cancel2", wid)
 }
 
 // Cancel2 is a paid mutator transaction binding the contract method 0xc19dd320.
 //
-// Solidity: function cancel2(uint256 _wid) returns()
-func (_BridgeContract *BridgeContractSession) Cancel2(_wid *big.Int) (*types.Transaction, error) {
-	return _BridgeContract.Contract.Cancel2(&_BridgeContract.TransactOpts, _wid)
+// Solidity: function cancel2(uint256 wid) returns()
+func (_BridgeContract *BridgeContractSession) Cancel2(wid *big.Int) (*types.Transaction, error) {
+	return _BridgeContract.Contract.Cancel2(&_BridgeContract.TransactOpts, wid)
 }
 
 // Cancel2 is a paid mutator transaction binding the contract method 0xc19dd320.
 //
-// Solidity: function cancel2(uint256 _wid) returns()
-func (_BridgeContract *BridgeContractTransactorSession) Cancel2(_wid *big.Int) (*types.Transaction, error) {
-	return _BridgeContract.Contract.Cancel2(&_BridgeContract.TransactOpts, _wid)
+// Solidity: function cancel2(uint256 wid) returns()
+func (_BridgeContract *BridgeContractTransactorSession) Cancel2(wid *big.Int) (*types.Transaction, error) {
+	return _BridgeContract.Contract.Cancel2(&_BridgeContract.TransactOpts, wid)
 }
 
 // Deposit is a paid mutator transaction binding the contract method 0xb55ada39.
 //
-// Solidity: function deposit(bytes32 _txid, uint32 _txout, address _target, uint256 _amount) returns(uint256 tax)
-func (_BridgeContract *BridgeContractTransactor) Deposit(opts *bind.TransactOpts, _txid [32]byte, _txout uint32, _target common.Address, _amount *big.Int) (*types.Transaction, error) {
-	return _BridgeContract.contract.Transact(opts, "deposit", _txid, _txout, _target, _amount)
+// Solidity: function deposit(bytes32 txid, uint32 txout, address target, uint256 amount) returns(uint256 tax)
+func (_BridgeContract *BridgeContractTransactor) Deposit(opts *bind.TransactOpts, txid [32]byte, txout uint32, target common.Address, amount *big.Int) (*types.Transaction, error) {
+	return _BridgeContract.contract.Transact(opts, "deposit", txid, txout, target, amount)
 }
 
 // Deposit is a paid mutator transaction binding the contract method 0xb55ada39.
 //
-// Solidity: function deposit(bytes32 _txid, uint32 _txout, address _target, uint256 _amount) returns(uint256 tax)
-func (_BridgeContract *BridgeContractSession) Deposit(_txid [32]byte, _txout uint32, _target common.Address, _amount *big.Int) (*types.Transaction, error) {
-	return _BridgeContract.Contract.Deposit(&_BridgeContract.TransactOpts, _txid, _txout, _target, _amount)
+// Solidity: function deposit(bytes32 txid, uint32 txout, address target, uint256 amount) returns(uint256 tax)
+func (_BridgeContract *BridgeContractSession) Deposit(txid [32]byte, txout uint32, target common.Address, amount *big.Int) (*types.Transaction, error) {
+	return _BridgeContract.Contract.Deposit(&_BridgeContract.TransactOpts, txid, txout, target, amount)
 }
 
 // Deposit is a paid mutator transaction binding the contract method 0xb55ada39.
 //
-// Solidity: function deposit(bytes32 _txid, uint32 _txout, address _target, uint256 _amount) returns(uint256 tax)
-func (_BridgeContract *BridgeContractTransactorSession) Deposit(_txid [32]byte, _txout uint32, _target common.Address, _amount *big.Int) (*types.Transaction, error) {
-	return _BridgeContract.Contract.Deposit(&_BridgeContract.TransactOpts, _txid, _txout, _target, _amount)
+// Solidity: function deposit(bytes32 txid, uint32 txout, address target, uint256 amount) returns(uint256 tax)
+func (_BridgeContract *BridgeContractTransactorSession) Deposit(txid [32]byte, txout uint32, target common.Address, amount *big.Int) (*types.Transaction, error) {
+	return _BridgeContract.Contract.Deposit(&_BridgeContract.TransactOpts, txid, txout, target, amount)
 }
 
 // Paid is a paid mutator transaction binding the contract method 0xb670ab5e.
 //
-// Solidity: function paid(uint256 _wid, bytes32 _txid, uint32 _txout, uint256 _received) returns()
-func (_BridgeContract *BridgeContractTransactor) Paid(opts *bind.TransactOpts, _wid *big.Int, _txid [32]byte, _txout uint32, _received *big.Int) (*types.Transaction, error) {
-	return _BridgeContract.contract.Transact(opts, "paid", _wid, _txid, _txout, _received)
+// Solidity: function paid(uint256 wid, bytes32 txid, uint32 txout, uint256 received) returns()
+func (_BridgeContract *BridgeContractTransactor) Paid(opts *bind.TransactOpts, wid *big.Int, txid [32]byte, txout uint32, received *big.Int) (*types.Transaction, error) {
+	return _BridgeContract.contract.Transact(opts, "paid", wid, txid, txout, received)
 }
 
 // Paid is a paid mutator transaction binding the contract method 0xb670ab5e.
 //
-// Solidity: function paid(uint256 _wid, bytes32 _txid, uint32 _txout, uint256 _received) returns()
-func (_BridgeContract *BridgeContractSession) Paid(_wid *big.Int, _txid [32]byte, _txout uint32, _received *big.Int) (*types.Transaction, error) {
-	return _BridgeContract.Contract.Paid(&_BridgeContract.TransactOpts, _wid, _txid, _txout, _received)
+// Solidity: function paid(uint256 wid, bytes32 txid, uint32 txout, uint256 received) returns()
+func (_BridgeContract *BridgeContractSession) Paid(wid *big.Int, txid [32]byte, txout uint32, received *big.Int) (*types.Transaction, error) {
+	return _BridgeContract.Contract.Paid(&_BridgeContract.TransactOpts, wid, txid, txout, received)
 }
 
 // Paid is a paid mutator transaction binding the contract method 0xb670ab5e.
 //
-// Solidity: function paid(uint256 _wid, bytes32 _txid, uint32 _txout, uint256 _received) returns()
-func (_BridgeContract *BridgeContractTransactorSession) Paid(_wid *big.Int, _txid [32]byte, _txout uint32, _received *big.Int) (*types.Transaction, error) {
-	return _BridgeContract.Contract.Paid(&_BridgeContract.TransactOpts, _wid, _txid, _txout, _received)
+// Solidity: function paid(uint256 wid, bytes32 txid, uint32 txout, uint256 received) returns()
+func (_BridgeContract *BridgeContractTransactorSession) Paid(wid *big.Int, txid [32]byte, txout uint32, received *big.Int) (*types.Transaction, error) {
+	return _BridgeContract.Contract.Paid(&_BridgeContract.TransactOpts, wid, txid, txout, received)
 }
 
 // Refund is a paid mutator transaction binding the contract method 0x278ecde1.
 //
-// Solidity: function refund(uint256 _wid) returns()
-func (_BridgeContract *BridgeContractTransactor) Refund(opts *bind.TransactOpts, _wid *big.Int) (*types.Transaction, error) {
-	return _BridgeContract.contract.Transact(opts, "refund", _wid)
+// Solidity: function refund(uint256 wid) returns()
+func (_BridgeContract *BridgeContractTransactor) Refund(opts *bind.TransactOpts, wid *big.Int) (*types.Transaction, error) {
+	return _BridgeContract.contract.Transact(opts, "refund", wid)
 }
 
 // Refund is a paid mutator transaction binding the contract method 0x278ecde1.
 //
-// Solidity: function refund(uint256 _wid) returns()
-func (_BridgeContract *BridgeContractSession) Refund(_wid *big.Int) (*types.Transaction, error) {
-	return _BridgeContract.Contract.Refund(&_BridgeContract.TransactOpts, _wid)
+// Solidity: function refund(uint256 wid) returns()
+func (_BridgeContract *BridgeContractSession) Refund(wid *big.Int) (*types.Transaction, error) {
+	return _BridgeContract.Contract.Refund(&_BridgeContract.TransactOpts, wid)
 }
 
 // Refund is a paid mutator transaction binding the contract method 0x278ecde1.
 //
-// Solidity: function refund(uint256 _wid) returns()
-func (_BridgeContract *BridgeContractTransactorSession) Refund(_wid *big.Int) (*types.Transaction, error) {
-	return _BridgeContract.Contract.Refund(&_BridgeContract.TransactOpts, _wid)
+// Solidity: function refund(uint256 wid) returns()
+func (_BridgeContract *BridgeContractTransactorSession) Refund(wid *big.Int) (*types.Transaction, error) {
+	return _BridgeContract.Contract.Refund(&_BridgeContract.TransactOpts, wid)
 }
 
 // RenounceOwnership is a paid mutator transaction binding the contract method 0x715018a6.
@@ -591,86 +557,86 @@ func (_BridgeContract *BridgeContractTransactorSession) RenounceOwnership() (*ty
 
 // ReplaceByFee is a paid mutator transaction binding the contract method 0xb3dd64dd.
 //
-// Solidity: function replaceByFee(uint256 _wid, uint16 _maxTxPrice) returns()
-func (_BridgeContract *BridgeContractTransactor) ReplaceByFee(opts *bind.TransactOpts, _wid *big.Int, _maxTxPrice uint16) (*types.Transaction, error) {
-	return _BridgeContract.contract.Transact(opts, "replaceByFee", _wid, _maxTxPrice)
+// Solidity: function replaceByFee(uint256 wid, uint16 maxTxPrice) returns()
+func (_BridgeContract *BridgeContractTransactor) ReplaceByFee(opts *bind.TransactOpts, wid *big.Int, maxTxPrice uint16) (*types.Transaction, error) {
+	return _BridgeContract.contract.Transact(opts, "replaceByFee", wid, maxTxPrice)
 }
 
 // ReplaceByFee is a paid mutator transaction binding the contract method 0xb3dd64dd.
 //
-// Solidity: function replaceByFee(uint256 _wid, uint16 _maxTxPrice) returns()
-func (_BridgeContract *BridgeContractSession) ReplaceByFee(_wid *big.Int, _maxTxPrice uint16) (*types.Transaction, error) {
-	return _BridgeContract.Contract.ReplaceByFee(&_BridgeContract.TransactOpts, _wid, _maxTxPrice)
+// Solidity: function replaceByFee(uint256 wid, uint16 maxTxPrice) returns()
+func (_BridgeContract *BridgeContractSession) ReplaceByFee(wid *big.Int, maxTxPrice uint16) (*types.Transaction, error) {
+	return _BridgeContract.Contract.ReplaceByFee(&_BridgeContract.TransactOpts, wid, maxTxPrice)
 }
 
 // ReplaceByFee is a paid mutator transaction binding the contract method 0xb3dd64dd.
 //
-// Solidity: function replaceByFee(uint256 _wid, uint16 _maxTxPrice) returns()
-func (_BridgeContract *BridgeContractTransactorSession) ReplaceByFee(_wid *big.Int, _maxTxPrice uint16) (*types.Transaction, error) {
-	return _BridgeContract.Contract.ReplaceByFee(&_BridgeContract.TransactOpts, _wid, _maxTxPrice)
+// Solidity: function replaceByFee(uint256 wid, uint16 maxTxPrice) returns()
+func (_BridgeContract *BridgeContractTransactorSession) ReplaceByFee(wid *big.Int, maxTxPrice uint16) (*types.Transaction, error) {
+	return _BridgeContract.Contract.ReplaceByFee(&_BridgeContract.TransactOpts, wid, maxTxPrice)
 }
 
 // SetDepositTax is a paid mutator transaction binding the contract method 0xb3f33eda.
 //
-// Solidity: function setDepositTax(uint16 _bp, uint64 _max) returns()
-func (_BridgeContract *BridgeContractTransactor) SetDepositTax(opts *bind.TransactOpts, _bp uint16, _max uint64) (*types.Transaction, error) {
-	return _BridgeContract.contract.Transact(opts, "setDepositTax", _bp, _max)
+// Solidity: function setDepositTax(uint16 bp, uint64 max) returns()
+func (_BridgeContract *BridgeContractTransactor) SetDepositTax(opts *bind.TransactOpts, bp uint16, max uint64) (*types.Transaction, error) {
+	return _BridgeContract.contract.Transact(opts, "setDepositTax", bp, max)
 }
 
 // SetDepositTax is a paid mutator transaction binding the contract method 0xb3f33eda.
 //
-// Solidity: function setDepositTax(uint16 _bp, uint64 _max) returns()
-func (_BridgeContract *BridgeContractSession) SetDepositTax(_bp uint16, _max uint64) (*types.Transaction, error) {
-	return _BridgeContract.Contract.SetDepositTax(&_BridgeContract.TransactOpts, _bp, _max)
+// Solidity: function setDepositTax(uint16 bp, uint64 max) returns()
+func (_BridgeContract *BridgeContractSession) SetDepositTax(bp uint16, max uint64) (*types.Transaction, error) {
+	return _BridgeContract.Contract.SetDepositTax(&_BridgeContract.TransactOpts, bp, max)
 }
 
 // SetDepositTax is a paid mutator transaction binding the contract method 0xb3f33eda.
 //
-// Solidity: function setDepositTax(uint16 _bp, uint64 _max) returns()
-func (_BridgeContract *BridgeContractTransactorSession) SetDepositTax(_bp uint16, _max uint64) (*types.Transaction, error) {
-	return _BridgeContract.Contract.SetDepositTax(&_BridgeContract.TransactOpts, _bp, _max)
+// Solidity: function setDepositTax(uint16 bp, uint64 max) returns()
+func (_BridgeContract *BridgeContractTransactorSession) SetDepositTax(bp uint16, max uint64) (*types.Transaction, error) {
+	return _BridgeContract.Contract.SetDepositTax(&_BridgeContract.TransactOpts, bp, max)
 }
 
-// SetRateLimit is a paid mutator transaction binding the contract method 0xd653d820.
+// SetMinWithdrawal is a paid mutator transaction binding the contract method 0xa0ea8451.
 //
-// Solidity: function setRateLimit(uint16 _sec) returns()
-func (_BridgeContract *BridgeContractTransactor) SetRateLimit(opts *bind.TransactOpts, _sec uint16) (*types.Transaction, error) {
-	return _BridgeContract.contract.Transact(opts, "setRateLimit", _sec)
+// Solidity: function setMinWithdrawal(uint64 amount) returns()
+func (_BridgeContract *BridgeContractTransactor) SetMinWithdrawal(opts *bind.TransactOpts, amount uint64) (*types.Transaction, error) {
+	return _BridgeContract.contract.Transact(opts, "setMinWithdrawal", amount)
 }
 
-// SetRateLimit is a paid mutator transaction binding the contract method 0xd653d820.
+// SetMinWithdrawal is a paid mutator transaction binding the contract method 0xa0ea8451.
 //
-// Solidity: function setRateLimit(uint16 _sec) returns()
-func (_BridgeContract *BridgeContractSession) SetRateLimit(_sec uint16) (*types.Transaction, error) {
-	return _BridgeContract.Contract.SetRateLimit(&_BridgeContract.TransactOpts, _sec)
+// Solidity: function setMinWithdrawal(uint64 amount) returns()
+func (_BridgeContract *BridgeContractSession) SetMinWithdrawal(amount uint64) (*types.Transaction, error) {
+	return _BridgeContract.Contract.SetMinWithdrawal(&_BridgeContract.TransactOpts, amount)
 }
 
-// SetRateLimit is a paid mutator transaction binding the contract method 0xd653d820.
+// SetMinWithdrawal is a paid mutator transaction binding the contract method 0xa0ea8451.
 //
-// Solidity: function setRateLimit(uint16 _sec) returns()
-func (_BridgeContract *BridgeContractTransactorSession) SetRateLimit(_sec uint16) (*types.Transaction, error) {
-	return _BridgeContract.Contract.SetRateLimit(&_BridgeContract.TransactOpts, _sec)
-}
-
-// SetWithdrawalTax is a paid mutator transaction binding the contract method 0x8aa4af89.
-//
-// Solidity: function setWithdrawalTax(uint16 _bp, uint64 _max) returns()
-func (_BridgeContract *BridgeContractTransactor) SetWithdrawalTax(opts *bind.TransactOpts, _bp uint16, _max uint64) (*types.Transaction, error) {
-	return _BridgeContract.contract.Transact(opts, "setWithdrawalTax", _bp, _max)
+// Solidity: function setMinWithdrawal(uint64 amount) returns()
+func (_BridgeContract *BridgeContractTransactorSession) SetMinWithdrawal(amount uint64) (*types.Transaction, error) {
+	return _BridgeContract.Contract.SetMinWithdrawal(&_BridgeContract.TransactOpts, amount)
 }
 
 // SetWithdrawalTax is a paid mutator transaction binding the contract method 0x8aa4af89.
 //
-// Solidity: function setWithdrawalTax(uint16 _bp, uint64 _max) returns()
-func (_BridgeContract *BridgeContractSession) SetWithdrawalTax(_bp uint16, _max uint64) (*types.Transaction, error) {
-	return _BridgeContract.Contract.SetWithdrawalTax(&_BridgeContract.TransactOpts, _bp, _max)
+// Solidity: function setWithdrawalTax(uint16 bp, uint64 max) returns()
+func (_BridgeContract *BridgeContractTransactor) SetWithdrawalTax(opts *bind.TransactOpts, bp uint16, max uint64) (*types.Transaction, error) {
+	return _BridgeContract.contract.Transact(opts, "setWithdrawalTax", bp, max)
 }
 
 // SetWithdrawalTax is a paid mutator transaction binding the contract method 0x8aa4af89.
 //
-// Solidity: function setWithdrawalTax(uint16 _bp, uint64 _max) returns()
-func (_BridgeContract *BridgeContractTransactorSession) SetWithdrawalTax(_bp uint16, _max uint64) (*types.Transaction, error) {
-	return _BridgeContract.Contract.SetWithdrawalTax(&_BridgeContract.TransactOpts, _bp, _max)
+// Solidity: function setWithdrawalTax(uint16 bp, uint64 max) returns()
+func (_BridgeContract *BridgeContractSession) SetWithdrawalTax(bp uint16, max uint64) (*types.Transaction, error) {
+	return _BridgeContract.Contract.SetWithdrawalTax(&_BridgeContract.TransactOpts, bp, max)
+}
+
+// SetWithdrawalTax is a paid mutator transaction binding the contract method 0x8aa4af89.
+//
+// Solidity: function setWithdrawalTax(uint16 bp, uint64 max) returns()
+func (_BridgeContract *BridgeContractTransactorSession) SetWithdrawalTax(bp uint16, max uint64) (*types.Transaction, error) {
+	return _BridgeContract.Contract.SetWithdrawalTax(&_BridgeContract.TransactOpts, bp, max)
 }
 
 // TransferOwnership is a paid mutator transaction binding the contract method 0xf2fde38b.
@@ -696,23 +662,23 @@ func (_BridgeContract *BridgeContractTransactorSession) TransferOwnership(newOwn
 
 // Withdraw is a paid mutator transaction binding the contract method 0xa81de869.
 //
-// Solidity: function withdraw(string _receiver, uint16 _maxTxPrice) payable returns()
-func (_BridgeContract *BridgeContractTransactor) Withdraw(opts *bind.TransactOpts, _receiver string, _maxTxPrice uint16) (*types.Transaction, error) {
-	return _BridgeContract.contract.Transact(opts, "withdraw", _receiver, _maxTxPrice)
+// Solidity: function withdraw(string receiver, uint16 maxTxPrice) payable returns()
+func (_BridgeContract *BridgeContractTransactor) Withdraw(opts *bind.TransactOpts, receiver string, maxTxPrice uint16) (*types.Transaction, error) {
+	return _BridgeContract.contract.Transact(opts, "withdraw", receiver, maxTxPrice)
 }
 
 // Withdraw is a paid mutator transaction binding the contract method 0xa81de869.
 //
-// Solidity: function withdraw(string _receiver, uint16 _maxTxPrice) payable returns()
-func (_BridgeContract *BridgeContractSession) Withdraw(_receiver string, _maxTxPrice uint16) (*types.Transaction, error) {
-	return _BridgeContract.Contract.Withdraw(&_BridgeContract.TransactOpts, _receiver, _maxTxPrice)
+// Solidity: function withdraw(string receiver, uint16 maxTxPrice) payable returns()
+func (_BridgeContract *BridgeContractSession) Withdraw(receiver string, maxTxPrice uint16) (*types.Transaction, error) {
+	return _BridgeContract.Contract.Withdraw(&_BridgeContract.TransactOpts, receiver, maxTxPrice)
 }
 
 // Withdraw is a paid mutator transaction binding the contract method 0xa81de869.
 //
-// Solidity: function withdraw(string _receiver, uint16 _maxTxPrice) payable returns()
-func (_BridgeContract *BridgeContractTransactorSession) Withdraw(_receiver string, _maxTxPrice uint16) (*types.Transaction, error) {
-	return _BridgeContract.Contract.Withdraw(&_BridgeContract.TransactOpts, _receiver, _maxTxPrice)
+// Solidity: function withdraw(string receiver, uint16 maxTxPrice) payable returns()
+func (_BridgeContract *BridgeContractTransactorSession) Withdraw(receiver string, maxTxPrice uint16) (*types.Transaction, error) {
+	return _BridgeContract.Contract.Withdraw(&_BridgeContract.TransactOpts, receiver, maxTxPrice)
 }
 
 // BridgeContractCanceledIterator is returned from FilterCanceled and is used to iterate over the raw logs and unpacked data for Canceled events raised by the BridgeContract contract.
@@ -1294,6 +1260,140 @@ func (_BridgeContract *BridgeContractFilterer) ParseDepositTaxUpdated(log types.
 	return event, nil
 }
 
+// BridgeContractMinWithdrawalUpdatedIterator is returned from FilterMinWithdrawalUpdated and is used to iterate over the raw logs and unpacked data for MinWithdrawalUpdated events raised by the BridgeContract contract.
+type BridgeContractMinWithdrawalUpdatedIterator struct {
+	Event *BridgeContractMinWithdrawalUpdated // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *BridgeContractMinWithdrawalUpdatedIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(BridgeContractMinWithdrawalUpdated)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(BridgeContractMinWithdrawalUpdated)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *BridgeContractMinWithdrawalUpdatedIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *BridgeContractMinWithdrawalUpdatedIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// BridgeContractMinWithdrawalUpdated represents a MinWithdrawalUpdated event raised by the BridgeContract contract.
+type BridgeContractMinWithdrawalUpdated struct {
+	Arg0 uint64
+	Raw  types.Log // Blockchain specific contextual infos
+}
+
+// FilterMinWithdrawalUpdated is a free log retrieval operation binding the contract event 0x69458aa02de2093876897ec9cd5653bbdd83360ef731be0da0e3c94bf9a22dba.
+//
+// Solidity: event MinWithdrawalUpdated(uint64 arg0)
+func (_BridgeContract *BridgeContractFilterer) FilterMinWithdrawalUpdated(opts *bind.FilterOpts) (*BridgeContractMinWithdrawalUpdatedIterator, error) {
+
+	logs, sub, err := _BridgeContract.contract.FilterLogs(opts, "MinWithdrawalUpdated")
+	if err != nil {
+		return nil, err
+	}
+	return &BridgeContractMinWithdrawalUpdatedIterator{contract: _BridgeContract.contract, event: "MinWithdrawalUpdated", logs: logs, sub: sub}, nil
+}
+
+// WatchMinWithdrawalUpdated is a free log subscription operation binding the contract event 0x69458aa02de2093876897ec9cd5653bbdd83360ef731be0da0e3c94bf9a22dba.
+//
+// Solidity: event MinWithdrawalUpdated(uint64 arg0)
+func (_BridgeContract *BridgeContractFilterer) WatchMinWithdrawalUpdated(opts *bind.WatchOpts, sink chan<- *BridgeContractMinWithdrawalUpdated) (event.Subscription, error) {
+
+	logs, sub, err := _BridgeContract.contract.WatchLogs(opts, "MinWithdrawalUpdated")
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(BridgeContractMinWithdrawalUpdated)
+				if err := _BridgeContract.contract.UnpackLog(event, "MinWithdrawalUpdated", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseMinWithdrawalUpdated is a log parse operation binding the contract event 0x69458aa02de2093876897ec9cd5653bbdd83360ef731be0da0e3c94bf9a22dba.
+//
+// Solidity: event MinWithdrawalUpdated(uint64 arg0)
+func (_BridgeContract *BridgeContractFilterer) ParseMinWithdrawalUpdated(log types.Log) (*BridgeContractMinWithdrawalUpdated, error) {
+	event := new(BridgeContractMinWithdrawalUpdated)
+	if err := _BridgeContract.contract.UnpackLog(event, "MinWithdrawalUpdated", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
 // BridgeContractOwnershipTransferredIterator is returned from FilterOwnershipTransferred and is used to iterate over the raw logs and unpacked data for OwnershipTransferred events raised by the BridgeContract contract.
 type BridgeContractOwnershipTransferredIterator struct {
 	Event *BridgeContractOwnershipTransferred // Event containing the contract specifics and raw log
@@ -1664,13 +1764,13 @@ func (it *BridgeContractRBFIterator) Close() error {
 // BridgeContractRBF represents a RBF event raised by the BridgeContract contract.
 type BridgeContractRBF struct {
 	Id         *big.Int
-	MaxTxPrice *big.Int
+	MaxTxPrice uint16
 	Raw        types.Log // Blockchain specific contextual infos
 }
 
-// FilterRBF is a free log retrieval operation binding the contract event 0xe6190c43c634720bcd5b72bb0b920b88f8d0a15ae7e5dcbb0582c1bb2f98df4b.
+// FilterRBF is a free log retrieval operation binding the contract event 0x19875a7124af51c604454b74336ce2168c45bceade9d9a1e6dfae9ba7d31b7fa.
 //
-// Solidity: event RBF(uint256 indexed id, uint256 maxTxPrice)
+// Solidity: event RBF(uint256 indexed id, uint16 maxTxPrice)
 func (_BridgeContract *BridgeContractFilterer) FilterRBF(opts *bind.FilterOpts, id []*big.Int) (*BridgeContractRBFIterator, error) {
 
 	var idRule []interface{}
@@ -1685,9 +1785,9 @@ func (_BridgeContract *BridgeContractFilterer) FilterRBF(opts *bind.FilterOpts, 
 	return &BridgeContractRBFIterator{contract: _BridgeContract.contract, event: "RBF", logs: logs, sub: sub}, nil
 }
 
-// WatchRBF is a free log subscription operation binding the contract event 0xe6190c43c634720bcd5b72bb0b920b88f8d0a15ae7e5dcbb0582c1bb2f98df4b.
+// WatchRBF is a free log subscription operation binding the contract event 0x19875a7124af51c604454b74336ce2168c45bceade9d9a1e6dfae9ba7d31b7fa.
 //
-// Solidity: event RBF(uint256 indexed id, uint256 maxTxPrice)
+// Solidity: event RBF(uint256 indexed id, uint16 maxTxPrice)
 func (_BridgeContract *BridgeContractFilterer) WatchRBF(opts *bind.WatchOpts, sink chan<- *BridgeContractRBF, id []*big.Int) (event.Subscription, error) {
 
 	var idRule []interface{}
@@ -1727,9 +1827,9 @@ func (_BridgeContract *BridgeContractFilterer) WatchRBF(opts *bind.WatchOpts, si
 	}), nil
 }
 
-// ParseRBF is a log parse operation binding the contract event 0xe6190c43c634720bcd5b72bb0b920b88f8d0a15ae7e5dcbb0582c1bb2f98df4b.
+// ParseRBF is a log parse operation binding the contract event 0x19875a7124af51c604454b74336ce2168c45bceade9d9a1e6dfae9ba7d31b7fa.
 //
-// Solidity: event RBF(uint256 indexed id, uint256 maxTxPrice)
+// Solidity: event RBF(uint256 indexed id, uint16 maxTxPrice)
 func (_BridgeContract *BridgeContractFilterer) ParseRBF(log types.Log) (*BridgeContractRBF, error) {
 	event := new(BridgeContractRBF)
 	if err := _BridgeContract.contract.UnpackLog(event, "RBF", log); err != nil {
@@ -2090,14 +2190,14 @@ type BridgeContractWithdraw struct {
 	From       common.Address
 	Amount     *big.Int
 	Tax        *big.Int
-	MaxTxPrice *big.Int
+	MaxTxPrice uint16
 	Receiver   string
 	Raw        types.Log // Blockchain specific contextual infos
 }
 
-// FilterWithdraw is a free log retrieval operation binding the contract event 0xa7aa0bf5f2a5106eb711bca96c8ea6ea0d99ec2c496d4d2c5dc0af8217d43c7c.
+// FilterWithdraw is a free log retrieval operation binding the contract event 0xbe7c38d37e8132b1d2b29509df9bf58cf1126edf2563c00db0ef3a271fb9f35b.
 //
-// Solidity: event Withdraw(uint256 indexed id, address indexed from, uint256 amount, uint256 tax, uint256 maxTxPrice, string receiver)
+// Solidity: event Withdraw(uint256 indexed id, address indexed from, uint256 amount, uint256 tax, uint16 maxTxPrice, string receiver)
 func (_BridgeContract *BridgeContractFilterer) FilterWithdraw(opts *bind.FilterOpts, id []*big.Int, from []common.Address) (*BridgeContractWithdrawIterator, error) {
 
 	var idRule []interface{}
@@ -2116,9 +2216,9 @@ func (_BridgeContract *BridgeContractFilterer) FilterWithdraw(opts *bind.FilterO
 	return &BridgeContractWithdrawIterator{contract: _BridgeContract.contract, event: "Withdraw", logs: logs, sub: sub}, nil
 }
 
-// WatchWithdraw is a free log subscription operation binding the contract event 0xa7aa0bf5f2a5106eb711bca96c8ea6ea0d99ec2c496d4d2c5dc0af8217d43c7c.
+// WatchWithdraw is a free log subscription operation binding the contract event 0xbe7c38d37e8132b1d2b29509df9bf58cf1126edf2563c00db0ef3a271fb9f35b.
 //
-// Solidity: event Withdraw(uint256 indexed id, address indexed from, uint256 amount, uint256 tax, uint256 maxTxPrice, string receiver)
+// Solidity: event Withdraw(uint256 indexed id, address indexed from, uint256 amount, uint256 tax, uint16 maxTxPrice, string receiver)
 func (_BridgeContract *BridgeContractFilterer) WatchWithdraw(opts *bind.WatchOpts, sink chan<- *BridgeContractWithdraw, id []*big.Int, from []common.Address) (event.Subscription, error) {
 
 	var idRule []interface{}
@@ -2162,9 +2262,9 @@ func (_BridgeContract *BridgeContractFilterer) WatchWithdraw(opts *bind.WatchOpt
 	}), nil
 }
 
-// ParseWithdraw is a log parse operation binding the contract event 0xa7aa0bf5f2a5106eb711bca96c8ea6ea0d99ec2c496d4d2c5dc0af8217d43c7c.
+// ParseWithdraw is a log parse operation binding the contract event 0xbe7c38d37e8132b1d2b29509df9bf58cf1126edf2563c00db0ef3a271fb9f35b.
 //
-// Solidity: event Withdraw(uint256 indexed id, address indexed from, uint256 amount, uint256 tax, uint256 maxTxPrice, string receiver)
+// Solidity: event Withdraw(uint256 indexed id, address indexed from, uint256 amount, uint256 tax, uint16 maxTxPrice, string receiver)
 func (_BridgeContract *BridgeContractFilterer) ParseWithdraw(log types.Log) (*BridgeContractWithdraw, error) {
 	event := new(BridgeContractWithdraw)
 	if err := _BridgeContract.contract.UnpackLog(event, "Withdraw", log); err != nil {

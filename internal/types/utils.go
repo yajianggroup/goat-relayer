@@ -54,11 +54,11 @@ func GetBTCNetwork(networkType string) *chaincfg.Params {
 func WithdrawalWaitTime(networkType string) (time.Duration, time.Duration) {
 	switch networkType {
 	case "regtest":
-		return 2 * time.Minute, 4 * time.Minute
+		return 5 * time.Minute, 10 * time.Minute
 	case "testnet3":
 		// testnet3 block speed is 10 minutes, so wait time is 10 minutes, 20 minutes
 		// TODO: restore after testnet upgrade
-		return 5 * time.Minute, 10 * time.Minute
+		return 10 * time.Minute, 20 * time.Minute
 	default:
 		// mainnet 10 minutes, 20 minutes
 		return 10 * time.Minute, 20 * time.Minute
@@ -207,6 +207,66 @@ func GenerateSPVProof(txHash string, txHashes []string) ([]byte, []byte, int, er
 	return merkleRoot.CloneBytes(), buf.Bytes(), txIndex, nil
 }
 
+func VerifyBlockSPV(btcBlock BtcBlockExt) error {
+	// get merkle root from header
+	expectedMerkleRoot := btcBlock.Header.MerkleRoot
+
+	// generate actual merkle root from transactions
+	var txHashes []*chainhash.Hash
+	for _, tx := range btcBlock.Transactions {
+		txHash := tx.TxHash()
+		txHashes = append(txHashes, &txHash)
+	}
+	actualMerkleRoot := buildMerkleRoot(txHashes)
+
+	// check merkle root is match
+	if !actualMerkleRoot.IsEqual(&expectedMerkleRoot) {
+		return fmt.Errorf("merkle root mismatch: expected %s, got %s",
+			expectedMerkleRoot, actualMerkleRoot)
+	}
+
+	// check header hash is match
+	headerHash := btcBlock.Header.BlockHash()
+	blockHash := btcBlock.BlockHash()
+	if !headerHash.IsEqual(&blockHash) {
+		return fmt.Errorf("block hash mismatch: expected %s, got %s", blockHash, headerHash)
+	}
+
+	log.Infof("Block %d SPV verification successful: Merkle root and block hash match", btcBlock.BlockNumber)
+	return nil
+}
+
+// buildMerkleRoot build merkle tree and return root hash
+func buildMerkleRoot(txHashes []*chainhash.Hash) *chainhash.Hash {
+	if len(txHashes) == 0 {
+		return nil
+	}
+
+	// Merkle Root calculation loop
+	for len(txHashes) > 1 {
+		var newLevel []*chainhash.Hash
+
+		// combine hashes two by two
+		for i := 0; i < len(txHashes); i += 2 {
+			if i+1 < len(txHashes) {
+				// normal case: combine two by two
+				combined := append(txHashes[i][:], txHashes[i+1][:]...)
+				newHash := chainhash.DoubleHashH(combined)
+				newLevel = append(newLevel, &newHash)
+			} else {
+				// odd case: copy the last transaction hash to new level
+				newLevel = append(newLevel, txHashes[i])
+			}
+		}
+
+		// prepare for next level
+		txHashes = newLevel
+	}
+
+	// return the final root hash
+	return txHashes[0]
+}
+
 func SerializeNoWitnessTx(rawTransaction []byte) ([]byte, error) {
 	// Parse the raw transaction
 	rawTx := wire.NewMsgTx(wire.TxVersion)
@@ -309,4 +369,18 @@ func ParseRSAPrivateKeyFromPEM(privKeyPEM string) (*rsa.PrivateKey, error) {
 	}
 
 	return privKey, nil
+}
+
+func IndexOfSlice(sl []string, s string) int {
+	for i, addr := range sl {
+		if addr == s {
+			return i
+		}
+	}
+	return -1
+}
+
+func Threshold(total int) int {
+	// >= 2/3
+	return (total*2 + 2) / 3
 }

@@ -12,17 +12,18 @@ import (
 type WithdrawStateStore interface {
 	CleanProcessingWithdraw() error
 	CloseWithdraw(id uint, reason string) error
-	CreateWithdrawal(address string, block, id, txPrice, amount uint64) error
+	CreateWithdrawal(sender string, receiver string, block, id, txPrice, amount uint64) error
 	CreateSendOrder(order *db.SendOrder, selectedUtxos []*db.Utxo, selectedWithdraws []*db.Withdraw, vins []*db.Vin, vouts []*db.Vout, isProposer bool) error
 	RecoverSendOrder(order *db.SendOrder, vins []*db.Vin, vouts []*db.Vout, withdrawIds []uint64) error
-	UpdateWithdrawInitialized(txid string) error
-	UpdateWithdrawFinalized(txid string) error
+	UpdateWithdrawInitialized(txid string, pid uint64) error
+	UpdateWithdrawFinalized(txid string, pid uint64) error
 	UpdateWithdrawReplace(id, txPrice uint64) error
-	UpdateWithdrawCancel(id uint64) error
+	UpdateWithdrawCanceling(id uint64) error
 	UpdateSendOrderInitlized(txid string, externalTxId string) error
 	UpdateSendOrderPending(txid string, externalTxId string) error
 	UpdateSendOrderConfirmed(txid string, blockHeight uint64) error
 	GetWithdrawsCanStart() ([]*db.Withdraw, error)
+	GetWithdrawsCanceling() ([]*db.Withdraw, error)
 	GetSendOrderInitlized() ([]*db.SendOrder, error)
 	GetSendOrderPending(limit int) ([]*db.SendOrder, error)
 	GetLatestSendOrderConfirmed() (*db.SendOrder, error)
@@ -37,7 +38,7 @@ type WithdrawStateStore interface {
 //	id - request id
 //	txPrice - user set txPrice for withdraw
 //	amount - user request withdraw amount of btc (unit satoshis)
-func (s *State) CreateWithdrawal(address string, block, id, txPrice, amount uint64) error {
+func (s *State) CreateWithdrawal(sender string, receiver string, block, id, txPrice, amount uint64) error {
 	s.walletMu.Lock()
 	defer s.walletMu.Unlock()
 
@@ -54,8 +55,8 @@ func (s *State) CreateWithdrawal(address string, block, id, txPrice, amount uint
 	withdraw := &db.Withdraw{
 		RequestId: id,
 		GoatBlock: block,
-		From:      "",
-		To:        address,
+		From:      sender,
+		To:        receiver,
 		Amount:    amount,
 		TxPrice:   txPrice,
 		TxFee:     0,
@@ -262,12 +263,12 @@ func (s *State) UpdateWithdrawReplace(id, txPrice uint64) error {
 	withdraw.TxPrice = txPrice
 	withdraw.UpdatedAt = time.Now()
 
-	// TODO notify stop aggregating if it is aggregating status, set to closed
+	// RBF will with higher txPrice, so no need to notify stop aggregating
 
 	return s.saveWithdraw(withdraw)
 }
 
-func (s *State) UpdateWithdrawCancel(id uint64) error {
+func (s *State) UpdateWithdrawCanceling(id uint64) error {
 	s.walletMu.Lock()
 	defer s.walletMu.Unlock()
 
@@ -281,10 +282,10 @@ func (s *State) UpdateWithdrawCancel(id uint64) error {
 		return nil
 	}
 
-	withdraw.Status = db.WITHDRAW_STATUS_CLOSED
+	withdraw.Status = db.WITHDRAW_STATUS_CANCELING
 	withdraw.UpdatedAt = time.Now()
 
-	// TODO notify stop aggregating if it is aggregating status, set to closed
+	// NOTE check stop aggregating order if there is aggregating status withdraw, set to closed
 
 	return s.saveWithdraw(withdraw)
 }
@@ -406,7 +407,7 @@ func (s *State) UpdateSendOrderConfirmed(txid string, btcBlock uint64) error {
 	return err
 }
 
-func (s *State) UpdateWithdrawInitialized(txid string) error {
+func (s *State) UpdateWithdrawInitialized(txid string, pid uint64) error {
 	s.walletMu.Lock()
 	defer s.walletMu.Unlock()
 
@@ -432,6 +433,7 @@ func (s *State) UpdateWithdrawInitialized(txid string) error {
 				order.Status = db.ORDER_STATUS_CLOSED
 			}
 			order.UpdatedAt = time.Now()
+			order.Pid = pid
 			err = s.saveOrder(tx, order)
 			if err != nil {
 				return err
@@ -467,11 +469,21 @@ func (s *State) UpdateWithdrawInitialized(txid string) error {
 	return err
 }
 
-func (s *State) UpdateWithdrawFinalized(txid string) error {
+func (s *State) UpdateWithdrawFinalized(txid string, pid uint64) error {
 	s.walletMu.Lock()
 	defer s.walletMu.Unlock()
 
-	err := s.dbm.GetWalletDB().Transaction(func(tx *gorm.DB) error {
+	sendOrder, err := s.getSendOrderByPid(pid)
+	if err != nil {
+		log.Errorf("State UpdateWithdrawFinalized cannot find send order by pid: %d", pid)
+		return nil
+	}
+	if sendOrder.Txid != txid {
+		log.Errorf("State UpdateWithdrawFinalized txid mismatch, pid: %d, txid: %s", pid, txid)
+		return nil
+	}
+
+	err = s.dbm.GetWalletDB().Transaction(func(tx *gorm.DB) error {
 		orders, err := s.getAllOrdersByTxid(tx, txid)
 		if err != nil {
 			return err
@@ -615,6 +627,20 @@ func (s *State) GetWithdrawsCanStart() ([]*db.Withdraw, error) {
 	return withdraws, nil
 }
 
+func (s *State) GetWithdrawsCanceling() ([]*db.Withdraw, error) {
+	s.walletMu.RLock()
+	defer s.walletMu.RUnlock()
+
+	withdraws, err := s.getWithdrawByStatuses(nil, "id asc", db.WITHDRAW_STATUS_CANCELING)
+	if err != nil {
+		if err != gorm.ErrRecordNotFound {
+			return nil, err
+		}
+		return nil, nil
+	}
+	return withdraws, nil
+}
+
 func (s *State) GetSendOrderInitlized() ([]*db.SendOrder, error) {
 	s.walletMu.RLock()
 	defer s.walletMu.RUnlock()
@@ -702,6 +728,15 @@ func (s *State) getWithdraw(evmTxId string) (*db.Withdraw, error) {
 func (s *State) getSendOrder(orderId string) (*db.SendOrder, error) {
 	var order db.SendOrder
 	result := s.dbm.GetWalletDB().Where("order_id=?", orderId).Order("id desc").First(&order)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return &order, nil
+}
+
+func (s *State) getSendOrderByPid(pid uint64) (*db.SendOrder, error) {
+	var order db.SendOrder
+	result := s.dbm.GetWalletDB().Where("pid = ?", pid).Order("id desc").First(&order)
 	if result.Error != nil {
 		return nil, result.Error
 	}

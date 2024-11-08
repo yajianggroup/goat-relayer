@@ -3,7 +3,6 @@ package layer2
 import (
 	"context"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"time"
 
@@ -21,18 +20,53 @@ import (
 	txtypes "github.com/cosmos/cosmos-sdk/x/auth/tx"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 	"github.com/goatnetwork/goat-relayer/internal/config"
-	bitcointypes "github.com/goatnetwork/goat/x/bitcoin/types"
 	log "github.com/sirupsen/logrus"
 )
 
-func (lis *Layer2Listener) SubmitToConsensus(ctx context.Context, msg interface{}) (*coretypes.ResultTx, error) {
+// Proposal defines a generic structure for handling proposal submissions
+type Proposal[T sdk.Msg] struct {
+	layer2Listener *Layer2Listener
+}
+
+// NewProposal creates a new Proposal instance
+func NewProposal[T sdk.Msg](listener *Layer2Listener) *Proposal[T] {
+	return &Proposal[T]{
+		layer2Listener: listener,
+	}
+}
+
+// RetrySubmit uses generics to retry submitting proposals to the consensus layer
+func (p *Proposal[T]) RetrySubmit(ctx context.Context, requestId string, msg T, retries int) error {
+	var err error
+	for i := 0; i <= retries; i++ {
+		resultTx, err := p.submitToConsensus(ctx, msg)
+		if err == nil {
+			if resultTx.TxResult.Code != 0 {
+				return fmt.Errorf("tx execute error, %v", resultTx.TxResult.Log)
+			}
+			return nil
+		} else if i == retries {
+			return err
+		}
+		log.Warnf("Retrying to submit msg to RPC, attempt %d, request id: %s", i+1, requestId)
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Second * 2):
+		}
+	}
+	return err
+}
+
+func (p *Proposal[T]) submitToConsensus(ctx context.Context, msg T) (*coretypes.ResultTx, error) {
 	var err error
 	accountPrefix := config.AppConfig.GoatChainAccountPrefix
 	chainID := config.AppConfig.GoatChainID
 	privKeyStr := config.AppConfig.RelayerPriKey
 	denom := config.AppConfig.GoatChainDenom
 
-	lis.goatSdkOnce.Do(func() {
+	p.layer2Listener.goatSdkOnce.Do(func() {
 		sdkConfig := sdk.GetConfig()
 		sdkConfig.SetBech32PrefixForAccount(accountPrefix, accountPrefix+sdk.PrefixPublic)
 		sdkConfig.Seal()
@@ -52,7 +86,7 @@ func (lis *Layer2Listener) SubmitToConsensus(ctx context.Context, msg interface{
 		log.Errorf("decode private key failed: %v", err)
 		return nil, err
 	}
-	if err := lis.checkAndReconnect(); err != nil {
+	if err := p.layer2Listener.checkAndReconnect(); err != nil {
 		log.Errorf("check and reconnect goat client faild: %v", err)
 		return nil, err
 	}
@@ -60,7 +94,7 @@ func (lis *Layer2Listener) SubmitToConsensus(ctx context.Context, msg interface{
 	address := sdk.AccAddress(privKey.PubKey().Address().Bytes()).String()
 
 	accountReq := &authtypes.QueryAccountRequest{Address: address}
-	accountResp, err := lis.goatQueryClient.Account(ctx, accountReq)
+	accountResp, err := p.layer2Listener.goatQueryClient.Account(ctx, accountReq)
 	if err != nil {
 		log.Errorf("query account failed: %v", err)
 		return nil, err
@@ -78,33 +112,10 @@ func (lis *Layer2Listener) SubmitToConsensus(ctx context.Context, msg interface{
 	txConfig := txtypes.NewTxConfig(protoCodec, txtypes.DefaultSignModes)
 	txBuilder := txConfig.NewTxBuilder()
 
-	if msgNewDeposits, msgNewBlockHashes, msgInitializeWithdrawal, msgFinalizeWithdrawal, err := lis.convertToTypes(msg); err != nil {
-		log.Errorf("convert to types failed: %v", err)
+	err = txBuilder.SetMsgs(msg)
+	if err != nil {
+		log.Errorf("set msg failed: %v", err)
 		return nil, err
-	} else if msgNewDeposits != nil {
-		err = txBuilder.SetMsgs(msgNewDeposits)
-		if err != nil {
-			log.Errorf("set msgNewDeposits failed: %v", err)
-			return nil, err
-		}
-	} else if msgNewBlockHashes != nil {
-		err = txBuilder.SetMsgs(msgNewBlockHashes)
-		if err != nil {
-			log.Errorf("set msgNewBlockHashes failed: %v", err)
-			return nil, err
-		}
-	} else if msgInitializeWithdrawal != nil {
-		err = txBuilder.SetMsgs(msgInitializeWithdrawal)
-		if err != nil {
-			log.Errorf("set msgInitializeWithdrawal failed: %v", err)
-			return nil, err
-		}
-	} else if msgFinalizeWithdrawal != nil {
-		err = txBuilder.SetMsgs(msgFinalizeWithdrawal)
-		if err != nil {
-			log.Errorf("set msgFinalizeWithdrawal failed: %v", err)
-			return nil, err
-		}
 	}
 
 	// set fee
@@ -146,7 +157,7 @@ func (lis *Layer2Listener) SubmitToConsensus(ctx context.Context, msg interface{
 		return nil, err
 	}
 
-	serviceClient := sdktx.NewServiceClient(lis.goatGrpcConn)
+	serviceClient := sdktx.NewServiceClient(p.layer2Listener.goatGrpcConn)
 
 	txResp, err := serviceClient.BroadcastTx(ctx, &sdktx.BroadcastTxRequest{
 		Mode:    sdktx.BroadcastMode_BROADCAST_MODE_SYNC,
@@ -172,7 +183,7 @@ func (lis *Layer2Listener) SubmitToConsensus(ctx context.Context, msg interface{
 	maxRetries := 10
 	var resultTx *coretypes.ResultTx
 	for i := 0; i < maxRetries; i++ {
-		resultTx, err = lis.goatRpcClient.Tx(ctx, hashBytes, false)
+		resultTx, err = p.layer2Listener.goatRpcClient.Tx(ctx, hashBytes, false)
 		if err == nil {
 			break
 		}
@@ -190,20 +201,4 @@ func (lis *Layer2Listener) SubmitToConsensus(ctx context.Context, msg interface{
 		log.Warnf("submit tx to consensus error: %v", resultTx.TxResult)
 	}
 	return resultTx, nil
-}
-
-func (lis *Layer2Listener) convertToTypes(msg interface{}) (*bitcointypes.MsgNewDeposits, *bitcointypes.MsgNewBlockHashes, *bitcointypes.MsgInitializeWithdrawal, *bitcointypes.MsgFinalizeWithdrawal, error) {
-	if msgNewDeposits, ok := msg.(*bitcointypes.MsgNewDeposits); ok {
-		return msgNewDeposits, nil, nil, nil, nil
-	}
-	if msgNewBlockHashes, ok := msg.(*bitcointypes.MsgNewBlockHashes); ok {
-		return nil, msgNewBlockHashes, nil, nil, nil
-	}
-	if msgInitializeWithdrawal, ok := msg.(*bitcointypes.MsgInitializeWithdrawal); ok {
-		return nil, nil, msgInitializeWithdrawal, nil, nil
-	}
-	if msgFinalizeWithdrawal, ok := msg.(*bitcointypes.MsgFinalizeWithdrawal); ok {
-		return nil, nil, nil, msgFinalizeWithdrawal, nil
-	}
-	return nil, nil, nil, nil, errors.New("type assertion failed: not type MsgNewDeposits or MsgNewBlockHashes or MsgInitializeWithdrawal or MsgFinalizeWithdrawal")
 }

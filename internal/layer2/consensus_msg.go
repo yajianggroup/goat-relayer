@@ -13,16 +13,16 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func (lis *Layer2Listener) processMsgInitializeWithdrawal(msg *bitcointypes.MsgInitializeWithdrawal) error {
-	log.Debugf("Process MsgInitializeWithdrawal, no witness tx: %v, tx fee: %d, withdraw ids: %v", msg.Proposal.NoWitnessTx, msg.Proposal.TxFee, msg.Proposal.Id)
+func (lis *Layer2Listener) processMsgInitializeWithdrawal(msg *bitcointypes.MsgProcessWithdrawal) error {
+	log.Debugf("Process MsgInitializeWithdrawal, no witness tx: %v, tx fee: %d, withdraw ids: %v", msg.NoWitnessTx, msg.TxFee, msg.Id)
 	network := types.GetBTCNetwork(config.AppConfig.BTCNetworkType)
-	tx, err := types.DeserializeTransaction(msg.Proposal.NoWitnessTx)
+	tx, err := types.DeserializeTransaction(msg.NoWitnessTx)
 	if err != nil {
 		return fmt.Errorf("failed to deserialize transaction: %v", err)
 	}
 
 	orderId := uuid.New().String()
-	utxoAmount := int64(msg.Proposal.TxFee)
+	utxoAmount := int64(msg.TxFee)
 
 	var vins []*db.Vin
 	for _, txIn := range tx.TxIn {
@@ -48,8 +48,8 @@ func (lis *Layer2Listener) processMsgInitializeWithdrawal(msg *bitcointypes.MsgI
 			return err
 		}
 		withdrawId := ""
-		if len(msg.Proposal.Id) > i {
-			withdrawId = fmt.Sprintf("%d", msg.Proposal.Id[i])
+		if len(msg.Id) > i {
+			withdrawId = fmt.Sprintf("%d", msg.Id[i])
 		}
 		vout := &db.Vout{
 			OrderId:    orderId,
@@ -77,10 +77,10 @@ func (lis *Layer2Listener) processMsgInitializeWithdrawal(msg *bitcointypes.MsgI
 		OrderType:   db.ORDER_TYPE_WITHDRAWAL,
 		BtcBlock:    0,
 		Txid:        tx.TxID(),
-		NoWitnessTx: msg.Proposal.NoWitnessTx,
-		TxFee:       msg.Proposal.TxFee,
+		NoWitnessTx: msg.NoWitnessTx,
+		TxFee:       msg.TxFee,
 		UpdatedAt:   time.Now(),
 	}
 
-	return lis.state.RecoverSendOrder(order, vins, vouts, msg.Proposal.Id)
+	return lis.state.RecoverSendOrder(order, vins, vouts, msg.Id)
 }

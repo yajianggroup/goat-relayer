@@ -1,10 +1,10 @@
 package p2p
 
-type Message struct {
+type Message[T any] struct {
 	MessageType MessageType `json:"msg_type"`
 	RequestId   string      `json:"request_id"`
 	DataType    string      `json:"data_type"`
-	Data        interface{} `json:"data"`
+	Data        T           `json:"data"`
 }
 
 type HeartbeatMessage struct {
@@ -22,4 +22,5 @@ const (
 	MessageTypeDepositReceive
 	MessageTypeWithdrawFinalize
 	MessageTypeSendOrderBroadcasted
+	MessageTypeNewVoter
 )

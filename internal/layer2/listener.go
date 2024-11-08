@@ -66,6 +66,9 @@ type Layer2Listener struct {
 	state     *state.State
 	ethClient *ethclient.Client
 
+	hasVoterUpdate bool
+	voterUpdateMu  sync.Mutex
+
 	contractBitcoin *abis.BitcoinContract
 	contractBridge  *abis.BridgeContract
 	contractRelayer *abis.RelayerContract
@@ -212,7 +215,6 @@ func (lis *Layer2Listener) Start(ctx context.Context) {
 	l2MaxBlockRange := uint64(config.AppConfig.L2MaxBlockRange)
 	// clientTimeout := time.Second * 10
 	var l2LatestBlock uint64
-	hasVoterUpdate := false
 
 	for {
 		select {
@@ -293,38 +295,20 @@ func (lis *Layer2Listener) Start(ctx context.Context) {
 					"toBlock":   toBlock,
 				}).Info("Syncing L2 goat events")
 
-				if !hasVoterUpdate && fromBlock > 1 {
+				lis.voterUpdateMu.Lock()
+				if !lis.hasVoterUpdate && fromBlock > 1 {
 					err := lis.processBlockVoters(fromBlock)
 					if err != nil {
 						log.Errorf("Error processBlockVoters at block %d: %v", fromBlock, err)
+						lis.voterUpdateMu.Unlock()
 						time.Sleep(l2RequestInterval)
 						continue
 					} else {
-						hasVoterUpdate = true
+						lis.hasVoterUpdate = true
 						log.Infof("Goat chain voters synced at block %d", fromBlock)
 					}
 				}
-
-				//// Filter evm event
-				// filterQuery := ethereum.FilterQuery{
-				// 	FromBlock: big.NewInt(int64(fromBlock)),
-				// 	ToBlock:   big.NewInt(int64(toBlock)),
-				// 	Addresses: []common.Address{abis.BridgeAddress, abis.BitcoinAddress, abis.RelayerAddress},
-				// }
-
-				// logs, err := lis.ethClient.FilterLogs(ctx, filterQuery)
-				// if err != nil {
-				// 	log.Errorf("Failed to filter logs: %v", err)
-				// 	time.Sleep(l2RequestInterval)
-				// 	continue
-				// }
-
-				// for _, vLog := range logs {
-				// 	lis.processGoatLogs(vLog)
-				// 	// if syncStatus.LastSyncBlock < vLog.BlockNumber {
-				// 	// 	syncStatus.LastSyncBlock = vLog.BlockNumber
-				// 	// }
-				// }
+				lis.voterUpdateMu.Unlock()
 
 				// Query cosmos tx or event
 				goatRpcAbort := false
@@ -391,7 +375,7 @@ func (lis *Layer2Listener) getGoatBlock(ctx context.Context, height uint64) erro
 				log.Debugf("Success to decode transaction: %v", decodedTx.GetMsgs())
 				for _, msg := range decodedTx.GetMsgs() {
 					switch msg := msg.(type) {
-					case *bitcointypes.MsgInitializeWithdrawal:
+					case *bitcointypes.MsgProcessWithdrawal:
 						if err := lis.processMsgInitializeWithdrawal(msg); err != nil {
 							return fmt.Errorf("failed to process msg InitializeWithdrawal: %v", err)
 						}

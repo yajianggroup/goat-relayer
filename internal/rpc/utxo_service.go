@@ -81,6 +81,16 @@ func (s *UtxoServer) NewTransaction(ctx context.Context, req *pb.NewTransactionR
 		}
 
 		for outIdx, amount := range outIdxToAmount {
+			isDeposit, err := s.layer2Listener.IsDeposit(tx.TxHash(), uint32(outIdx))
+			if err != nil {
+				log.Errorf("Failed to check if deposit is already in layer2: %v", err)
+				continue
+			}
+			if isDeposit {
+				log.Infof("Deposit is already in layer2: %s", tx.TxHash().String())
+				continue
+			}
+
 			err = s.state.AddUnconfirmDeposit(req.TransactionId, req.RawTransaction, evmAddr, signVersion, outIdx, amount)
 			if err != nil {
 				log.Errorf("Failed to add unconfirmed deposit: %v", err)
@@ -96,7 +106,7 @@ func (s *UtxoServer) NewTransaction(ctx context.Context, req *pb.NewTransactionR
 				Timestamp:   time.Now().Unix(),
 			}
 
-			err = p2p.PublishMessage(context.Background(), p2p.Message{
+			err = p2p.PublishMessage(context.Background(), p2p.Message[any]{
 				MessageType: p2p.MessageTypeDepositReceive,
 				RequestId:   fmt.Sprintf("DEPOSIT:%s:%s_%d", config.AppConfig.RelayerAddress, deposit.TxId, outIdx),
 				DataType:    "MsgUtxoDeposit",

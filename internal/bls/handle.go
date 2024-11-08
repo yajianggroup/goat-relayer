@@ -2,7 +2,6 @@ package bls
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/goatnetwork/goat-relayer/internal/state"
@@ -56,6 +55,18 @@ func (s *Signer) handleSigStart(ctx context.Context, event interface{}) {
 			// feedback SigFailed
 			s.state.EventBus.Publish(state.SigFailed, e)
 		}
+	case types.MsgSignCancelWithdraw:
+		log.Debugf("Event handleSigStartCancelWithdraw is of type MsgSignCancelWithdraw, request id %s", e.RequestId)
+		if err := s.handleSigStartWithdrawCancel(ctx, e); err != nil {
+			log.Errorf("Error handleSigStart MsgSignCancelWithdraw, %v", err)
+			// feedback SigFailed
+			s.state.EventBus.Publish(state.SigFailed, e)
+		}
+	case types.MsgSignNewVoter:
+		log.Debugf("Event handleSigStartNewVoter is of type MsgSignNewVoter, request id %s", e.RequestId)
+		if err := s.handleSigStartNewVoter(ctx, e); err != nil {
+			log.Errorf("Error handleSigStart MsgSignNewVoter, %v", err)
+		}
 	default:
 		log.Debug("Unknown event handleSigStart type")
 	}
@@ -80,33 +91,18 @@ func (s *Signer) handleSigReceive(ctx context.Context, event interface{}) {
 			// feedback SigFailed
 			s.state.EventBus.Publish(state.SigFailed, e)
 		}
+	case types.MsgSignNewVoter:
+		// only proposer will process new voter sig and broadcast to consensus
+		log.Debugf("Event handleSigReceive is of type MsgSignNewVoter, request id %s", e.RequestId)
+		if err := s.handleSigReceiveNewVoter(ctx, e); err != nil {
+			log.Errorf("Error handleSigReceive MsgSignNewVoter, %v", err)
+			// feedback SigFailed
+			s.state.EventBus.Publish(state.SigFailed, e)
+		}
 	default:
 		// check e['msg_type'] from libp2p
 		log.Debugf("Unknown event handleSigReceive type, %v", e)
 	}
-}
-
-func (s *Signer) RetrySubmit(ctx context.Context, requestId string, msg interface{}, retries int) error {
-	var err error
-	for i := 0; i <= retries; i++ {
-		resultTx, err := s.layer2Listener.SubmitToConsensus(ctx, msg)
-		if err == nil {
-			if resultTx.TxResult.Code != 0 {
-				return fmt.Errorf("tx execute error, %v", resultTx.TxResult.Log)
-			}
-			return nil
-		} else if i == retries {
-			return err
-		}
-		log.Warnf("Retrying to submit msg to RPC, attempt %d, request id: %s", i+1, requestId)
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-time.After(time.Second * 2):
-		}
-	}
-	return err
 }
 
 func (s *Signer) sigExists(requestId string) (map[string]interface{}, bool) {
@@ -129,18 +125,4 @@ func (s *Signer) removeSigMap(requestId string, reportTimeout bool) {
 	}
 	delete(s.sigMap, requestId)
 	delete(s.sigTimeoutMap, requestId)
-}
-
-func indexOfSlice(sl []string, s string) int {
-	for i, addr := range sl {
-		if addr == s {
-			return i
-		}
-	}
-	return -1
-}
-
-func Threshold(total int) int {
-	// >= 2/3
-	return (total*2 + 2) / 3
 }

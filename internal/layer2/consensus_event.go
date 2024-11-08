@@ -3,9 +3,12 @@ package layer2
 import (
 	"context"
 	"encoding/base64"
+	"math/big"
 	"strconv"
+	"strings"
 	"time"
 
+	"github.com/go-errors/errors"
 	"github.com/goatnetwork/goat-relayer/internal/db"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -36,17 +39,17 @@ func (lis *Layer2Listener) processEvent(block uint64, event abcitypes.Event) err
 	case bitcointypes.EventTypeNewDeposit:
 		return lis.processNewDeposit(block, event.Attributes)
 
-	case bitcointypes.EventTypeWithdrawalCancellation:
+	case bitcointypes.EventTypeWithdrawalUserCancel:
 		return lis.processUserCancelWithdrawal(block, event.Attributes)
-	case bitcointypes.EventTypeWithdrawalRequest:
+	case bitcointypes.EventTypeWithdrawalInit:
 		return lis.processUserRequestWithdrawal(block, event.Attributes)
-	case bitcointypes.EventTypeWithdrawalReplace:
+	case bitcointypes.EventTypeWithdrawalUserReplace:
 		return lis.processUserReplaceWithdrawal(block, event.Attributes)
-	case bitcointypes.EventTypeInitializeWithdrawal:
+	case bitcointypes.EventTypeWithdrawalProcessing:
 		return lis.processWithdrawalInitialized(block, event.Attributes)
-	case bitcointypes.EventTypeApproveCancellation:
+	case bitcointypes.EventTypeWithdrawalRelayerCancel:
 		return lis.processWithdrawalCancelApproved(block, event.Attributes)
-	case bitcointypes.EventTypeFinalizeWithdrawal:
+	case bitcointypes.EventTypeWithdrawalFinalized:
 		return lis.processWithdrawalFinalized(block, event.Attributes)
 
 	case bitcointypes.EventTypeNewConsolidation:
@@ -160,9 +163,9 @@ func (lis *Layer2Listener) processUserCancelWithdrawal(block uint64, attributes 
 	if id == 0 {
 		return nil
 	}
-	err := lis.state.UpdateWithdrawCancel(id)
+	err := lis.state.UpdateWithdrawCanceling(id)
 	if err != nil {
-		log.Errorf("Abci RequestCancelWithdrawal UpdateWithdrawCancel error: %v", err)
+		log.Errorf("Abci RequestCancelWithdrawal UpdateWithdrawCanceling error: %v", err)
 		return err
 	}
 	return nil
@@ -195,7 +198,7 @@ func (lis *Layer2Listener) processUserReplaceWithdrawal(block uint64, attributes
 }
 
 func (lis *Layer2Listener) processUserRequestWithdrawal(block uint64, attributes []abcitypes.EventAttribute) error {
-	var address string
+	var from, to string
 	var id, txPrice, amount uint64
 	for _, attr := range attributes {
 		key := attr.Key
@@ -205,7 +208,7 @@ func (lis *Layer2Listener) processUserRequestWithdrawal(block uint64, attributes
 			id, _ = strconv.ParseUint(value, 10, 64)
 		}
 		if key == "address" {
-			address = value
+			to = value
 		}
 		if key == "tx_price" {
 			txPrice, _ = strconv.ParseUint(value, 10, 64)
@@ -214,8 +217,14 @@ func (lis *Layer2Listener) processUserRequestWithdrawal(block uint64, attributes
 			amount, _ = strconv.ParseUint(value, 10, 64)
 		}
 	}
-	log.Infof("Abci RequestWithdrawal, address: %s, block: %d, id: %d, txPrice: %d, amount: %d", address, block, id, txPrice, amount)
-	err := lis.state.CreateWithdrawal(address, block, id, txPrice, amount)
+	log.Infof("Abci RequestWithdrawal, address: %s, block: %d, id: %d, txPrice: %d, amount: %d", to, block, id, txPrice, amount)
+	sender, err := lis.GetWithdrawalSenderAddress(big.NewInt(int64(id)))
+	if err != nil {
+		log.Errorf("Abci RequestWithdrawal GetWithdrawalSenderAddress error: %v", err)
+		return err
+	}
+	from = strings.ToLower(strings.TrimPrefix(sender.Hex(), "0x"))
+	err = lis.state.CreateWithdrawal(from, to, block, id, txPrice, amount)
 	if err != nil {
 		log.Errorf("Abci RequestWithdrawal CreateWithdrawal error: %v", err)
 		return err
@@ -225,20 +234,25 @@ func (lis *Layer2Listener) processUserRequestWithdrawal(block uint64, attributes
 
 func (lis *Layer2Listener) processWithdrawalFinalized(block uint64, attributes []abcitypes.EventAttribute) error {
 	var txid string
+	var pid uint64
 	for _, attr := range attributes {
 		key := attr.Key
 		value := attr.Value
 
+		if key == "pid" {
+			pid, _ = strconv.ParseUint(value, 10, 64)
+		}
 		if key == "txid" {
 			// BE hash
 			txid = value
 		}
 	}
-	log.Infof("Abci FinalizeWithdrawal, block: %d, txid: %s", block, txid)
+	log.Infof("Abci FinalizeWithdrawal, block: %d, pid: %d, txid: %s", block, pid, txid)
 	if txid == "" {
 		return nil
 	}
-	err := lis.state.UpdateWithdrawFinalized(txid)
+
+	err := lis.state.UpdateWithdrawFinalized(txid, pid)
 	if err != nil {
 		log.Errorf("Abci FinalizeWithdrawal UpdateWithdrawFinalized error: %v", err)
 		return err
@@ -262,12 +276,17 @@ func (lis *Layer2Listener) processWithdrawalCancelApproved(block uint64, attribu
 		return nil
 	}
 
-	// NOTE not implement EventTypeApproveCancellation
+	err := lis.state.CloseWithdraw(uint(id), "canceled")
+	if err != nil {
+		log.Errorf("Abci ApproveCancelWithdrawal close withdraw error: %v", err)
+		return err
+	}
 	return nil
 }
 
 func (lis *Layer2Listener) processWithdrawalInitialized(block uint64, attributes []abcitypes.EventAttribute) error {
 	var txid string
+	var pid uint64
 	for _, attr := range attributes {
 		key := attr.Key
 		value := attr.Value
@@ -276,13 +295,16 @@ func (lis *Layer2Listener) processWithdrawalInitialized(block uint64, attributes
 			// BE hash
 			txid = value
 		}
+		if key == "pid" {
+			pid, _ = strconv.ParseUint(value, 10, 64)
+		}
 	}
-	log.Infof("Abci WithdrawalInitialized, block: %d, txid: %s", block, txid)
+	log.Infof("Abci WithdrawalInitialized, block: %d, txid: %s, pid: %d", block, txid, pid)
 
 	if txid == "" {
 		return nil
 	}
-	err := lis.state.UpdateWithdrawInitialized(txid)
+	err := lis.state.UpdateWithdrawInitialized(txid, pid)
 	if err != nil {
 		log.Errorf("Abci WithdrawalInitialized UpdateWithdrawInitialized error: %v", err)
 		return err
@@ -307,7 +329,7 @@ func (lis *Layer2Listener) processNewConsolidation(block uint64, attributes []ab
 		return nil
 	}
 	// call the same method as withdrawal initialized to update send order
-	err := lis.state.UpdateWithdrawInitialized(txid)
+	err := lis.state.UpdateWithdrawInitialized(txid, 0)
 	if err != nil {
 		log.Errorf("Abci NewConsolidation UpdateWithdrawInitialized error: %v", err)
 		return err
@@ -337,10 +359,6 @@ func (lis *Layer2Listener) processNewDeposit(block uint64, attributes []abcitype
 		if key == "amount" {
 			amount, _ = strconv.ParseUint(value, 10, 64)
 		}
-		// TODO goat emit event with block hash, should match deposit with height
-		// if key == "block_hash" {
-		// 	blockHash = value
-		// }
 	}
 
 	// NOTE: DB operate: insert if not exist, if P2WSH, should query from BTC client,
@@ -517,6 +535,17 @@ func (lis *Layer2Listener) processAcceptedProposerEvent(block uint64, attributes
 
 // Voter events
 func (lis *Layer2Listener) processVoterEvent(block uint64, eventType string, attributes []abcitypes.EventAttribute) error {
+	if eventType == relayertypes.EventVoterActivated || eventType == relayertypes.EventVoterDischarged {
+		log.Infof("Abci %s, block: %d", eventType, block)
+		// notify listener to update voter state
+		lis.voterUpdateMu.Lock()
+		lis.hasVoterUpdate = false
+		lis.voterUpdateMu.Unlock()
+		// abort getGoatBlock loop by return error
+		return errors.New("voter update should abort getGoatBlock loop")
+	}
+
+	var voter string
 	for _, attr := range attributes {
 		key := attr.Key
 		value := attr.Value
@@ -529,34 +558,37 @@ func (lis *Layer2Listener) processVoterEvent(block uint64, eventType string, att
 		// Relayer voter should calculate from secp256k1 private key,
 		// then derive the public key, convert pk to address
 
-		// means next epoch valid
-		// if key == "voter_pending" {
+		if key == "voter" {
+			voter = value
+		}
+		// NOTE: proposer is not used now
+		// if key == "proposer" {
+		// 	proposer = value
 		// }
+	}
 
-		if key == "voter_on_boarding" {
-			// TODO should pass event, notify voter to accept boarding
-			// Call event bus, send block, voterAddr
-			// Push state queue
+	// means next epoch valid
+	if eventType == relayertypes.EventVoterPending {
+		// boarding step 1: new voter should send online proof to proposer
+		// proposer should verify the proof
+		// if valid, proposer should send onboarding tx
+		err := lis.state.AddVoterQueue(voter, block)
+		if err != nil {
+			log.Errorf("Abci processVoterEvent AddVoterQueue error: %v", err)
+			return err
 		}
+	}
 
-		if key == "voter_boarded" {
-			// TODO should pass event, notify voter to mark boarded
-			// Call event bus, send block, voterAddr
-			// Update state queue status
+	if eventType == relayertypes.EventVoterOnBoarding {
+		// ignore
+	}
 
-			// TODO query voter
-		}
-
-		if key == "voter_activated" {
-			// TODO should pass event, notify voter to add to list
-			// Call event bus, send block, voterAddr
-			// Update state status (state -> db)
-		}
-
-		if key == "voter_discharged" {
-			// TODO should pass event, notify voter to remove from list
-			// Call event bus, send block, voterAddr
-			// Update state status (state -> db)
+	if eventType == relayertypes.EventVoterBoarded {
+		// boarding step 2: notify all voters to mark new voter boarded, proposer should not accept other online proof again
+		err := lis.state.UpdateVoterQueueProcessed(voter)
+		if err != nil {
+			log.Errorf("Abci processVoterEvent UpdateVoterQueueProcessed error: %v", err)
+			return err
 		}
 	}
 	return nil

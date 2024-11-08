@@ -16,6 +16,7 @@ import (
 	"github.com/goatnetwork/goat-relayer/internal/p2p"
 	"github.com/goatnetwork/goat-relayer/internal/rpc"
 	"github.com/goatnetwork/goat-relayer/internal/state"
+	"github.com/goatnetwork/goat-relayer/internal/voter"
 	"github.com/goatnetwork/goat-relayer/internal/wallet"
 	log "github.com/sirupsen/logrus"
 )
@@ -30,6 +31,7 @@ type Application struct {
 	BTCListener     *btc.BTCListener
 	UTXOService     *rpc.UtxoServer
 	WalletService   *wallet.WalletServer
+	VoterProcessor  *voter.VoterProcessor
 }
 
 func NewApplication() *Application {
@@ -44,6 +46,7 @@ func NewApplication() *Application {
 	btcListener := btc.NewBTCListener(libP2PService, state, dbm)
 	utxoService := rpc.NewUtxoServer(state, layer2Listener)
 	walletService := wallet.NewWalletServer(libP2PService, state, signer)
+	voterProcessor := voter.NewVoterProcessor(libP2PService, state, signer)
 
 	return &Application{
 		DatabaseManager: dbm,
@@ -55,6 +58,7 @@ func NewApplication() *Application {
 		BTCListener:     btcListener,
 		UTXOService:     utxoService,
 		WalletService:   walletService,
+		VoterProcessor:  voterProcessor,
 	}
 }
 
@@ -65,6 +69,7 @@ func (app *Application) Run() {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 
+	blockDoneCh := make(chan struct{})
 	var wg sync.WaitGroup
 
 	wg.Add(1)
@@ -94,7 +99,7 @@ func (app *Application) Run() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		app.BTCListener.Start(ctx)
+		app.BTCListener.Start(ctx, blockDoneCh)
 	}()
 
 	wg.Add(1)
@@ -106,11 +111,18 @@ func (app *Application) Run() {
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		app.WalletService.Start(ctx)
+		app.WalletService.Start(ctx, blockDoneCh)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		app.VoterProcessor.Start(ctx)
 	}()
 
 	<-stop
 	log.Info("Receiving exit signal...")
+	close(blockDoneCh)
 
 	cancel()
 

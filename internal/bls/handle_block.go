@@ -3,11 +3,14 @@ package bls
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/goatnetwork/goat-relayer/internal/config"
+	"github.com/goatnetwork/goat-relayer/internal/layer2"
 	"github.com/goatnetwork/goat-relayer/internal/p2p"
 	"github.com/goatnetwork/goat-relayer/internal/state"
 	"github.com/goatnetwork/goat-relayer/internal/types"
@@ -55,7 +58,7 @@ func (s *Signer) handleSigStartNewBlock(ctx context.Context, e types.MsgSignNewB
 	}
 
 	// p2p broadcast
-	p2pMsg := p2p.Message{
+	p2pMsg := p2p.Message[any]{
 		MessageType: p2p.MessageTypeSigReq,
 		RequestId:   e.RequestId,
 		DataType:    "MsgSignNewBlock",
@@ -82,7 +85,8 @@ func (s *Signer) handleSigStartNewBlock(ctx context.Context, e types.MsgSignNewB
 		return nil
 	}
 
-	err = s.RetrySubmit(ctx, e.RequestId, rpcMsg, config.AppConfig.L2SubmitRetry)
+	newProposal := layer2.NewProposal[*bitcointypes.MsgNewBlockHashes](s.layer2Listener)
+	err = newProposal.RetrySubmit(ctx, e.RequestId, rpcMsg, config.AppConfig.L2SubmitRetry)
 	if err != nil {
 		log.Errorf("SigStart proposer submit NewBlock to RPC error, request id: %s, err: %v", e.RequestId, err)
 		s.removeSigMap(e.RequestId, false)
@@ -136,7 +140,8 @@ func (s *Signer) handleSigReceiveNewBlock(ctx context.Context, e types.MsgSignNe
 			return nil
 		}
 
-		err = s.RetrySubmit(ctx, e.RequestId, rpcMsg, config.AppConfig.L2SubmitRetry)
+		newProposal := layer2.NewProposal[*bitcointypes.MsgNewBlockHashes](s.layer2Listener)
+		err = newProposal.RetrySubmit(ctx, e.RequestId, rpcMsg, config.AppConfig.L2SubmitRetry)
 		if err != nil {
 			log.Errorf("SigReceive proposer submit NewBlock to RPC error, request id: %s, err: %v", e.RequestId, err)
 			s.removeSigMap(e.RequestId, false)
@@ -166,7 +171,29 @@ func (s *Signer) handleSigReceiveNewBlock(ctx context.Context, e types.MsgSignNe
 			log.Warnf("SigReceive MsgSignNewBlock epoch does not match, request id %s, msg epoch: %d, current epoch: %d", e.RequestId, e.Epoch, epochVoter.Epoch)
 			return fmt.Errorf("cannot handle receive sig %s with epoch %d, expect: %d", e.RequestId, e.Epoch, epochVoter.Epoch)
 		}
-		// TODO hash comparation
+		blockHashSize := len(e.BlockHash)
+		if blockHashSize > 16 {
+			return fmt.Errorf("block hash size is too long, request id: %s, block hash size: %d", e.RequestId, blockHashSize)
+		}
+		if blockHashSize == 0 {
+			return fmt.Errorf("block hash size is 0, request id: %s", e.RequestId)
+		}
+		// query from db, hash comparation
+		blockHashStrs := make([]string, blockHashSize)
+		for i, hash := range e.BlockHash {
+			blockHash, err := chainhash.NewHash(hash)
+			if err != nil {
+				return fmt.Errorf("block hash convert to string error, request id: %s, hash index: %d, block hash: %s, err: %v", e.RequestId, i, hex.EncodeToString(hash), err)
+			}
+			blockHashStrs[i] = blockHash.String()
+		}
+		foundCount, err := s.state.CheckBtcBlockSignCount(blockHashStrs)
+		if err != nil {
+			return fmt.Errorf("check block hash sign count error, request id: %s, err: %v", e.RequestId, err)
+		}
+		if foundCount != int64(blockHashSize) {
+			return fmt.Errorf("block hash sign count does not match, request id: %s, found: %d, expect: %d", e.RequestId, foundCount, blockHashSize)
+		}
 
 		newSign := &types.MsgSignNewBlock{
 			MsgSign: types.MsgSign{
@@ -182,7 +209,7 @@ func (s *Signer) handleSigReceiveNewBlock(ctx context.Context, e types.MsgSignNe
 			BlockHash:        e.BlockHash,
 		}
 		// p2p broadcast
-		p2pMsg := p2p.Message{
+		p2pMsg := p2p.Message[any]{
 			MessageType: p2p.MessageTypeSigResp,
 			RequestId:   newSign.RequestId,
 			DataType:    "MsgSignNewBlock",
@@ -243,7 +270,7 @@ func (s *Signer) aggSigNewBlock(requestId string) (*bitcointypes.MsgNewBlockHash
 			hashs = msgNewBlock.BlockHash
 			proposerSig = msgNewBlock.SigData
 		} else {
-			pos := indexOfSlice(voterAll, address) // voter address
+			pos := types.IndexOfSlice(voterAll, address) // voter address
 			log.Debugf("Bitmap check, pos: %d, address: %s, all: %s", pos, address, epochVoter.VoteAddrList)
 			if pos >= 0 {
 				bmp.Set(uint32(pos))
@@ -266,7 +293,7 @@ func (s *Signer) aggSigNewBlock(requestId string) (*bitcointypes.MsgNewBlockHash
 	voteSig = append([][]byte{proposerSig}, voteSig...)
 
 	// check threshold
-	threshold := Threshold(len(voterAll))
+	threshold := types.Threshold(len(voterAll))
 	if len(voteSig) < threshold {
 		return nil, fmt.Errorf("threshold not reach, request id: %s, has sig: %d, threshold: %d", requestId, len(voteSig), threshold)
 	}
