@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/goatnetwork/goat-relayer/internal/config"
@@ -34,14 +35,19 @@ type FireblocksProposal struct {
 func NewFireblocksProposal() *FireblocksProposal {
 	// use HDWallet 44/1/1/0/0, VaultAccountId:1
 	assetId := "BTC_TEST"
+	vaultAccountId := "1"
 	if types.GetBTCNetwork(config.AppConfig.BTCNetworkType).Name == "mainnet" {
 		assetId = "BTC"
+		vaultAccountId = "6"
 	}
+	id, _ := strconv.ParseUint(vaultAccountId, 10, 32)
+	vaultAccountIdInt := uint32(id)
+
 	return &FireblocksProposal{
 		Bip44AddressIndex: 1,
 		Bip44Change:       0,
-		DerivationPath:    [5]uint32{44, 1, 1, 0, 0},
-		VaultAccountId:    "1",
+		DerivationPath:    [5]uint32{44, 1, vaultAccountIdInt, 0, 0},
+		VaultAccountId:    vaultAccountId,
 		AssetId:           assetId,
 
 		httpClient: &http.Client{},
