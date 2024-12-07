@@ -87,7 +87,7 @@ func (s *State) AddUtxo(utxo *db.Utxo, pk []byte, blockHash string, blockHeight 
 			}
 		} else if len(noWitnessTx) > 0 && isDeposit {
 			// check deposit cache table, if it not exist, save deposit cache table
-			err = s.SaveConfirmDeposit(utxo.Txid, hex.EncodeToString(noWitnessTx), utxo.EvmAddr, 1, utxo.OutIndex, blockHash, blockHeight, merkleRoot, proofBytes, txIndex)
+			err = s.SaveConfirmDeposit(utxo.Txid, utxo.Amount, hex.EncodeToString(noWitnessTx), utxo.EvmAddr, 1, utxo.OutIndex, blockHash, blockHeight, merkleRoot, proofBytes, txIndex)
 			if err != nil {
 				log.Errorf("State AddUtxo SaveConfirmDeposit error: %v", err)
 			}
