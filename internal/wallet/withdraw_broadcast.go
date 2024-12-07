@@ -223,6 +223,10 @@ func (c *FireblocksClient) CheckPending(txid string, externalTxId string, update
 				switch rpcErr.Code {
 				case btcjson.ErrRPCTxAlreadyInChain:
 					return false, 0, 0, nil
+				// ErrRPCVerifyRejected indicates that transaction or block was rejected by network rules
+				case btcjson.ErrRPCVerifyRejected:
+					log.Warnf("transaction was rejected by network rules, reverting for re-signing: %v, txid: %s", rpcErr, txid)
+					return true, 0, 0, nil
 				}
 			}
 			return false, 0, 0, fmt.Errorf("send raw transaction error: %v, txid: %s", err, txid)
