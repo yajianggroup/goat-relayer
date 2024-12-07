@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -223,6 +224,11 @@ func (c *FireblocksClient) CheckPending(txid string, externalTxId string, update
 				switch rpcErr.Code {
 				case btcjson.ErrRPCTxAlreadyInChain:
 					return false, 0, 0, nil
+				case btcjson.ErrRPCVerifyRejected:
+					if strings.Contains(rpcErr.Message, "mandatory-script-verify-flag-failed") {
+						log.Warnf("Transaction signature verification failed, reverting for re-signing: %v, txid: %s", rpcErr, txid)
+						return true, 0, 0, nil
+					}
 				}
 			}
 			return false, 0, 0, fmt.Errorf("send raw transaction error: %v, txid: %s", err, txid)
