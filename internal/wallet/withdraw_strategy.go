@@ -412,7 +412,9 @@ func CreateRawTransaction(utxos []*db.Utxo, withdrawals []*db.Withdraw, changeAd
 			return nil, 0, err
 		}
 		outPoint := wire.NewOutPoint(hash, uint32(utxo.OutIndex))
-		tx.AddTxIn(wire.NewTxIn(outPoint, nil, nil))
+		txIn := wire.NewTxIn(outPoint, nil, nil)
+		txIn.Sequence = 0xffffff01
+		tx.AddTxIn(txIn)
 	}
 
 	// actual fee for withdraw
