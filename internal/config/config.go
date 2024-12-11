@@ -30,6 +30,7 @@ func InitConfig() {
 	viper.SetDefault("BTC_START_HEIGHT", 0)
 	viper.SetDefault("BTC_NETWORK_TYPE", "")
 	viper.SetDefault("BTC_MAX_NETWORK_FEE", 500)
+	viper.SetDefault("BTC_REINDEX_BLOCKS", "")
 	viper.SetDefault("L2_RPC", "http://localhost:8545")
 	viper.SetDefault("L2_JWT_SECRET", "")
 	viper.SetDefault("L2_CHAIN_ID", "2345")
@@ -81,6 +82,7 @@ func InitConfig() {
 		BTCRPC_USER:            viper.GetString("BTC_RPC_USER"),
 		BTCRPC_PASS:            viper.GetString("BTC_RPC_PASS"),
 		BTCStartHeight:         viper.GetInt("BTC_START_HEIGHT"),
+		BTCReindexBlocks:       viper.GetString("BTC_REINDEX_BLOCKS"),
 		BTCConfirmations:       viper.GetInt("BTC_CONFIRMATIONS"),
 		BTCNetworkType:         viper.GetString("BTC_NETWORK_TYPE"),
 		BTCMaxNetworkFee:       viper.GetInt("BTC_MAX_NETWORK_FEE"),
@@ -138,6 +140,7 @@ type Config struct {
 	BTCConfirmations       int
 	BTCNetworkType         string
 	BTCMaxNetworkFee       int
+	BTCReindexBlocks       string
 	L2RPC                  string
 	L2JwtSecret            string
 	L2ChainId              *big.Int

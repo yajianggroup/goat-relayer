@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -24,11 +26,13 @@ type BTCNotifier struct {
 	client         *rpcclient.Client
 	confirmations  int64
 	currentHeight  uint64
+	reindexBlocks  []string
 	bestHeight     int64
 	catchingStatus bool
 	catchingMu     sync.Mutex
 	syncStatus     *db.BtcSyncStatus
 	syncMu         sync.Mutex
+	initOnce       sync.Once
 
 	cache      *BTCCache
 	poller     *BTCPoller
@@ -37,6 +41,7 @@ type BTCNotifier struct {
 
 func NewBTCNotifier(client *rpcclient.Client, cache *BTCCache, poller *BTCPoller) *BTCNotifier {
 	var maxBlockHeight int64 = -1
+	var reindexBlocks []string
 	var lastBlock db.BtcBlockData
 	result := cache.db.Order("block_height desc").First(&lastBlock)
 	if result.Error != nil && result.Error != gorm.ErrRecordNotFound {
@@ -50,6 +55,11 @@ func NewBTCNotifier(client *rpcclient.Client, cache *BTCCache, poller *BTCPoller
 		maxBlockHeight = int64(config.AppConfig.BTCStartHeight) - 1
 	}
 	log.Infof("New btc notify at max block height is %d", maxBlockHeight)
+
+	if config.AppConfig.BTCReindexBlocks != "" {
+		reindexBlocks = strings.Split(config.AppConfig.BTCReindexBlocks, ",")
+		log.Infof("New btc notify reindex blocks are %v", reindexBlocks)
+	}
 
 	var syncStatus db.BtcSyncStatus
 	resultQuery := cache.db.First(&syncStatus)
@@ -77,6 +87,7 @@ func NewBTCNotifier(client *rpcclient.Client, cache *BTCCache, poller *BTCPoller
 		client:         client,
 		confirmations:  int64(config.AppConfig.BTCConfirmations),
 		currentHeight:  uint64(maxBlockHeight + 1),
+		reindexBlocks:  reindexBlocks,
 		catchingStatus: true,
 		syncStatus:     &syncStatus,
 		cache:          cache,
@@ -102,12 +113,35 @@ func (bn *BTCNotifier) checkConfirmations(ctx context.Context, blockDoneCh chan 
 		case <-ctx.Done():
 			log.Info("Stopping confirmation checks...")
 			return
+
 		case <-ticker.C:
 			bestHeight, err := bn.client.GetBlockCount()
 			if err != nil {
 				log.Errorf("Error getting latest block height: %v", err)
 				continue
 			}
+
+			bn.initOnce.Do(func() {
+				for len(bn.reindexBlocks) > 0 {
+					height := bn.reindexBlocks[0]
+					log.Infof("Reindex block: %s", height)
+					heightInt, err := strconv.ParseInt(height, 10, 64)
+					if err != nil {
+						log.Warnf("Failed to parse reindex block: %s, error: %v", height, err)
+						break
+					}
+					if heightInt > bestHeight {
+						log.Warnf("Reindex block height is larger than best height %d, skip", bestHeight)
+						break
+					}
+					if err := bn.processBlockAtHeight(heightInt, blockDoneCh); err != nil {
+						break
+					}
+					time.Sleep(catchUpInterval)
+					// remove the processed block
+					bn.reindexBlocks = bn.reindexBlocks[1:]
+				}
+			})
 
 			if bestHeight <= bn.bestHeight {
 				// no need to sync
