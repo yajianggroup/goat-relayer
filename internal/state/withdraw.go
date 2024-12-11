@@ -268,6 +268,7 @@ func (s *State) UpdateWithdrawReplace(id, txPrice uint64) error {
 	return s.saveWithdraw(withdraw)
 }
 
+// UpdateWithdrawCanceling, update withdraw status to canceling
 func (s *State) UpdateWithdrawCanceling(id uint64) error {
 	s.walletMu.Lock()
 	defer s.walletMu.Unlock()
@@ -287,6 +288,22 @@ func (s *State) UpdateWithdrawCanceling(id uint64) error {
 
 	// NOTE check stop aggregating order if there is aggregating status withdraw, set to closed
 
+	return s.saveWithdraw(withdraw)
+}
+
+// UpdateWithdrawCanceled, update withdraw status to closed
+func (s *State) UpdateWithdrawCanceled(id uint64) error {
+	s.walletMu.Lock()
+	defer s.walletMu.Unlock()
+
+	withdraw, err := s.getWithdrawByRequestId(nil, id)
+	if err != nil {
+		return err
+	}
+
+	withdraw.Status = db.WITHDRAW_STATUS_CLOSED
+	withdraw.Reason = "canceled"
+	withdraw.UpdatedAt = time.Now()
 	return s.saveWithdraw(withdraw)
 }
 

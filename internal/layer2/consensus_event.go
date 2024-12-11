@@ -276,9 +276,9 @@ func (lis *Layer2Listener) processWithdrawalCancelApproved(block uint64, attribu
 		return nil
 	}
 
-	err := lis.state.CloseWithdraw(uint(id), "canceled")
+	err := lis.state.UpdateWithdrawCanceled(id)
 	if err != nil {
-		log.Errorf("Abci ApproveCancelWithdrawal close withdraw error: %v", err)
+		log.Errorf("Abci ApproveCancelWithdrawal UpdateWithdrawCanceled error: %v", err)
 		return err
 	}
 	return nil
