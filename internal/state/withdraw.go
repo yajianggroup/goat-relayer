@@ -490,17 +490,7 @@ func (s *State) UpdateWithdrawFinalized(txid string, pid uint64) error {
 	s.walletMu.Lock()
 	defer s.walletMu.Unlock()
 
-	sendOrder, err := s.getSendOrderByPid(pid)
-	if err != nil {
-		log.Errorf("State UpdateWithdrawFinalized cannot find send order by pid: %d", pid)
-		return nil
-	}
-	if sendOrder.Txid != txid {
-		log.Errorf("State UpdateWithdrawFinalized txid mismatch, pid: %d, txid: %s", pid, txid)
-		return nil
-	}
-
-	err = s.dbm.GetWalletDB().Transaction(func(tx *gorm.DB) error {
+	err := s.dbm.GetWalletDB().Transaction(func(tx *gorm.DB) error {
 		orders, err := s.getAllOrdersByTxid(tx, txid)
 		if err != nil {
 			return err
@@ -521,6 +511,7 @@ func (s *State) UpdateWithdrawFinalized(txid string, pid uint64) error {
 			}
 
 			order.Status = db.ORDER_STATUS_PROCESSED
+			order.Pid = pid
 			order.UpdatedAt = time.Now()
 
 			err = s.saveOrder(tx, order)
