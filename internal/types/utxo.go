@@ -274,6 +274,71 @@ func TransactionSizeEstimate(numInputs int, receiverTypes []string, numOutputs i
 	return totalSize
 }
 
+func TransactionSizeEstimateV2(numInputs int, receiverTypes []string, numOutputs int, utxoTypes []string) (int64, int64) {
+	// Base transaction overhead (version + locktime)
+	baseSize := int64(10)
+	witnessSize := int64(0)
+
+	// Calculate input sizes
+	for _, utxoType := range utxoTypes {
+		switch utxoType {
+		case WALLET_TYPE_P2WPKH:
+			// Base: txid(32) + vout(4) + script_len(1) + sequence(4) = 41
+			// Witness: items_count(1) + sig_len(1) + sig(72) + pubkey_len(1) + pubkey(33) = 108
+			baseSize += 41
+			witnessSize += 108
+		case WALLET_TYPE_P2PKH:
+			// Legacy input: txid(32) + vout(4) + script_len(1) + script(107) + sequence(4) = 148
+			baseSize += 148
+		case WALLET_TYPE_P2WSH:
+			// Base: txid(32) + vout(4) + script_len(1) + sequence(4) = 41
+			// Witness: items_count(1) + sig_len(1) + sig(72) + pubkey_len(1) + pubkey(33) + script_len(1) + script(35) = 144
+			baseSize += 41
+			witnessSize += 144
+		case WALLET_TYPE_P2SH:
+			// Legacy P2SH input
+			baseSize += 296
+		case WALLET_TYPE_P2TR:
+			// Base: txid(32) + vout(4) + script_len(1) + sequence(4) = 41
+			// Witness: items_count(1) + schnorr_sig_len(1) + schnorr_sig(64) = 66
+			baseSize += 41
+			witnessSize += 66
+		}
+	}
+
+	// Calculate output sizes
+	for _, receiverType := range receiverTypes {
+		switch receiverType {
+		case WALLET_TYPE_P2PKH:
+			baseSize += 34 // value(8) + script_len(1) + script(25)
+		case WALLET_TYPE_P2WPKH:
+			baseSize += 31 // value(8) + script_len(1) + script(22)
+		case WALLET_TYPE_P2SH:
+			baseSize += 32 // value(8) + script_len(1) + script(23)
+		case WALLET_TYPE_P2WSH:
+			baseSize += 43 // value(8) + script_len(1) + script(34)
+		case WALLET_TYPE_P2TR:
+			baseSize += 43 // value(8) + script_len(1) + script(34)
+		}
+	}
+
+	// Add change outputs (P2WPKH)
+	if len(receiverTypes) < numOutputs {
+		baseSize += int64(31 * (numOutputs - len(receiverTypes)))
+	}
+
+	// If there's any witness data, we need to add 2 bytes for the marker and flag
+	if witnessSize > 0 {
+		baseSize += 2
+	}
+
+	// Virtual size = (base size * 4 + witness size) / 4
+	// This ensures witness data is counted at 1/4 of its actual size
+	virtualSize := baseSize + witnessSize/4
+
+	return virtualSize, witnessSize
+}
+
 // Deserialize transaction
 func DeserializeTransaction(data []byte) (*wire.MsgTx, error) {
 	var tx wire.MsgTx

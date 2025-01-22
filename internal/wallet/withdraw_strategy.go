@@ -75,7 +75,7 @@ func ConsolidateSmallUTXOs(utxos []*db.Utxo, networkFee, threshold int64, maxVin
 		utxoTypes[i] = utxo.ReceiverType
 	}
 
-	txSize := types.TransactionSizeEstimate(len(smallUTXOs), []string{types.WALLET_TYPE_P2WPKH}, 1, utxoTypes) // 1 vout
+	txSize, _ := types.TransactionSizeEstimateV2(len(smallUTXOs), []string{types.WALLET_TYPE_P2WPKH}, 1, utxoTypes) // 1 vout
 	estimatedFee := txSize * networkFee
 
 	if totalAmount < types.GetDustAmount(networkFee) {
@@ -119,7 +119,7 @@ func ConsolidateUTXOsByCount(utxos []*db.Utxo, networkFee int64, maxVin, trigerN
 		utxoTypes[i] = utxo.ReceiverType
 	}
 
-	txSize := types.TransactionSizeEstimate(len(selectedUTXOs), []string{types.WALLET_TYPE_P2WPKH}, 1, utxoTypes) // 1 vout
+	txSize, _ := types.TransactionSizeEstimateV2(len(selectedUTXOs), []string{types.WALLET_TYPE_P2WPKH}, 1, utxoTypes) // 1 vout
 	estimatedFee := txSize * networkFee
 
 	if totalAmount < types.GetDustAmount(networkFee) {
@@ -163,7 +163,7 @@ func SelectOptimalUTXOs(utxos []*db.Utxo, receiverTypes []string, withdrawAmount
 
 	// calculate the current transaction fee with no UTXO selected yet
 	utxoTypes := make([]string, 0)
-	txSize := types.TransactionSizeEstimate(len(utxoTypes), receiverTypes, withdrawTotal, utxoTypes) // +1 for change output
+	txSize, _ := types.TransactionSizeEstimateV2(len(utxoTypes), receiverTypes, withdrawTotal, utxoTypes) // +1 for change output
 	estimatedFee := txSize * networkFee
 
 	// sort utxos by amount from small to large
@@ -201,7 +201,7 @@ func SelectOptimalUTXOs(utxos []*db.Utxo, receiverTypes []string, withdrawAmount
 	}
 	// if found a suitable utxo or combination, calculate transaction size and fee
 	if found {
-		txSize = types.TransactionSizeEstimate(len(selectedUTXOs), receiverTypes, withdrawTotal, utxoTypes)
+		txSize, _ := types.TransactionSizeEstimateV2(len(selectedUTXOs), receiverTypes, withdrawTotal, utxoTypes)
 		estimatedFee = txSize * networkFee
 		// totalTarget = withdrawAmount + estimatedFee // not used, fee should minus from withdraw txout value
 	} else {
@@ -220,7 +220,7 @@ func SelectOptimalUTXOs(utxos []*db.Utxo, receiverTypes []string, withdrawAmount
 
 			// update transaction size and fee
 			utxoTypes = append(utxoTypes, utxo.ReceiverType)
-			txSize = types.TransactionSizeEstimate(len(selectedUTXOs), receiverTypes, withdrawTotal, utxoTypes)
+			txSize, _ := types.TransactionSizeEstimateV2(len(selectedUTXOs), receiverTypes, withdrawTotal, utxoTypes)
 			estimatedFee = txSize * networkFee
 
 			// recalculate totalTarget (withdrawAmount + estimatedFee)
@@ -263,7 +263,7 @@ func SelectOptimalUTXOs(utxos []*db.Utxo, receiverTypes []string, withdrawAmount
 
 		// update transaction size and estimated fee with the current UTXO selection
 		utxoTypes = append(utxoTypes, smallestUTXO.ReceiverType)
-		txSize = types.TransactionSizeEstimate(len(selectedUTXOs), receiverTypes, withdrawTotal, utxoTypes)
+		txSize, _ = types.TransactionSizeEstimateV2(len(selectedUTXOs), receiverTypes, withdrawTotal, utxoTypes)
 		estimatedFee = txSize * networkFee
 
 		// recalculate the total target (withdraw amount + estimated fee)
@@ -279,7 +279,7 @@ func SelectOptimalUTXOs(utxos []*db.Utxo, receiverTypes []string, withdrawAmount
 	changeAmount := totalSelectedAmount - withdrawAmount // - estimatedFee, fee should minus from withdraw txout value
 	if changeAmount > types.GetDustAmount(networkFee) {
 		// if change amount > dust limit + network fee * 31 (P2WPKH output size), we need to add a change output
-		txSize = types.TransactionSizeEstimate(len(selectedUTXOs), receiverTypes, withdrawTotal+1, utxoTypes)
+		txSize, _ := types.TransactionSizeEstimateV2(len(selectedUTXOs), receiverTypes, withdrawTotal+1, utxoTypes)
 		estimatedFee = txSize * networkFee
 	} else {
 		// no change output
