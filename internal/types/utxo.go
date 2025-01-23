@@ -288,8 +288,9 @@ func TransactionSizeEstimateV2(numInputs int, receiverTypes []string, numOutputs
 		switch utxoType {
 		case WALLET_TYPE_P2WPKH:
 			// Base: txid(32) + vout(4) + script_len(1) + sequence(4) = 41
-			// Witness: items_count(1) + sig_len(1) + sig(72) + pubkey_len(1) + pubkey(33) = 108
+			// Witness: items_count(1) + sig_len(1) + max_sig(72) + pubkey_len(1) + pubkey(33) = 108 or 107
 			baseSize += 41
+			// Use the maximum possible size for estimation
 			witnessSize += 108
 		case WALLET_TYPE_P2PKH:
 			// Legacy input: txid(32) + vout(4) + script_len(1) + script(107) + sequence(4) = 148
@@ -297,7 +298,18 @@ func TransactionSizeEstimateV2(numInputs int, receiverTypes []string, numOutputs
 		case WALLET_TYPE_P2WSH:
 			// Base: txid(32) + vout(4) + script_len(1) + sequence(4) = 41
 			baseSize += 41
-			witnessSize += 130
+			// Witness (131 or 132 bytes):
+			//   - items_count: 1 byte
+			//   - sig_len: 1 byte
+			//   - max_signature: 72 bytes
+			//   - redeem_script_len: 1 byte
+			//   - redeem_script (57 bytes):
+			//     * OP_PUSHDATA: 1 byte
+			//     * evm_address: 20 bytes
+			//     * OP_DROP: 1 byte
+			//     * compressed_pubkey: 33 bytes
+			//     * OP_CHECKSIG: 1 byte
+			witnessSize += 132
 		case WALLET_TYPE_P2SH:
 			// Legacy P2SH input
 			baseSize += 296

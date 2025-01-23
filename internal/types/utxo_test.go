@@ -14,10 +14,6 @@ import (
 
 var (
 	TEST_GOAT_MAGIC_BYTES = []byte{0x47, 0x4F, 0x41, 0x54} // "GOAT"
-
-	// Actual witness data from blockchain
-	TEST_P2WPKH_SIGNATURE = "3045022100fca1b651552cf416f08cda21018a5c6c9405ab1b94cc694b52026a90cdcb769702200543a5d3d1b33369607fc1354f2a8af6bb0e08b9fe5445047c4d77c81c0f2b8101"
-	TEST_P2WPKH_PUBKEY    = "02b46f2e2e387cbc2bfb541da34d5149256f593a3c175b18004ba21db23d2b8c24"
 )
 
 func encodeWitnessStack(items ...[]byte) []byte {
@@ -86,13 +82,6 @@ func TestIsUtxoGoatDepositV1WithRawTx(t *testing.T) {
 }
 
 func TestTransactionSizeEstimateV2(t *testing.T) {
-	// Convert witness data from hex
-	signature, _ := hex.DecodeString(TEST_P2WPKH_SIGNATURE)
-	pubkey, _ := hex.DecodeString(TEST_P2WPKH_PUBKEY)
-
-	// Create complete witness stack
-	witnessStack := encodeWitnessStack(signature, pubkey)
-
 	tests := []struct {
 		name          string
 		numInputs     int
@@ -101,17 +90,25 @@ func TestTransactionSizeEstimateV2(t *testing.T) {
 		utxoTypes     []string
 		wantVSize     int64
 		wantWitSize   int64
-		witnessData   []byte // actual witness data
 	}{
 		{
-			name:          "Single P2WPKH input with 5 P2WPKH outputs",
+			name:          "1 P2WPKH-In <> 4 P2WPKH-Out, 1 Change",
 			numInputs:     1,
-			receiverTypes: []string{WALLET_TYPE_P2WPKH, WALLET_TYPE_P2WPKH, WALLET_TYPE_P2WPKH, WALLET_TYPE_P2WPKH, WALLET_TYPE_P2WPKH},
-			numOutputs:    5,
+			numOutputs:    4 + 1,
 			utxoTypes:     []string{WALLET_TYPE_P2WPKH},
-			wantVSize:     234, // (baseSize*4 + witSize)/4 = 233.5, truncated to 234
-			wantWitSize:   108, // witness: stack_items(1) + sig_len(1) + sig(72) + pubkey_len(1) + pubkey(33) = 110
-			witnessData:   witnessStack,
+			receiverTypes: []string{WALLET_TYPE_P2WPKH, WALLET_TYPE_P2WPKH, WALLET_TYPE_P2WPKH, WALLET_TYPE_P2WPKH, WALLET_TYPE_P2WPKH},
+			wantVSize:     234, // weight = baseSize(206) * 4 + witSize(108) + 2 = 934, vsize = 934/4 ≈ 234(233.5)
+			wantWitSize:   108, // p2wpkh: stack_items(1) + sig_len(1) + sig(72) + pubkey_len(1) + pubkey(33) = 108
+		},
+		{
+			name:          "1 P2WSH-In, 1 P2WPKH-In <> 1 P2WPKH-Out, 1 Change",
+			numInputs:     1 + 1,
+			numOutputs:    1 + 1,
+			utxoTypes:     []string{WALLET_TYPE_P2WSH, WALLET_TYPE_P2WPKH},
+			receiverTypes: []string{WALLET_TYPE_P2WPKH},
+			wantVSize:     215, // weight = base_size(154) * 4 + witness_size(240) + 2 = 858, vsize = 858/4 = 215(214.5)
+			wantWitSize:   240, // p2wpkh(108): items(1) + sig_len(1) + sig(72) + pubkey_len(1) + pubkey(33), p2wsh(130): items(1) + sig_len(1) + sig(72) + script_len(1) + script(57)
+			//
 		},
 	}
 
@@ -123,14 +120,6 @@ func TestTransactionSizeEstimateV2(t *testing.T) {
 			}
 			if gotWitSize != tt.wantWitSize {
 				t.Errorf("TransactionSizeEstimateV2() witness size = %v, want %v", gotWitSize, tt.wantWitSize)
-			}
-
-			// Verify witness data size matches our calculation
-			if tt.witnessData != nil {
-				actualWitnessSize := len(tt.witnessData)
-				if int64(actualWitnessSize) != tt.wantWitSize {
-					t.Errorf("Actual witness data size = %v, want %v", actualWitnessSize, tt.wantWitSize)
-				}
 			}
 		})
 	}
