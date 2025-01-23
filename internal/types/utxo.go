@@ -292,9 +292,18 @@ func TransactionSizeEstimateV2(numInputs int, receiverTypes []string, numOutputs
 			baseSize += 148
 		case WALLET_TYPE_P2WSH:
 			// Base: txid(32) + vout(4) + script_len(1) + sequence(4) = 41
-			// Witness: items_count(1) + sig_len(1) + sig(72) + pubkey_len(1) + pubkey(33) + script_len(1) + script(35) = 144
 			baseSize += 41
-			witnessSize += 144
+			// Witness (130 bytes):
+			//   - items_count: 1 byte
+			//   - sig_len: 1 byte
+			//   - signature: 72 bytes
+			//   - redeem_script_len: 1 byte
+			//   - redeem_script (55 bytes):
+			//     * evm_address: 20 bytes
+			//     * OP_DROP: 1 byte
+			//     * compressed_pubkey: 33 bytes
+			//     * OP_CHECKSIG: 1 byte
+			witnessSize += 130
 		case WALLET_TYPE_P2SH:
 			// Legacy P2SH input
 			baseSize += 296
