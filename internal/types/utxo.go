@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math"
 
 	"github.com/btcsuite/btcd/btcjson"
 	"github.com/btcsuite/btcd/btcutil"
@@ -276,8 +277,11 @@ func TransactionSizeEstimate(numInputs int, receiverTypes []string, numOutputs i
 
 func TransactionSizeEstimateV2(numInputs int, receiverTypes []string, numOutputs int, utxoTypes []string) (int64, int64) {
 	// Base transaction overhead (version + locktime)
-	baseSize := int64(10)
+	baseSize := int64(4 + 4) // version(4) + locktime(4)
 	witnessSize := int64(0)
+
+	// Calculate input sizes
+	baseSize += 1 // input count varint
 
 	// Calculate input sizes
 	for _, utxoType := range utxoTypes {
@@ -293,29 +297,19 @@ func TransactionSizeEstimateV2(numInputs int, receiverTypes []string, numOutputs
 		case WALLET_TYPE_P2WSH:
 			// Base: txid(32) + vout(4) + script_len(1) + sequence(4) = 41
 			baseSize += 41
-			// Witness (130 bytes):
-			//   - items_count: 1 byte
-			//   - sig_len: 1 byte
-			//   - signature: 72 bytes
-			//   - redeem_script_len: 1 byte
-			//   - redeem_script (55 bytes):
-			//     * evm_address: 20 bytes
-			//     * OP_DROP: 1 byte
-			//     * compressed_pubkey: 33 bytes
-			//     * OP_CHECKSIG: 1 byte
 			witnessSize += 130
 		case WALLET_TYPE_P2SH:
 			// Legacy P2SH input
 			baseSize += 296
 		case WALLET_TYPE_P2TR:
 			// Base: txid(32) + vout(4) + script_len(1) + sequence(4) = 41
-			// Witness: items_count(1) + schnorr_sig_len(1) + schnorr_sig(64) = 66
 			baseSize += 41
 			witnessSize += 66
 		}
 	}
 
 	// Calculate output sizes
+	baseSize += 1 // output count varint
 	for _, receiverType := range receiverTypes {
 		switch receiverType {
 		case WALLET_TYPE_P2PKH:
@@ -336,16 +330,17 @@ func TransactionSizeEstimateV2(numInputs int, receiverTypes []string, numOutputs
 		baseSize += int64(31 * (numOutputs - len(receiverTypes)))
 	}
 
-	// If there's any witness data, we need to add 2 bytes for the marker and flag
+	// Virtual size = (base size * 4 + witness size) / 4
+	weight := baseSize*4 + witnessSize
+
+	// If there's any witness data, we need to add marker and flag bytes to weight
 	if witnessSize > 0 {
-		baseSize += 2
+		weight += 2
 	}
 
-	// Virtual size = (base size * 4 + witness size) / 4
-	// This ensures witness data is counted at 1/4 of its actual size
-	virtualSize := baseSize + witnessSize/4
+	virtualSize := math.Ceil(float64(weight) / float64(4))
 
-	return virtualSize, witnessSize
+	return int64(virtualSize), witnessSize
 }
 
 // Deserialize transaction

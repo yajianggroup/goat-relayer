@@ -13,8 +13,30 @@ import (
 )
 
 var (
-	TEST_GOAT_MAGIC_BYTES = []byte{0x47, 0x54, 0x54, 0x30} // "GTT0"
+	TEST_GOAT_MAGIC_BYTES = []byte{0x47, 0x4F, 0x41, 0x54} // "GOAT"
+
+	// Actual witness data from blockchain
+	TEST_P2WPKH_SIGNATURE = "3045022100fca1b651552cf416f08cda21018a5c6c9405ab1b94cc694b52026a90cdcb769702200543a5d3d1b33369607fc1354f2a8af6bb0e08b9fe5445047c4d77c81c0f2b8101"
+	TEST_P2WPKH_PUBKEY    = "02b46f2e2e387cbc2bfb541da34d5149256f593a3c175b18004ba21db23d2b8c24"
 )
+
+func encodeWitnessStack(items ...[]byte) []byte {
+	// Calculate total size
+	size := 1 // varint for number of items
+	for _, item := range items {
+		size += 1 // varint for item length
+		size += len(item)
+	}
+
+	// Encode witness stack
+	witness := make([]byte, 0, size)
+	witness = append(witness, byte(len(items))) // Number of items (varint)
+	for _, item := range items {
+		witness = append(witness, byte(len(item))) // Item length (varint)
+		witness = append(witness, item...)         // Item data
+	}
+	return witness
+}
 
 func TestIsUtxoGoatDepositV1WithRawTx(t *testing.T) {
 	// Decode the provided raw transaction
@@ -61,4 +83,55 @@ func TestIsUtxoGoatDepositV1WithRawTx(t *testing.T) {
 	}
 	t.Logf("Extract evmAddress: %s", evmAddress)
 	assert.NotEqual(t, evmAddress, (common.Address{}).Hex())
+}
+
+func TestTransactionSizeEstimateV2(t *testing.T) {
+	// Convert witness data from hex
+	signature, _ := hex.DecodeString(TEST_P2WPKH_SIGNATURE)
+	pubkey, _ := hex.DecodeString(TEST_P2WPKH_PUBKEY)
+
+	// Create complete witness stack
+	witnessStack := encodeWitnessStack(signature, pubkey)
+
+	tests := []struct {
+		name          string
+		numInputs     int
+		receiverTypes []string
+		numOutputs    int
+		utxoTypes     []string
+		wantVSize     int64
+		wantWitSize   int64
+		witnessData   []byte // actual witness data
+	}{
+		{
+			name:          "Single P2WPKH input with 5 P2WPKH outputs",
+			numInputs:     1,
+			receiverTypes: []string{WALLET_TYPE_P2WPKH, WALLET_TYPE_P2WPKH, WALLET_TYPE_P2WPKH, WALLET_TYPE_P2WPKH, WALLET_TYPE_P2WPKH},
+			numOutputs:    5,
+			utxoTypes:     []string{WALLET_TYPE_P2WPKH},
+			wantVSize:     234, // (baseSize*4 + witSize)/4 = 233.5, truncated to 234
+			wantWitSize:   108, // witness: stack_items(1) + sig_len(1) + sig(72) + pubkey_len(1) + pubkey(33) = 110
+			witnessData:   witnessStack,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotVSize, gotWitSize := TransactionSizeEstimateV2(tt.numInputs, tt.receiverTypes, tt.numOutputs, tt.utxoTypes)
+			if gotVSize != tt.wantVSize {
+				t.Errorf("TransactionSizeEstimateV2() virtual size = %v, want %v", gotVSize, tt.wantVSize)
+			}
+			if gotWitSize != tt.wantWitSize {
+				t.Errorf("TransactionSizeEstimateV2() witness size = %v, want %v", gotWitSize, tt.wantWitSize)
+			}
+
+			// Verify witness data size matches our calculation
+			if tt.witnessData != nil {
+				actualWitnessSize := len(tt.witnessData)
+				if int64(actualWitnessSize) != tt.wantWitSize {
+					t.Errorf("Actual witness data size = %v, want %v", actualWitnessSize, tt.wantWitSize)
+				}
+			}
+		})
+	}
 }
