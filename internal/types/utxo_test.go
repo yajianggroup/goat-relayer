@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	TEST_GOAT_MAGIC_BYTES = []byte{0x47, 0x4F, 0x41, 0x54} // "GOAT"
+	TEST_GOAT_MAGIC_BYTES = []byte{0x47, 0x54, 0x54, 0x30} // "GTT0"
 )
 
 func encodeWitnessStack(items ...[]byte) []byte {
