@@ -421,9 +421,6 @@ func CreateRawTransaction(utxos []*db.Utxo, withdrawals []*db.Withdraw, changeAd
 	actualFee := int64(0)
 	if len(withdrawals) > 0 {
 		totalTxout := len(withdrawals)
-		if changeAmount > 0 {
-			totalTxout++
-		}
 		actualFee = estimatedFee / int64(totalTxout)
 	}
 
@@ -446,9 +443,8 @@ func CreateRawTransaction(utxos []*db.Utxo, withdrawals []*db.Withdraw, changeAd
 		tx.AddTxOut(wire.NewTxOut(val, pkScript))
 	}
 
-	val := changeAmount - actualFee
 	// add change output
-	if val > 0 {
+	if changeAmount > 0 {
 		changeAddr, err := btcutil.DecodeAddress(changeAddress, net)
 		if err != nil {
 			return nil, 0, err
@@ -457,10 +453,10 @@ func CreateRawTransaction(utxos []*db.Utxo, withdrawals []*db.Withdraw, changeAd
 		if err != nil {
 			return nil, 0, err
 		}
-		if val <= types.GetDustAmount(networkFee) {
-			return nil, 0, fmt.Errorf("change amount too small after fee deduction: %d", val)
+		if changeAmount <= types.GetDustAmount(networkFee) {
+			return nil, 0, fmt.Errorf("change amount too small after fee deduction: %d", changeAmount)
 		}
-		tx.AddTxOut(wire.NewTxOut(val, changePkScript))
+		tx.AddTxOut(wire.NewTxOut(changeAmount, changePkScript))
 	}
 	noWitnessTx, err := types.SerializeTransactionNoWitness(tx)
 	if err != nil {
