@@ -421,6 +421,10 @@ func CreateRawTransaction(utxos []*db.Utxo, withdrawals []*db.Withdraw, changeAd
 	actualFee := int64(0)
 	if len(withdrawals) > 0 {
 		totalTxout := len(withdrawals)
+		// NOTE: not to share fee with change output
+		// if changeAmount > 0 {
+		// 	totalTxout++
+		// }
 		actualFee = estimatedFee / int64(totalTxout)
 	}
 
