@@ -396,6 +396,11 @@ func (w *WalletServer) createSendOrder(tx *wire.MsgTx, orderType string, selecte
 		return nil, err
 	}
 
+	utxoTypes := make([]string, len(selectedUtxos))
+	for i, utxo := range selectedUtxos {
+		utxoTypes[i] = utxo.ReceiverType
+	}
+	_, witnessSize := types.TransactionSizeEstimateV2(len(selectedUtxos), []string{types.WALLET_TYPE_P2WPKH}, len(vouts), utxoTypes)
 	msgSignSendOrder := &types.MsgSignSendOrder{
 		MsgSign: types.MsgSign{
 			RequestId:    requestId,
@@ -406,11 +411,12 @@ func (w *WalletServer) createSendOrder(tx *wire.MsgTx, orderType string, selecte
 			SigData:      nil,
 			CreateTime:   time.Now().Unix(),
 		},
-		SendOrder: orderBytes,
-		Utxos:     utxoBytes,
-		Vins:      vinBytes,
-		Vouts:     voutBytes,
-		Withdraws: withdrawBytes,
+		SendOrder:   orderBytes,
+		Utxos:       utxoBytes,
+		Vins:        vinBytes,
+		Vouts:       voutBytes,
+		WitnessSize: uint64(witnessSize),
+		Withdraws:   withdrawBytes,
 
 		WithdrawIds: withdrawIds,
 	}

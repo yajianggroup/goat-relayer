@@ -160,7 +160,7 @@ func TestCreateRawTransaction(t *testing.T) {
 		expectedScript, err := txscript.PayToAddrScript(addr)
 		assert.NoError(t, err)
 		assert.Equal(t, expectedScript, tx.TxOut[i].PkScript)
-		assert.Equal(t, int64(withdrawal.Amount)-1000/3, tx.TxOut[i].Value) // minus fee
+		assert.Equal(t, int64(withdrawal.Amount)-500, tx.TxOut[i].Value) // minus fee
 	}
 
 	// when withdrawal amount is too small (dust)
@@ -168,7 +168,7 @@ func TestCreateRawTransaction(t *testing.T) {
 	_, dustWithdraw, err = wallet.CreateRawTransaction(utxos, withdrawals, "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", 5000000, 1000, 10, net)
 	assert.Error(t, err)
 	assert.Equal(t, uint(1), dustWithdraw) // the ID of the withdrawal with the small amount
-	assert.EqualError(t, err, fmt.Sprintf("withdrawal amount too small after fee deduction: %d", withdrawals[0].Amount-1000/3))
+	assert.EqualError(t, err, fmt.Sprintf("withdrawal amount too small after fee deduction: %d", withdrawals[0].Amount-500))
 }
 
 // Test SignTransactionByPrivKey function
