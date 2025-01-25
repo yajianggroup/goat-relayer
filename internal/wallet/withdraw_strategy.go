@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"sort"
 	"time"
 
@@ -425,7 +426,7 @@ func CreateRawTransaction(utxos []*db.Utxo, withdrawals []*db.Withdraw, changeAd
 		// if changeAmount > 0 {
 		// 	totalTxout++
 		// }
-		actualFee = estimatedFee / int64(totalTxout)
+		actualFee = int64(math.Ceil(float64(estimatedFee) / float64(totalTxout)))
 	}
 
 	// add outputs (withdrawals)
