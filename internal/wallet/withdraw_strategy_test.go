@@ -78,12 +78,12 @@ func TestSelectOptimalUTXOs(t *testing.T) {
 	assert.Greater(t, totalSelectedAmount, int64(0))
 	assert.Equal(t, int64(40000000), withdrawAmount)
 	assert.Greater(t, changeAmount, int64(0))
-	assert.Greater(t, estimatedFee, int64(0))
+	assert.Greater(t, estimatedFee, float64(0))
 
 	// when not enough UTXOs
 	_, _, _, _, estimatedFee, _, err = wallet.SelectOptimalUTXOs(utxos, []string{types.WALLET_TYPE_P2WPKH}, 150000000, 100, 1)
 	assert.Error(t, err)
-	assert.EqualError(t, err, fmt.Sprintf("not enough utxos to satisfy the withdrawal amount and network fee, withdraw amount: 150000000, selected amount: 115000000, estimated fee: %d", estimatedFee))
+	assert.EqualError(t, err, fmt.Sprintf("not enough utxos to satisfy the withdrawal amount and network fee, withdraw amount: 150000000, selected amount: 115000000, estimated fee: %f", estimatedFee))
 }
 
 // Test SelectWithdrawals function

@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"math"
 
 	"github.com/btcsuite/btcd/btcjson"
 	"github.com/btcsuite/btcd/btcutil"
@@ -275,7 +274,7 @@ func TransactionSizeEstimate(numInputs int, receiverTypes []string, numOutputs i
 	return totalSize
 }
 
-func TransactionSizeEstimateV2(numInputs int, receiverTypes []string, numOutputs int, utxoTypes []string) (int64, int64) {
+func TransactionSizeEstimateV2(numInputs int, receiverTypes []string, numOutputs int, utxoTypes []string) (float64, int64) {
 	// Base transaction overhead (version + locktime)
 	baseSize := int64(4 + 4) // version(4) + locktime(4)
 	witnessSize := int64(0)
@@ -352,7 +351,7 @@ func TransactionSizeEstimateV2(numInputs int, receiverTypes []string, numOutputs
 	weight := baseSize*4 + witnessSize
 	virtualSize := float64(weight) / float64(4)
 
-	return int64(math.Ceil(virtualSize)), witnessSize
+	return virtualSize, witnessSize
 }
 
 // Deserialize transaction

@@ -88,7 +88,7 @@ func TestTransactionSizeEstimateV2(t *testing.T) {
 		receiverTypes []string
 		numOutputs    int
 		utxoTypes     []string
-		wantVSize     int64
+		wantVSize     float64
 		wantWitSize   int64
 	}{
 		{
@@ -97,8 +97,8 @@ func TestTransactionSizeEstimateV2(t *testing.T) {
 			numOutputs:    4 + 1,
 			utxoTypes:     []string{WALLET_TYPE_P2WPKH},
 			receiverTypes: []string{WALLET_TYPE_P2WPKH, WALLET_TYPE_P2WPKH, WALLET_TYPE_P2WPKH, WALLET_TYPE_P2WPKH, WALLET_TYPE_P2WPKH},
-			wantVSize:     234, // weight = baseSize(206) * 4 + witSize(110) = 934, vsize = 934/4 ≈ 234(233.5)
-			wantWitSize:   110, // marker_flag: 2, p2wpkh: stack_items(1) + sig_len(1) + sig(72) + pubkey_len(1) + pubkey(33) = 108
+			wantVSize:     233.5, // weight = baseSize(206) * 4 + witSize(110) = 934, vsize = 934/4 ≈ 234(233.5)
+			wantWitSize:   110,   // marker_flag: 2, p2wpkh: stack_items(1) + sig_len(1) + sig(72) + pubkey_len(1) + pubkey(33) = 108
 		},
 		{
 			name:          "1 P2WSH-In, 1 P2WPKH-In <> 1 P2WPKH-Out, 1 Change",
@@ -106,8 +106,8 @@ func TestTransactionSizeEstimateV2(t *testing.T) {
 			numOutputs:    1 + 1,
 			utxoTypes:     []string{WALLET_TYPE_P2WSH, WALLET_TYPE_P2WPKH},
 			receiverTypes: []string{WALLET_TYPE_P2WPKH},
-			wantVSize:     215, // weight = base_size(154) * 4 + witness_size(242) = 858, vsize = 858/4 = 215(214.5)
-			wantWitSize:   242, // marker_flag: 2, p2wpkh(108): items(1) + sig_len(1) + sig(72) + pubkey_len(1) + pubkey(33), p2wsh(132): items(1) + sig_len(1) + sig(72) + script_len(1) + script(5)
+			wantVSize:     214.5, // weight = base_size(154) * 4 + witness_size(242) = 858, vsize = 858/4 = 215(214.5)
+			wantWitSize:   242,   // marker_flag: 2, p2wpkh(108): items(1) + sig_len(1) + sig(72) + pubkey_len(1) + pubkey(33), p2wsh(132): items(1) + sig_len(1) + sig(72) + script_len(1) + script(5)
 			//
 		},
 		{
@@ -118,8 +118,8 @@ func TestTransactionSizeEstimateV2(t *testing.T) {
 			receiverTypes: []string{WALLET_TYPE_P2WPKH, WALLET_TYPE_P2WPKH, WALLET_TYPE_P2WPKH, WALLET_TYPE_P2WPKH,
 				WALLET_TYPE_P2WPKH, WALLET_TYPE_P2WPKH, WALLET_TYPE_P2WPKH, WALLET_TYPE_P2WPKH,
 				WALLET_TYPE_P2TR},
-			wantVSize:   438, // weight = baseSize(383) * 4 + witnessSize(218) = 1750, vsize = 1750/4 = 438(437.5)
-			wantWitSize: 218, // marker_flag: 2, p2wpkh(108 * 2): items(1) + sig_len(1) + sig(72) + pubkey_len(1) + pubkey(33)
+			wantVSize:   437.5, // weight = baseSize(383) * 4 + witnessSize(218) = 1750, vsize = 1750/4 = 438(437.5)
+			wantWitSize: 218,   // marker_flag: 2, p2wpkh(108 * 2): items(1) + sig_len(1) + sig(72) + pubkey_len(1) + pubkey(33)
 		},
 	}
 

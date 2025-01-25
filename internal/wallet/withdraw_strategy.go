@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"math"
 	"sort"
 	"time"
 
@@ -76,7 +77,7 @@ func ConsolidateSmallUTXOs(utxos []*db.Utxo, networkFee, threshold int64, maxVin
 	}
 
 	txSize, _ := types.TransactionSizeEstimateV2(len(smallUTXOs), []string{types.WALLET_TYPE_P2WPKH}, 1, utxoTypes) // 1 vout
-	estimatedFee := txSize * networkFee
+	estimatedFee := int64(math.Ceil(txSize)) * networkFee
 
 	if totalAmount < types.GetDustAmount(networkFee) {
 		return nil, 0, 0, fmt.Errorf("total amount is too low, cannot consolidate")
@@ -120,7 +121,7 @@ func ConsolidateUTXOsByCount(utxos []*db.Utxo, networkFee int64, maxVin, trigerN
 	}
 
 	txSize, witnessSize := types.TransactionSizeEstimateV2(len(selectedUTXOs), []string{types.WALLET_TYPE_P2WPKH}, 1, utxoTypes) // 1 vout
-	estimatedFee := txSize * networkFee
+	estimatedFee := int64(math.Ceil(txSize)) * networkFee
 
 	if totalAmount < types.GetDustAmount(networkFee) {
 		return nil, 0, 0, 0, fmt.Errorf("total amount is too low, cannot consolidate")
@@ -153,11 +154,11 @@ func ConsolidateUTXOsByCount(utxos []*db.Utxo, networkFee int64, maxVin, trigerN
 //	estimatedFee - estimate fee
 //	witnessSize - witness size
 //	error - error if any
-func SelectOptimalUTXOs(utxos []*db.Utxo, receiverTypes []string, withdrawAmount, networkFee int64, withdrawTotal int) ([]*db.Utxo, int64, int64, int64, int64, int64, error) {
+func SelectOptimalUTXOs(utxos []*db.Utxo, receiverTypes []string, withdrawAmount, networkFee int64, withdrawTotal int) ([]*db.Utxo, int64, int64, int64, float64, int64, error) {
 	var selectedUTXOs []*db.Utxo
 	var totalSelectedAmount int64 = 0
 	var witnessSize int64 = 0
-	var txSize int64 = 0
+	var txSize float64 = 0
 	var maxVin int = 10
 	if withdrawAmount > 50*1e8 {
 		// max vin is 50 for large amount than 50 BTC
@@ -167,7 +168,7 @@ func SelectOptimalUTXOs(utxos []*db.Utxo, receiverTypes []string, withdrawAmount
 	// calculate the current transaction fee with no UTXO selected yet
 	utxoTypes := make([]string, 0)
 	txSize, witnessSize = types.TransactionSizeEstimateV2(len(utxoTypes), receiverTypes, withdrawTotal, utxoTypes) // +1 for change output
-	estimatedFee := txSize * networkFee
+	estimatedFee := txSize * float64(networkFee)
 
 	// sort utxos by amount from small to large
 	sort.Slice(utxos, func(i, j int) bool {
@@ -205,7 +206,7 @@ func SelectOptimalUTXOs(utxos []*db.Utxo, receiverTypes []string, withdrawAmount
 	// if found a suitable utxo or combination, calculate transaction size and fee
 	if found {
 		txSize, witnessSize = types.TransactionSizeEstimateV2(len(selectedUTXOs), receiverTypes, withdrawTotal, utxoTypes)
-		estimatedFee = txSize * networkFee
+		estimatedFee = txSize * float64(networkFee)
 		// totalTarget = withdrawAmount + estimatedFee // not used, fee should minus from withdraw txout value
 	} else {
 		// if not found a suitable utxo or combination, accumulate utxos by amount from large to small
@@ -224,7 +225,7 @@ func SelectOptimalUTXOs(utxos []*db.Utxo, receiverTypes []string, withdrawAmount
 			// update transaction size and fee
 			utxoTypes = append(utxoTypes, utxo.ReceiverType)
 			txSize, witnessSize = types.TransactionSizeEstimateV2(len(selectedUTXOs), receiverTypes, withdrawTotal, utxoTypes)
-			estimatedFee = txSize * networkFee
+			estimatedFee = txSize * float64(networkFee)
 
 			// recalculate totalTarget (withdrawAmount + estimatedFee)
 			// totalTarget = withdrawAmount + estimatedFee // not used, fee should minus from withdraw txout value
@@ -267,7 +268,7 @@ func SelectOptimalUTXOs(utxos []*db.Utxo, receiverTypes []string, withdrawAmount
 		// update transaction size and estimated fee with the current UTXO selection
 		utxoTypes = append(utxoTypes, smallestUTXO.ReceiverType)
 		txSize, witnessSize = types.TransactionSizeEstimateV2(len(selectedUTXOs), receiverTypes, withdrawTotal, utxoTypes)
-		estimatedFee = txSize * networkFee
+		estimatedFee = txSize * float64(networkFee)
 
 		// recalculate the total target (withdraw amount + estimated fee)
 		// totalTarget = withdrawAmount + estimatedFee // not used, fee should minus from withdraw txout value
@@ -275,7 +276,7 @@ func SelectOptimalUTXOs(utxos []*db.Utxo, receiverTypes []string, withdrawAmount
 
 	// after selecting, check if we have enough UTXO to cover the total target
 	if totalSelectedAmount < withdrawAmount {
-		return nil, 0, 0, 0, estimatedFee, 0, fmt.Errorf("not enough utxos to satisfy the withdrawal amount and network fee, withdraw amount: %d, selected amount: %d, estimated fee: %d", withdrawAmount, totalSelectedAmount, estimatedFee)
+		return nil, 0, 0, 0, estimatedFee, 0, fmt.Errorf("not enough utxos to satisfy the withdrawal amount and network fee, withdraw amount: %d, selected amount: %d, estimated fee: %f", withdrawAmount, totalSelectedAmount, estimatedFee)
 	}
 
 	// calculate the change amount
@@ -283,10 +284,10 @@ func SelectOptimalUTXOs(utxos []*db.Utxo, receiverTypes []string, withdrawAmount
 	if changeAmount > types.GetDustAmount(networkFee) {
 		// if change amount > dust limit + network fee * 31 (P2WPKH output size), we need to add a change output
 		txSize, witnessSize = types.TransactionSizeEstimateV2(len(selectedUTXOs), receiverTypes, withdrawTotal+1, utxoTypes)
-		estimatedFee = txSize * networkFee
+		estimatedFee = txSize * float64(networkFee)
 	} else {
 		// no change output
-		estimatedFee += changeAmount
+		estimatedFee += float64(changeAmount)
 		changeAmount = 0
 	}
 
@@ -405,7 +406,15 @@ func SelectWithdrawals(withdrawals []*db.Withdraw, networkFee types.BtcNetworkFe
 //	tx - raw transaction
 //	dustWithdraw - value lower than dust limit withdraw id
 //	error - error if any
-func CreateRawTransaction(utxos []*db.Utxo, withdrawals []*db.Withdraw, changeAddress string, changeAmount, estimatedFee, witnessSize, networkFee int64, net *chaincfg.Params) (*wire.MsgTx, uint64, uint, error) {
+func CreateRawTransaction(
+	utxos []*db.Utxo,
+	withdrawals []*db.Withdraw,
+	changeAddress string,
+	changeAmount int64,
+	estimatedFee float64,
+	witnessSize int64,
+	networkFee int64,
+	net *chaincfg.Params) (*wire.MsgTx, uint64, uint, error) {
 	tx := wire.NewMsgTx(wire.TxVersion)
 
 	// add utxos as transaction inputs
@@ -429,11 +438,10 @@ func CreateRawTransaction(utxos []*db.Utxo, withdrawals []*db.Withdraw, changeAd
 		// if changeAmount > 0 {
 		// 	totalTxout++
 		// }
-		actualFee = estimatedFee / int64(totalTxout)
-		changeFee = estimatedFee % int64(totalTxout)
+		actualFee = int64(math.Ceil(estimatedFee / float64(totalTxout)))
 	} else {
 		// no withdrawals, use estimated fee for consolidation
-		changeFee = estimatedFee
+		changeFee = int64(math.Ceil(estimatedFee))
 	}
 
 	// add outputs (withdrawals)
@@ -455,7 +463,7 @@ func CreateRawTransaction(utxos []*db.Utxo, withdrawals []*db.Withdraw, changeAd
 		tx.AddTxOut(wire.NewTxOut(val, pkScript))
 	}
 
-	val := changeAmount - changeFee
+	val := int64(changeAmount) - changeFee
 	// add change output
 	if val > 0 {
 		changeAddr, err := btcutil.DecodeAddress(changeAddress, net)

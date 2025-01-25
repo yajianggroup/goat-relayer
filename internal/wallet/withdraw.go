@@ -275,7 +275,7 @@ func (w *WalletServer) initWithdrawSig() {
 				if err != nil {
 					log.Errorf("WalletServer initWithdrawSig CloseWithdraw for dust limit withdraw %d, error: %v", dustWithdrawId, err)
 				} else {
-					log.Infof("WalletServer initWithdrawSig CloseWithdraw for dust limit withdraw %d ok, ave tx fee %d", dustWithdrawId, estimateFee/int64(len(selectedWithdraws)))
+					log.Infof("WalletServer initWithdrawSig CloseWithdraw for dust limit withdraw %d ok, ave tx fee %d", dustWithdrawId, int64(estimateFee)/int64(len(selectedWithdraws)))
 				}
 			}
 			return
