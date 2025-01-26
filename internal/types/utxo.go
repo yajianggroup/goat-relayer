@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"math"
 
 	"github.com/btcsuite/btcd/btcjson"
 	"github.com/btcsuite/btcd/btcutil"
@@ -275,7 +274,7 @@ func TransactionSizeEstimate(numInputs int, receiverTypes []string, numOutputs i
 	return totalSize
 }
 
-func TransactionSizeEstimateV2(numInputs int, receiverTypes []string, numOutputs int, utxoTypes []string) (int64, int64) {
+func TransactionSizeEstimateV2(numInputs int, receiverTypes []string, numOutputs int, utxoTypes []string) (float64, int64) {
 	// Base transaction overhead (version + locktime)
 	baseSize := int64(4 + 4) // version(4) + locktime(4)
 	witnessSize := int64(0)
@@ -304,10 +303,11 @@ func TransactionSizeEstimateV2(numInputs int, receiverTypes []string, numOutputs
 			//   - max_signature: 72 bytes
 			//   - redeem_script_len: 1 byte
 			//   - redeem_script (57 bytes):
-			//     * OP_PUSHDATA: 1 byte
+			//     * evm_address_len: 1 byte
 			//     * evm_address: 20 bytes
 			//     * OP_DROP: 1 byte
-			//     * compressed_pubkey: 33 bytes
+			//     * pubkey_len: 1 byte
+			//     * pubkey: 33 bytes
 			//     * OP_CHECKSIG: 1 byte
 			witnessSize += 132
 		case WALLET_TYPE_P2SH:
@@ -342,17 +342,16 @@ func TransactionSizeEstimateV2(numInputs int, receiverTypes []string, numOutputs
 		baseSize += int64(31 * (numOutputs - len(receiverTypes)))
 	}
 
-	// Virtual size = (base size * 4 + witness size) / 4
-	weight := baseSize*4 + witnessSize
-
-	// If there's any witness data, we need to add marker and flag bytes to weight
+	// If there's any witness data, we need to add marker and flag bytes to witness
 	if witnessSize > 0 {
-		weight += 2
+		witnessSize += 2
 	}
 
-	virtualSize := math.Ceil(float64(weight) / float64(4))
+	// Virtual size = (base size * 4 + witness size) / 4
+	weight := baseSize*4 + witnessSize
+	virtualSize := float64(weight) / float64(4)
 
-	return int64(virtualSize), witnessSize
+	return virtualSize, witnessSize
 }
 
 // Deserialize transaction
