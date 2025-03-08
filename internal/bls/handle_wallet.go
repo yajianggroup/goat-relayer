@@ -234,7 +234,7 @@ func (s *Signer) handleSigReceiveSendOrder(ctx context.Context, e types.MsgSignS
 			}
 		} else if order.OrderType == db.ORDER_TYPE_CONSOLIDATION {
 			// check consolidation in init, aggregating, pending, if true, return
-			if s.state.IsConsolidationInProgress() {
+			if s.state.HasConsolidationInProgress() {
 				log.Warnf("SigReceive SendOrder ignore, there is a consolidation in progress, request id: %s", e.RequestId)
 				return fmt.Errorf("SigReceive SendOrder cannot handle, there is a consolidation in progress, request id: %s", e.RequestId)
 			}
