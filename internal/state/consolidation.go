@@ -16,13 +16,11 @@ func (s *State) HasConsolidationInProgress() bool {
 
 	var order db.SendOrder
 	err := s.dbm.GetWalletDB().Where("status IN (?)", []string{db.ORDER_STATUS_AGGREGATING, db.ORDER_STATUS_INIT, db.ORDER_STATUS_PENDING}).Order("id desc").First(&order).Error
+	if err == gorm.ErrRecordNotFound {
+		return false
+	}
 	if err != nil {
-		if err == gorm.ErrRecordNotFound {
-			return false
-		} else {
-			log.Errorf("State HasConsolidationInProgress get sendorder db error: %v", err)
-			return true
-		}
+		log.Errorf("State HasConsolidationInProgress get sendorder db error: %v", err)
 	}
 	return true
 }
