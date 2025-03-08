@@ -715,12 +715,12 @@ func (s *State) GetSendOrderByTxIdOrExternalId(id string) (*db.SendOrder, error)
 }
 
 // GetLatestSendOrderConfirmed get confirmed send order
-func (s *State) GetLatestSendOrderConfirmed() (*db.SendOrder, error) {
+func (s *State) GetLatestWithdrawSendOrderConfirmed() (*db.SendOrder, error) {
 	s.walletMu.RLock()
 	defer s.walletMu.RUnlock()
 
 	var sendOrder *db.SendOrder
-	err := s.dbm.GetWalletDB().Where("status = ?", db.ORDER_STATUS_CONFIRMED).First(&sendOrder).Error
+	err := s.dbm.GetWalletDB().Where("status = ? and order_type = ?", db.ORDER_STATUS_CONFIRMED, db.ORDER_TYPE_WITHDRAWAL).First(&sendOrder).Error
 	if err != nil && err != gorm.ErrRecordNotFound {
 		return nil, err
 	}
