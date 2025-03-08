@@ -664,13 +664,31 @@ func GenerateRawMeessageToFireblocks(tx *wire.MsgTx, utxos []*db.Utxo, net *chai
 	return hashes, nil
 }
 
+func FindFireblocksSignedMessage(rawHash []byte, fbSignedMessages []types.FbSignedMessage) (*types.FbSignedMessage, error) {
+	for _, signedMessage := range fbSignedMessages {
+		if signedMessage.Content == hex.EncodeToString(rawHash) {
+			return &signedMessage, nil
+		}
+	}
+	return nil, fmt.Errorf("signed message not found")
+}
+
 func ApplyFireblocksSignaturesToTx(tx *wire.MsgTx, utxos []*db.Utxo, fbSignedMessages []types.FbSignedMessage, net *chaincfg.Params) error {
 	if len(utxos) != len(fbSignedMessages) {
 		return fmt.Errorf("number of UTXOs and signed messages do not match")
 	}
 
+	// match the signed messages with utxos
+	rawHashes, err := GenerateRawMeessageToFireblocks(tx, utxos, net)
+	if err != nil {
+		return fmt.Errorf("error generating raw message to fireblocks: %v", err)
+	}
+
 	for i, utxo := range utxos {
-		signedMessage := fbSignedMessages[i]
+		signedMessage, err := FindFireblocksSignedMessage(rawHashes[i], fbSignedMessages)
+		if err != nil {
+			return fmt.Errorf("error finding fireblocks signed message: %v", err)
+		}
 
 		// Convert the Fireblocks signature to DER format
 		derSignature, err := convertToDERSignature(signedMessage.Signature)
