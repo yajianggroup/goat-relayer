@@ -10,10 +10,10 @@ require (
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.1.0
 	github.com/cometbft/cometbft v0.38.17
 	github.com/cosmos/cosmos-sdk v0.50.12
-	github.com/ethereum/go-ethereum v1.14.12
+	github.com/ethereum/go-ethereum v1.14.13
 	github.com/gin-gonic/gin v1.10.0
 	github.com/go-errors/errors v1.4.2
-	github.com/goatnetwork/goat v0.2.1-0.20250122100450-e1d8a7dcb35a
+	github.com/goatnetwork/goat v0.2.3
 	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
