@@ -407,6 +407,17 @@ func (s *State) UpdateSendOrderConfirmed(txid string, btcBlock uint64) error {
 			if err != nil {
 				return err
 			}
+			vins, err := s.getVinsByOrderId(tx, order.OrderId)
+			if err != nil {
+				return err
+			}
+			for _, vin := range vins {
+				// update utxo to spent
+				err = s.updateUtxoStatusSpent(tx, vin.Txid, vin.OutIndex, order.BtcBlock)
+				if err != nil {
+					return err
+				}
+			}
 			return nil
 		}
 
