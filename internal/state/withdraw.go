@@ -26,7 +26,7 @@ type WithdrawStateStore interface {
 	GetWithdrawsCanceling() ([]*db.Withdraw, error)
 	GetSendOrderInitlized() ([]*db.SendOrder, error)
 	GetSendOrderPending(limit int) ([]*db.SendOrder, error)
-	GetLatestSendOrderConfirmed() (*db.SendOrder, error)
+	GetLatestWithdrawSendOrderConfirmed() (*db.SendOrder, error)
 }
 
 // CreateWithdrawal, when a new withdrawal request is detected, save to unconfirmed
