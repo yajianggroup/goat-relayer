@@ -232,6 +232,12 @@ func (s *Signer) handleSigReceiveSendOrder(ctx context.Context, e types.MsgSignS
 				log.Errorf("SigReceive SendOrder request id %s unmarshal withdraws err: %v", e.RequestId, err)
 				return err
 			}
+		} else if order.OrderType == db.ORDER_TYPE_CONSOLIDATION {
+			// check consolidation in init, aggregating, pending, if true, return
+			if s.state.HasConsolidationInProgress() {
+				log.Warnf("SigReceive SendOrder ignore, there is a consolidation in progress, request id: %s", e.RequestId)
+				return fmt.Errorf("SigReceive SendOrder cannot handle, there is a consolidation in progress, request id: %s", e.RequestId)
+			}
 		}
 
 		// check txid

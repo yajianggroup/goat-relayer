@@ -186,6 +186,8 @@ func (c *FireblocksClient) CheckPending(txid string, externalTxId string, update
 		return false, 0, 0, fmt.Errorf("get tx details from fireblocks error: %v, txid: %s", err, txid)
 	}
 
+	log.Infof("Fireblocks transaction query response, extTxId: %s, status: %s, subStatus: %s", externalTxId, txDetails.Status, txDetails.SubStatus)
+
 	failedStatus := []string{"CANCELLING", "CANCELLED", "BLOCKED", "REJECTED", "FAILED"}
 	// Check if txDetails.Status is in failedStatus
 	for _, status := range failedStatus {

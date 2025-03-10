@@ -209,7 +209,8 @@ func (w *WalletServer) initWithdrawSig() {
 	var msgSignSendOrder *types.MsgSignSendOrder
 	networkFee := btcState.NetworkFee
 
-	if len(utxos) >= CONSOLIDATION_TRIGGER_COUNT {
+	// check utxo count >= consolidation trigger count and no consolidation in progress
+	if len(utxos) >= CONSOLIDATION_TRIGGER_COUNT && !w.state.HasConsolidationInProgress() {
 		// 3. start consolidation
 		log.Infof("WalletServer initWithdrawSig should start consolidation, utxo count: %d", len(utxos))
 

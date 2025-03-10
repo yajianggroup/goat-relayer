@@ -664,13 +664,31 @@ func GenerateRawMeessageToFireblocks(tx *wire.MsgTx, utxos []*db.Utxo, net *chai
 	return hashes, nil
 }
 
+func FindFireblocksSignedMessage(rawHash []byte, fbSignedMessages []types.FbSignedMessage) (*types.FbSignedMessage, error) {
+	for _, signedMessage := range fbSignedMessages {
+		if signedMessage.Content == hex.EncodeToString(rawHash) {
+			return &signedMessage, nil
+		}
+	}
+	return nil, fmt.Errorf("signed message not found")
+}
+
 func ApplyFireblocksSignaturesToTx(tx *wire.MsgTx, utxos []*db.Utxo, fbSignedMessages []types.FbSignedMessage, net *chaincfg.Params) error {
 	if len(utxos) != len(fbSignedMessages) {
 		return fmt.Errorf("number of UTXOs and signed messages do not match")
 	}
 
+	// match the signed messages with utxos
+	rawHashes, err := GenerateRawMeessageToFireblocks(tx, utxos, net)
+	if err != nil {
+		return fmt.Errorf("error generating raw message to fireblocks: %v", err)
+	}
+
 	for i, utxo := range utxos {
-		signedMessage := fbSignedMessages[i]
+		signedMessage, err := FindFireblocksSignedMessage(rawHashes[i], fbSignedMessages)
+		if err != nil {
+			return fmt.Errorf("error finding fireblocks signed message: %v", err)
+		}
 
 		// Convert the Fireblocks signature to DER format
 		derSignature, err := convertToDERSignature(signedMessage.Signature)
@@ -736,9 +754,30 @@ func convertToDERSignature(fbSig types.FbSignature) ([]byte, error) {
 		return nil, fmt.Errorf("error decoding R: %v", err)
 	}
 
+	if len(rBytes) > 32 {
+		return nil, fmt.Errorf("R is too long")
+	}
+
+	// Pad R to 32 bytes
+	if len(rBytes) < 32 {
+		paddedR := make([]byte, 32)
+		copy(paddedR[32-len(rBytes):], rBytes)
+		rBytes = paddedR
+	}
+
 	sBytes, err := hex.DecodeString(fbSig.S)
 	if err != nil {
 		return nil, fmt.Errorf("error decoding S: %v", err)
+	}
+
+	if len(sBytes) > 32 {
+		return nil, fmt.Errorf("S is too long")
+	}
+	// Pad S to 32 bytes
+	if len(sBytes) < 32 {
+		paddedS := make([]byte, 32)
+		copy(paddedS[32-len(sBytes):], sBytes)
+		sBytes = paddedS
 	}
 
 	// Convert R and S into btcec.ModNScalar

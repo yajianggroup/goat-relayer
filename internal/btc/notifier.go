@@ -222,7 +222,17 @@ func (bn *BTCNotifier) updateNetworkFee() error {
 	fee, err := bn.feeFetcher.GetNetworkFee()
 	if err != nil {
 		log.Errorf("Failed to get network fee from fee fetcher: %v", err)
-		return err
+
+		// Use default values when fee fetching fails completely
+		defaultFee := &types.BtcNetworkFee{
+			FastestFee:  3,
+			HalfHourFee: 3,
+			HourFee:     3,
+		}
+
+		log.Warnf("Using default network fee values: %+v", defaultFee)
+		bn.poller.state.UpdateBtcNetworkFee(defaultFee.FastestFee, defaultFee.HalfHourFee, defaultFee.HourFee)
+		return nil // Return nil to prevent error propagation
 	}
 
 	log.Infof("BTC network fee (sat/vbyte): %+v", fee)
