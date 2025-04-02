@@ -363,6 +363,7 @@ func (s *State) UpdateSendOrderPending(txid string, externalTxId string, withdra
 			if sendOrder == nil || len(utxos) == 0 || len(vins) == 0 || len(vouts) == 0 {
 				return errors.New("send order, utxos, vins, vouts is nil")
 			}
+			sendOrder.ID = 0
 			order = sendOrder
 			err = s.saveOrder(tx, order)
 			if err != nil {
@@ -385,15 +386,11 @@ func (s *State) UpdateSendOrderPending(txid string, externalTxId string, withdra
 
 			}
 			for _, vin := range vins {
-				vinInDb, err := s.getVin(vin.Txid, vin.OutIndex)
-				if err != nil && err != gorm.ErrRecordNotFound {
+				vin.ID = 0
+				vin.OrderId = sendOrder.OrderId
+				err = s.saveVin(tx, vin)
+				if err != nil {
 					return err
-				}
-				if vinInDb == nil {
-					err = s.saveVin(tx, vin)
-					if err != nil {
-						return err
-					}
 				}
 			}
 			for _, withdrawId := range withdrawIds {
@@ -402,7 +399,7 @@ func (s *State) UpdateSendOrderPending(txid string, externalTxId string, withdra
 					return err
 				}
 				if withdrawInDb.Status == db.WITHDRAW_STATUS_AGGREGATING || withdrawInDb.Status == db.WITHDRAW_STATUS_CREATE {
-					withdrawInDb.OrderId = order.OrderId
+					withdrawInDb.OrderId = sendOrder.OrderId
 					withdrawInDb.Txid = txid
 					withdrawInDb.Status = db.WITHDRAW_STATUS_INIT
 					err = s.saveWithdraw(tx, withdrawInDb)
@@ -414,18 +411,13 @@ func (s *State) UpdateSendOrderPending(txid string, externalTxId string, withdra
 				}
 			}
 			for _, vout := range vouts {
-				voutInDb, err := s.getVout(vout.Txid, vout.OutIndex)
-				if err != nil && err != gorm.ErrRecordNotFound {
+				vout.ID = 0
+				vout.OrderId = sendOrder.OrderId
+				err = s.saveVout(tx, vout)
+				if err != nil {
 					return err
 				}
-				if voutInDb == nil {
-					err = s.saveVout(tx, vout)
-					if err != nil {
-						return err
-					}
-				}
 			}
-			return nil
 		}
 		if order.Status == db.ORDER_STATUS_CONFIRMED || order.Status == db.ORDER_STATUS_PROCESSED || order.Status == db.ORDER_STATUS_CLOSED {
 			return nil
