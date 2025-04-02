@@ -51,6 +51,27 @@ func (s *State) UpdateUtxoStatusSpent(txid string, out int, btcBlock uint64) err
 	return s.updateUtxoStatusSpent(nil, txid, out, btcBlock)
 }
 
+func (s *State) UpdateUtxoStatusSpentByVins(vins []*db.Vin, btcBlock uint64) error {
+	s.walletMu.Lock()
+	defer s.walletMu.Unlock()
+
+	err := s.dbm.GetWalletDB().Transaction(func(tx *gorm.DB) error {
+		for _, vin := range vins {
+			err := s.updateUtxoStatusSpent(tx, vin.Txid, vin.OutIndex, btcBlock)
+			// ignore not found record but warning
+			if err != nil && err != gorm.ErrRecordNotFound {
+				return err
+			}
+			if err == gorm.ErrRecordNotFound {
+				log.Warnf("UpdateUtxoStatusSpentByVins not found record, txid: %s, out: %d", vin.Txid, vin.OutIndex)
+			}
+		}
+		return nil
+	})
+
+	return err
+}
+
 func (s *State) AddUtxo(utxo *db.Utxo, pk []byte, blockHash string, blockHeight uint64, noWitnessTx []byte, merkleRoot []byte, proofBytes []byte, txIndex int, isDeposit bool) error {
 	s.walletMu.Lock()
 	defer s.walletMu.Unlock()
