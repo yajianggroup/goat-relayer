@@ -68,6 +68,7 @@ func (w *WalletServer) handleWithdrawSigFailed(event interface{}, reason string)
 		}
 		log.Infof("Event handleWithdrawSigFailed is of type MsgSignSendOrder, request id %s, reason: %s", e.RequestId, reason)
 		w.sigStatus = false
+		w.sigFinishHeight = w.state.GetL2Info().Height
 	case types.MsgSignFinalizeWithdraw:
 		if !w.finalizeWithdrawStatus {
 			log.Debug("Event handleWithdrawSigFailed ignore, finalizeWithdrawStatus is false")
@@ -176,8 +177,8 @@ func (w *WalletServer) initWithdrawSig() {
 		log.Debug("WalletServer initWithdrawSig ignore, there is a sig")
 		return
 	}
-	if l2Info.Height <= w.sigFinishHeight+5 {
-		log.Debug("WalletServer initWithdrawSig ignore, last finish sig in 5 blocks")
+	if l2Info.Height <= w.sigFinishHeight+10 {
+		log.Debug("WalletServer initWithdrawSig ignore, last finish sig in 10 blocks")
 		return
 	}
 	// clean process, become proposer again, remove all status "create", "aggregating"
