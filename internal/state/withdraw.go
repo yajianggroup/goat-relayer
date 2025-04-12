@@ -610,6 +610,64 @@ func (s *State) UpdateWithdrawFinalized(txid string, pid uint64) error {
 	return err
 }
 
+func (s *State) CleanProcessingWithdrawByOrderId(orderId string) error {
+	s.walletMu.Lock()
+	defer s.walletMu.Unlock()
+
+	err := s.dbm.GetWalletDB().Transaction(func(tx *gorm.DB) error {
+		order, err := s.getOrderByOrderId(tx, orderId)
+		if err != nil && err != gorm.ErrRecordNotFound {
+			return err
+		}
+		if order == nil {
+			return nil
+		}
+		if order.Status != db.ORDER_STATUS_AGGREGATING {
+			return nil
+		}
+		order.Status = db.ORDER_STATUS_CLOSED
+		order.UpdatedAt = time.Now()
+
+		err = s.saveOrder(tx, order)
+		if err != nil {
+			return err
+		}
+
+		// update UTXO from pending to processed by vins
+		vins, err := s.getVinsByOrderId(tx, order.OrderId)
+		if err != nil {
+			return err
+		}
+		for _, vin := range vins {
+			var utxoInDb db.Utxo
+			if err = tx.Where("txid = ? and out_index = ?", vin.Txid, vin.OutIndex).First(&utxoInDb).Error; err != nil {
+				continue
+			}
+			if utxoInDb.Status != db.UTXO_STATUS_PENDING {
+				continue
+			}
+			err = tx.Model(&db.Utxo{}).Where("id = ?", utxoInDb.ID).Updates(&db.Utxo{Status: db.UTXO_STATUS_PROCESSED, UpdatedAt: time.Now()}).Error
+			if err != nil {
+				log.Errorf("State CleanProcessingWithdraw update utxo txid %s - out %d error: %v", utxoInDb.Txid, utxoInDb.OutIndex, err)
+				return err
+			}
+		}
+
+		err = s.updateOtherStatusByOrder(tx, order.OrderId, db.ORDER_STATUS_CLOSED, true)
+		if err != nil {
+			return err
+		}
+
+		// restore withdraw from aggregating to create
+		err = s.updateWithdrawStatusByOrderId(tx, db.WITHDRAW_STATUS_CREATE, order.OrderId, db.WITHDRAW_STATUS_AGGREGATING)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
+	return err
+}
+
 // CleanProcessingWithdraw, clean all status "aggregating" orders and related withdraws
 func (s *State) CleanProcessingWithdraw() error {
 	s.walletMu.Lock()

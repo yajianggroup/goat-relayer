@@ -62,13 +62,25 @@ func (w *WalletServer) handleWithdrawSigFailed(event interface{}, reason string)
 
 	switch e := event.(type) {
 	case types.MsgSignSendOrder:
+		w.sigFinishHeight = w.state.GetL2Info().Height
+		var order db.SendOrder
+		err := json.Unmarshal(e.SendOrder, &order)
+		if err != nil {
+			log.Debug("Cannot unmarshal send order from msg")
+			return
+		}
+		err = w.state.CleanProcessingWithdrawByOrderId(order.OrderId)
+		if err != nil {
+			log.Errorf("Event handleWithdrawSigFailed, clean processing withdraw by order id %s, error: %v", order.OrderId, err)
+			return
+		}
+		log.Infof("Event handleWithdrawSigFailed, clean processing withdraw by order id %s, withdraw ids: %v", order.OrderId, e.WithdrawIds)
 		if !w.sigStatus {
 			log.Debug("Event handleWithdrawSigFailed ignore, sigStatus is false")
 			return
 		}
 		log.Infof("Event handleWithdrawSigFailed is of type MsgSignSendOrder, request id %s, reason: %s", e.RequestId, reason)
 		w.sigStatus = false
-		w.sigFinishHeight = w.state.GetL2Info().Height
 	case types.MsgSignFinalizeWithdraw:
 		if !w.finalizeWithdrawStatus {
 			log.Debug("Event handleWithdrawSigFailed ignore, finalizeWithdrawStatus is false")
@@ -94,13 +106,13 @@ func (w *WalletServer) handleWithdrawSigFinish(event interface{}) {
 
 	switch e := event.(type) {
 	case types.MsgSignSendOrder:
+		w.sigFinishHeight = w.state.GetL2Info().Height
 		if !w.sigStatus {
 			log.Debug("Event handleWithdrawSigFinish ignore, sigStatus is false")
 			return
 		}
 		log.Infof("Event handleWithdrawSigFinish is of type MsgSignSendOrder, request id %s", e.RequestId)
 		w.sigStatus = false
-		w.sigFinishHeight = w.state.GetL2Info().Height
 	case types.MsgSignFinalizeWithdraw:
 		if !w.finalizeWithdrawStatus {
 			log.Debug("Event handleWithdrawSigFinish ignore, finalizeWithdrawStatus is false")
@@ -150,8 +162,8 @@ func (w *WalletServer) initWithdrawSig() {
 	epochVoter := w.state.GetEpochVoter()
 
 	// update proposer status
-	if l2Info.Height <= epochVoter.Height+8 {
-		log.Debugf("WalletServer initWithdrawSig ignore, last proposer change in 8 blocks, proposer: %s", epochVoter.Proposer)
+	if l2Info.Height <= epochVoter.Height+5 {
+		log.Debugf("WalletServer initWithdrawSig ignore, last proposer change in 5 blocks, proposer: %s", epochVoter.Proposer)
 		return
 	}
 	if epochVoter.Proposer != config.AppConfig.RelayerAddress {
@@ -171,8 +183,8 @@ func (w *WalletServer) initWithdrawSig() {
 		log.Debug("WalletServer initWithdrawSig ignore, there is a sig")
 		return
 	}
-	if l2Info.Height <= w.sigFinishHeight+8 {
-		log.Debug("WalletServer initWithdrawSig ignore, last finish sig in 8 blocks")
+	if l2Info.Height <= w.sigFinishHeight+5 {
+		log.Debug("WalletServer initWithdrawSig ignore, last finish sig in 5 blocks")
 		return
 	}
 	// clean process, become proposer again, remove all status "create", "aggregating"
