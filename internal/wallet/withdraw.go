@@ -151,7 +151,10 @@ func (w *WalletServer) initWithdrawSig() {
 
 	// update proposer status
 	w.updateProposerStatus(epochVoter.Proposer, l2Info.Height)
-
+	if l2Info.Height <= w.lastProposerChangeHeight+8 {
+		log.Debugf("WalletServer initWithdrawSig ignore, last proposer change in 8 blocks, proposer: %s", epochVoter.Proposer)
+		return
+	}
 	if epochVoter.Proposer != config.AppConfig.RelayerAddress {
 		// do not clean immediately
 		if (w.sigStatus || w.proposerChanged) && l2Info.Height > epochVoter.Height+1 {
@@ -178,12 +181,13 @@ func (w *WalletServer) initWithdrawSig() {
 		log.Debug("WalletServer initWithdrawSig ignore, there is a sig")
 		return
 	}
-	if l2Info.Height <= w.sigFinishHeight+8 || l2Info.Height <= w.lastProposerChangeHeight+8 {
-		log.Debug("WalletServer initWithdrawSig ignore, last finish sig or proposer change in 8 blocks")
+	if l2Info.Height <= w.sigFinishHeight+8 {
+		log.Debug("WalletServer initWithdrawSig ignore, last finish sig in 8 blocks")
 		return
 	}
 	// clean process, become proposer again, remove all status "create", "aggregating"
 	w.cleanWithdrawProcess()
+	log.Infof("WalletServer initWithdrawSig proposer changed, cleanup executed, self is proposer")
 
 	// 3. do consolidation
 	// 4. query withraw list from db, status 'create'
