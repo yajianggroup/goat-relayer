@@ -522,6 +522,7 @@ func (lis *Layer2Listener) processElectedProposerEvent(block uint64, attributes 
 		log.Errorf("Abci ElectedProposer CleanProcessingWithdraw error: %v", err)
 		return err
 	}
+	log.Infof("Abci ElectedProposer proposer changed, cleanup executed")
 	return nil
 }
 
