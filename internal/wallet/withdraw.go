@@ -21,8 +21,8 @@ import (
 const (
 	CONSOLIDATION_TRIGGER_COUNT = 100
 	CONSOLIDATION_MAX_VIN       = 500
-	WITHDRAW_IMMEDIATE_COUNT    = 150
-	WITHDRAW_MAX_VOUT           = 150
+	WITHDRAW_IMMEDIATE_COUNT    = 32
+	WITHDRAW_MAX_VOUT           = 32
 )
 
 func (w *WalletServer) withdrawLoop(ctx context.Context) {
