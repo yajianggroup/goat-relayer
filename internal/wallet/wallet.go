@@ -25,6 +25,7 @@ type WalletServer struct {
 	sigMu                        sync.Mutex
 	sigStatus                    bool
 	lastProposerAddress          string
+	lastProposerChangeHeight     uint64
 	proposerChanged              bool
 	proposerMutex                sync.Mutex
 	sigFinishHeight              uint64
@@ -98,12 +99,14 @@ func (w *WalletServer) Stop() {
 	})
 }
 
-func (w *WalletServer) updateProposerStatus(currentProposer string) {
+func (w *WalletServer) updateProposerStatus(currentProposer string, currentHeight uint64) {
 	w.proposerMutex.Lock()
 	defer w.proposerMutex.Unlock()
 
 	if w.lastProposerAddress != currentProposer {
 		w.proposerChanged = true
+		w.lastProposerChangeHeight = currentHeight
+
 		log.Infof("WalletServer detected proposer change from %s to %s", w.lastProposerAddress, currentProposer)
 
 		w.lastProposerAddress = currentProposer

@@ -150,15 +150,15 @@ func (w *WalletServer) initWithdrawSig() {
 	epochVoter := w.state.GetEpochVoter()
 
 	// update proposer status
-	w.updateProposerStatus(epochVoter.Proposer)
+	w.updateProposerStatus(epochVoter.Proposer, l2Info.Height)
 
 	if epochVoter.Proposer != config.AppConfig.RelayerAddress {
 		// do not clean immediately
-		if w.proposerChanged && l2Info.Height > epochVoter.Height+1 {
+		if (w.sigStatus || w.proposerChanged) && l2Info.Height > epochVoter.Height+1 {
 			w.sigStatus = false
 			// clean process, role changed, remove all status "create", "aggregating"
 			w.cleanWithdrawProcess()
-			log.Infof("WalletServer detected proposer change and conditions met, cleanup executed")
+			log.Infof("WalletServer detected proposer change and conditions met, cleanup executed, self is voter")
 
 			// clear proposer change status
 			w.clearProposerChange()
@@ -170,6 +170,7 @@ func (w *WalletServer) initWithdrawSig() {
 	// self is proposer, clear proposer change status
 	if w.proposerChanged {
 		w.clearProposerChange()
+		log.Infof("WalletServer detected proposer change and conditions met, cleanup executed, self is proposer")
 	}
 
 	// 2. check if there is a sig in progress
@@ -177,8 +178,8 @@ func (w *WalletServer) initWithdrawSig() {
 		log.Debug("WalletServer initWithdrawSig ignore, there is a sig")
 		return
 	}
-	if l2Info.Height <= w.sigFinishHeight+10 {
-		log.Debug("WalletServer initWithdrawSig ignore, last finish sig in 10 blocks")
+	if l2Info.Height <= w.sigFinishHeight+8 || l2Info.Height <= w.lastProposerChangeHeight+8 {
+		log.Debug("WalletServer initWithdrawSig ignore, last finish sig or proposer change in 8 blocks")
 		return
 	}
 	// clean process, become proposer again, remove all status "create", "aggregating"
