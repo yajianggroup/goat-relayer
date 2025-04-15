@@ -209,6 +209,7 @@ func (s *Signer) handleSigReceiveSendOrder(ctx context.Context, e types.MsgSignS
 		var vouts []*db.Vout
 		var utxos []*db.Utxo
 		var withdraws []*db.Withdraw
+		var safeboxTasks []*db.SafeboxTask
 		var err error
 		if err = json.Unmarshal(e.SendOrder, &order); err != nil {
 			log.Errorf("SigReceive SendOrder request id %s unmarshal order err: %v", e.RequestId, err)
@@ -230,6 +231,12 @@ func (s *Signer) handleSigReceiveSendOrder(ctx context.Context, e types.MsgSignS
 			err = json.Unmarshal(e.Withdraws, &withdraws)
 			if err != nil {
 				log.Errorf("SigReceive SendOrder request id %s unmarshal withdraws err: %v", e.RequestId, err)
+				return err
+			}
+		} else if order.OrderType == db.ORDER_TYPE_SAFEBOX {
+			err = json.Unmarshal(e.SafeboxTasks, &safeboxTasks)
+			if err != nil {
+				log.Errorf("SigReceive SendOrder request id %s unmarshal safebox tasks err: %v", e.RequestId, err)
 				return err
 			}
 		} else if order.OrderType == db.ORDER_TYPE_CONSOLIDATION {
@@ -258,7 +265,7 @@ func (s *Signer) handleSigReceiveSendOrder(ctx context.Context, e types.MsgSignS
 		}
 
 		// save to local db
-		err = s.state.CreateSendOrder(&order, utxos, withdraws, vins, vouts, false)
+		err = s.state.CreateSendOrder(&order, utxos, withdraws, safeboxTasks, vins, vouts, false)
 		if err != nil {
 			log.Errorf("SigReceive SendOrder save to db, request id %s, err: %v", e.RequestId, err)
 			return err

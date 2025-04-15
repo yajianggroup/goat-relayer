@@ -57,10 +57,14 @@ type MsgSignSendOrder struct {
 	Utxos     []byte `json:"utxos"`
 	Vins      []byte `json:"vins"`
 	Vouts     []byte `json:"vouts"`
-	Withdraws []byte `json:"withdraws"`
 
+	Withdraws   []byte   `json:"withdraws"`
 	WithdrawIds []uint64 `json:"withdraw_ids"`
-	WitnessSize uint64   `json:"witness_size"`
+
+	SafeboxTasks []byte   `json:"safebox_tasks"`
+	TaskIds      []uint64 `json:"task_ids"`
+
+	WitnessSize uint64 `json:"witness_size"`
 }
 
 type MsgSignFinalizeWithdraw struct {
@@ -102,6 +106,8 @@ type TssSession struct {
 	Status           string `json:"status"`
 	Amount           uint64 `json:"amount"`
 	DepositAddress   string `json:"deposit_address"`
+	TimelockEndTime  uint64 `json:"timelock_end_time"`
+	Pubkey           []byte `json:"pubkey"`
 	FundingTxid      string `json:"funding_txid"`
 	FundingOutIndex  uint64 `json:"funding_out_index"`
 	TimelockTxid     string `json:"timelock_txid"`

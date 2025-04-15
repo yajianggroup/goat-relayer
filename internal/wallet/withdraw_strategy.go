@@ -398,7 +398,7 @@ func SelectWithdrawals(withdrawals []*db.Withdraw, networkFee types.BtcNetworkFe
 //	withdrawals - all withdrawals can start
 //	networkFee - network fee
 
-func SelectSafeboxTasks(tasks []*db.SafeboxTask, networkFee types.BtcNetworkFee, maxVout, immediateCount int, net *chaincfg.Params) (selectedTaskWithdraws []*db.Withdraw, receiverTypes []string, withdrawAmount int64, actualPrice int64, err error) {
+func SelectSafeboxTasks(tasks []*db.SafeboxTask, networkFee types.BtcNetworkFee, maxVout, immediateCount int, net *chaincfg.Params) (selectedTaskWithdraws []*db.SafeboxTask, receiverTypes []string, withdrawAmount int64, actualPrice int64, err error) {
 	if networkFee.HalfHourFee > uint64(config.AppConfig.BTCMaxNetworkFee) {
 		return nil, nil, 0, 0, fmt.Errorf("network fee is too high, cannot generate safebox timelock tx")
 	}
@@ -410,18 +410,10 @@ func SelectSafeboxTasks(tasks []*db.SafeboxTask, networkFee types.BtcNetworkFee,
 
 	selectedTasks := tasks[:immediateCount]
 	receiverTypes = make([]string, len(selectedTasks))
-	selectedTaskWithdraws = make([]*db.Withdraw, len(selectedTasks))
-
 	for i, task := range selectedTasks {
 		receiverTypes[i], _ = types.GetAddressType(task.TimelockAddress, net)
-		selectedTaskWithdraws[i] = &db.Withdraw{
-			ID:      task.ID,
-			To:      task.TimelockAddress,
-			Amount:  uint64(task.Amount),
-			TxPrice: uint64(networkFee.HalfHourFee),
-		}
 	}
-	return selectedTaskWithdraws, receiverTypes, int64(withdrawAmount), int64(actualPrice), nil
+	return selectedTasks, receiverTypes, int64(withdrawAmount), int64(actualPrice), nil
 }
 
 // CreateRawTransaction create raw transaction
@@ -442,6 +434,7 @@ func SelectSafeboxTasks(tasks []*db.SafeboxTask, networkFee types.BtcNetworkFee,
 func CreateRawTransaction(
 	utxos []*db.Utxo,
 	withdrawals []*db.Withdraw,
+	tasks []*db.SafeboxTask,
 	changeAddress string,
 	changeAmount int64,
 	estimatedFee float64,
@@ -494,6 +487,18 @@ func CreateRawTransaction(
 		// re-set TxFee field
 		withdrawal.TxFee = withdrawal.Amount - uint64(val)
 		tx.AddTxOut(wire.NewTxOut(val, pkScript))
+	}
+
+	for _, task := range tasks {
+		addr, err := btcutil.DecodeAddress(task.TimelockAddress, net)
+		if err != nil {
+			return nil, 0, 0, err
+		}
+		pkScript, err := txscript.PayToAddrScript(addr)
+		if err != nil {
+			return nil, 0, 0, err
+		}
+		tx.AddTxOut(wire.NewTxOut(int64(task.Amount), pkScript))
 	}
 
 	val := int64(changeAmount) - changeFee

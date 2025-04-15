@@ -71,10 +71,13 @@ func (w *WalletServer) handleWithdrawSigFailed(event interface{}, reason string)
 			log.Debug("Cannot unmarshal send order from msg")
 			return
 		}
-		err = w.state.CleanProcessingWithdrawByOrderId(order.OrderId)
-		if err != nil {
-			log.Errorf("Event handleWithdrawSigFailed, clean processing withdraw by order id %s, error: %v", order.OrderId, err)
-			return
+		if order.OrderType == db.ORDER_TYPE_SAFEBOX {
+			err = w.state.RevertSafeboxTaskToReceivedOKByTimelockTxid(order.Txid)
+			if err != nil {
+				log.Errorf("Event handleWithdrawSigFailed, clean processing withdraw by order id %s, error: %v", order.OrderId, err)
+				return
+			}
+			log.Infof("Event handleWithdrawSigFailed, clean processing withdraw by order id %s, withdraw ids: %v", order.OrderId, e.WithdrawIds)
 		}
 		log.Infof("Event handleWithdrawSigFailed, clean processing withdraw by order id %s, withdraw ids: %v", order.OrderId, e.WithdrawIds)
 		if !w.sigStatus {
@@ -248,31 +251,31 @@ func (w *WalletServer) initWithdrawSig() {
 		log.Infof("WalletServer initWithdrawSig ConsolidateSmallUTXOs, totalAmount: %d, finalAmount: %d, selectedUtxos: %d", totalAmount, finalAmount, len(selectedUtxos))
 
 		// create SendOrder for selectedUtxos consolidation
-		tx, actualFee, _, err := CreateRawTransaction(selectedUtxos, nil, p2wpkhAddress.EncodeAddress(), finalAmount, 0, int64(consolidationFee), witnessSize, network)
+		tx, actualFee, _, err := CreateRawTransaction(selectedUtxos, nil, nil, p2wpkhAddress.EncodeAddress(), finalAmount, 0, int64(consolidationFee), witnessSize, network)
 		if err != nil {
 			log.Errorf("WalletServer initWithdrawSig CreateRawTransaction for consolidation error: %v", err)
 			return
 		}
 		log.Infof("WalletServer initWithdrawSig CreateRawTransaction for consolidation, tx: %s", tx.TxID())
 
-		msgSignSendOrder, err = w.createSendOrder(tx, db.ORDER_TYPE_CONSOLIDATION, selectedUtxos, nil, totalAmount, 0, finalAmount, uint64(totalAmount-finalAmount), actualFee, uint64(witnessSize), epochVoter, network)
+		msgSignSendOrder, err = w.createSendOrder(tx, db.ORDER_TYPE_CONSOLIDATION, selectedUtxos, nil, nil, totalAmount, 0, finalAmount, uint64(totalAmount-finalAmount), actualFee, uint64(witnessSize), epochVoter, network)
 		if err != nil {
 			log.Errorf("WalletServer initWithdrawSig createSendOrder for consolidation error: %v", err)
 			return
 		}
 	} else if tasks, err := w.state.GetSafeboxTasks(); err == nil && len(tasks) > 0 {
 		safeboxTxFee := networkFee.HalfHourFee
-		selectedTaskWithdraws, receiverTypes, withdrawAmount, actualPrice, err := SelectSafeboxTasks(tasks, networkFee, SAFEBOX_TASK_MAX_VOUT, SAFEBOX_TASK_IMMEDIATE_COUNT, network)
+		selectedTasks, receiverTypes, withdrawAmount, actualPrice, err := SelectSafeboxTasks(tasks, networkFee, SAFEBOX_TASK_MAX_VOUT, SAFEBOX_TASK_IMMEDIATE_COUNT, network)
 		if err != nil {
 			log.Errorf("WalletServer initWithdrawSig SelectSafeboxTasks error: %v", err)
 			return
 		}
-		if len(selectedTaskWithdraws) != 1 {
+		if len(selectedTasks) != 1 {
 			log.Infof("WalletServer initWithdrawSig no safebox tx after filter can start")
 			return
 		}
 		// create SendOrder for selectedWithdraws
-		selectOptimalUTXOs, totalSelectedAmount, _, changeAmount, estimateFee, witnessSize, err := SelectOptimalUTXOs(utxos, receiverTypes, withdrawAmount, actualPrice, len(selectedTaskWithdraws))
+		selectOptimalUTXOs, totalSelectedAmount, _, changeAmount, estimateFee, witnessSize, err := SelectOptimalUTXOs(utxos, receiverTypes, withdrawAmount, actualPrice, len(selectedTasks))
 		if err != nil {
 			log.Errorf("WalletServer initWithdrawSig SelectOptimalUTXOs for safebox task error: %v", err)
 			return
@@ -280,14 +283,14 @@ func (w *WalletServer) initWithdrawSig() {
 		log.Infof("WalletServer initWithdrawSig SelectOptimalUTXOs for safebox task, totalSelectedAmount: %d, withdrawAmount: %d, changeAmount: %d, selectedUtxos: %d", totalSelectedAmount, withdrawAmount, changeAmount, len(selectOptimalUTXOs))
 
 		// create SendOrder for selectedUtxos consolidation
-		tx, actualFee, _, err := CreateRawTransaction(selectOptimalUTXOs, selectedTaskWithdraws, p2wpkhAddress.EncodeAddress(), changeAmount, estimateFee, int64(safeboxTxFee), witnessSize, network)
+		tx, actualFee, _, err := CreateRawTransaction(selectOptimalUTXOs, nil, selectedTasks, p2wpkhAddress.EncodeAddress(), changeAmount, estimateFee, int64(safeboxTxFee), witnessSize, network)
 		if err != nil {
 			log.Errorf("WalletServer initWithdrawSig CreateRawTransaction for safebox task error: %v", err)
 			return
 		}
 		log.Infof("WalletServer initWithdrawSig CreateRawTransaction for safebox task, tx: %s", tx.TxID())
 
-		msgSignSendOrder, err = w.createSendOrder(tx, db.ORDER_TYPE_SAFEBOX, selectOptimalUTXOs, selectedTaskWithdraws, totalSelectedAmount, withdrawAmount, changeAmount, actualFee, uint64(actualPrice), uint64(witnessSize), epochVoter, network)
+		msgSignSendOrder, err = w.createSendOrder(tx, db.ORDER_TYPE_SAFEBOX, selectOptimalUTXOs, nil, selectedTasks, totalSelectedAmount, withdrawAmount, changeAmount, actualFee, uint64(actualPrice), uint64(witnessSize), epochVoter, network)
 		if err != nil {
 			log.Errorf("WalletServer initWithdrawSig createSendOrder for safebox task error: %v", err)
 			return
@@ -322,7 +325,7 @@ func (w *WalletServer) initWithdrawSig() {
 		}
 		log.Infof("WalletServer initWithdrawSig SelectOptimalUTXOs for withdraw, totalSelectedAmount: %d, withdrawAmount: %d, changeAmount: %d, selectedUtxos: %d", totalSelectedAmount, withdrawAmount, changeAmount, len(selectOptimalUTXOs))
 
-		tx, actualFee, dustWithdrawId, err := CreateRawTransaction(selectOptimalUTXOs, selectedWithdraws, p2wpkhAddress.EncodeAddress(), changeAmount, estimateFee, witnessSize, actualPrice, network)
+		tx, actualFee, dustWithdrawId, err := CreateRawTransaction(selectOptimalUTXOs, selectedWithdraws, nil, p2wpkhAddress.EncodeAddress(), changeAmount, estimateFee, witnessSize, actualPrice, network)
 		if err != nil {
 			log.Errorf("WalletServer initWithdrawSig CreateRawTransaction for withdraw error: %v", err)
 			if dustWithdrawId > 0 {
@@ -338,7 +341,7 @@ func (w *WalletServer) initWithdrawSig() {
 		}
 		log.Infof("WalletServer initWithdrawSig CreateRawTransaction for withdraw, tx: %s, network fee rate: %d", tx.TxID(), actualPrice)
 
-		msgSignSendOrder, err = w.createSendOrder(tx, db.ORDER_TYPE_WITHDRAWAL, selectOptimalUTXOs, selectedWithdraws, totalSelectedAmount, withdrawAmount, changeAmount, actualFee, uint64(actualPrice), uint64(witnessSize), epochVoter, network)
+		msgSignSendOrder, err = w.createSendOrder(tx, db.ORDER_TYPE_WITHDRAWAL, selectOptimalUTXOs, selectedWithdraws, nil, totalSelectedAmount, withdrawAmount, changeAmount, actualFee, uint64(actualPrice), uint64(witnessSize), epochVoter, network)
 		if err != nil {
 			log.Errorf("WalletServer initWithdrawSig createSendOrder for withdraw error: %v", err)
 			return
@@ -346,7 +349,7 @@ func (w *WalletServer) initWithdrawSig() {
 	}
 
 	// w.sigStatus should update to false after layer2 InitalWithdraw callback
-	if msgSignSendOrder != nil && msgSignSendOrder.MsgSign.RequestId != "" {
+	if msgSignSendOrder != nil {
 		w.sigStatus = true
 
 		// send msg to bus
@@ -356,7 +359,7 @@ func (w *WalletServer) initWithdrawSig() {
 }
 
 // createSendOrder, create send order for selected utxos and withdraws (if orderType is consolidation, selectedWithdraws is nil)
-func (w *WalletServer) createSendOrder(tx *wire.MsgTx, orderType string, selectedUtxos []*db.Utxo, selectedWithdraws []*db.Withdraw, utxoAmount, withdrawAmount, changeAmount int64, txFee, networkTxPrice, witnessSize uint64, epochVoter db.EpochVoter, network *chaincfg.Params) (*types.MsgSignSendOrder, error) {
+func (w *WalletServer) createSendOrder(tx *wire.MsgTx, orderType string, selectedUtxos []*db.Utxo, selectedWithdraws []*db.Withdraw, safeboxTasks []*db.SafeboxTask, utxoAmount, withdrawAmount, changeAmount int64, txFee, networkTxPrice, witnessSize uint64, epochVoter db.EpochVoter, network *chaincfg.Params) (*types.MsgSignSendOrder, error) {
 	noWitnessTx, err := types.SerializeTransactionNoWitness(tx)
 	if err != nil {
 		return nil, err
@@ -457,21 +460,15 @@ func (w *WalletServer) createSendOrder(tx *wire.MsgTx, orderType string, selecte
 		utxoTypes[i] = utxo.ReceiverType
 	}
 
-	var msgSign types.MsgSign
-	if orderType == db.ORDER_TYPE_SAFEBOX {
-		msgSign = types.MsgSign{RequestId: ""}
-	} else {
-		msgSign = types.MsgSign{
+	msgSignSendOrder := &types.MsgSignSendOrder{
+		MsgSign: types.MsgSign{
 			RequestId:    requestId,
 			Sequence:     epochVoter.Sequence,
 			Epoch:        epochVoter.Epoch,
 			IsProposer:   true,
 			VoterAddress: epochVoter.Proposer,
 			SigData:      nil,
-		}
-	}
-	msgSignSendOrder := &types.MsgSignSendOrder{
-		MsgSign:   msgSign,
+		},
 		SendOrder: orderBytes,
 		Utxos:     utxoBytes,
 		Vins:      vinBytes,
@@ -483,7 +480,7 @@ func (w *WalletServer) createSendOrder(tx *wire.MsgTx, orderType string, selecte
 	}
 
 	// save
-	err = w.state.CreateSendOrder(order, selectedUtxos, selectedWithdraws, vins, vouts, true)
+	err = w.state.CreateSendOrder(order, selectedUtxos, selectedWithdraws, nil, vins, vouts, true)
 	if err != nil {
 		return nil, err
 	}

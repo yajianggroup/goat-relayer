@@ -108,7 +108,6 @@ type DepositResult struct {
 	Address            string `gorm:"not null" json:"address"`
 	Amount             uint64 `gorm:"not null" json:"amount"`
 	BlockHash          string `gorm:"not null" json:"block_hash"`
-	Timestamp          uint64 `gorm:"not null" json:"timestamp"`
 	NeedFetchSubScript bool   `gorm:"not null;default:false;index:idx_need_fetch_sub_script" json:"need_fetch_sub_script"` // if true, need fetch sub script from BTC client, or fetch not exist utxo then save
 }
 
@@ -121,7 +120,7 @@ type SafeboxTask struct {
 	TimelockEndTime  uint64    `gorm:"not null" json:"timelock_end_time"`
 	Deadline         uint64    `gorm:"not null" json:"deadline"`
 	Amount           uint64    `gorm:"not null" json:"amount"`
-	Pubkey           []byte    `gorm:"not null" json:"pubkey"`
+	Pubkey           []byte    `json:"pubkey"`
 	WitnessScript    []byte    `json:"witness_script"`
 	TimelockAddress  string    `gorm:"not null;index:timelock_address_idx" json:"timelock_address"`
 	BtcAddress       string    `gorm:"not null" json:"btc_address"`
@@ -130,6 +129,7 @@ type SafeboxTask struct {
 	TimelockTxid     string    `gorm:"not null;index:timelock_txid_out_index" json:"timelock_txid"`
 	TimelockOutIndex uint64    `gorm:"not null;index:timelock_txid_out_index" json:"timelock_out_index"`
 	Status           string    `gorm:"not null" json:"status"`
+	OrderId          string    `gorm:"not null;index:safeboxtask_orderid_index" json:"order_id"` // update when signing, it always can be query from SendOrder by BTC txid
 	UpdatedAt        time.Time `gorm:"not null" json:"updated_at"`
 }
 
