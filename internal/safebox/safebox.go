@@ -211,7 +211,7 @@ func (s *SafeboxProcessor) BuildUnsignedTx(ctx context.Context, task *db.Safebox
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to pack receiveFunds input: %v", err)
 		}
-	case db.TASK_STATUS_INIT:
+	case db.TASK_STATUS_INIT, db.TASK_STATUS_RECEIVED_OK:
 		// Fullfill input data
 		// Convert slice to fixed length array
 		var timelockTxHash [32]byte
@@ -423,7 +423,7 @@ func (s *SafeboxProcessor) process(ctx context.Context) {
 		s.logger.Infof("SafeboxProcessor process - Querying TSS sign status, RequestId: %s", s.tssSession.GetRequestId())
 		resp, err := s.tssSigner.QuerySignResult(ctx, s.tssSession.GetRequestId())
 		if err != nil {
-			s.logger.Errorf("SafeboxProcessor process - Failed to query TSS sign status: %v, RequestId: %s", err, s.tssSession.GetRequestId())
+			s.logger.Errorf("SafeboxProcessor process - Failed to query TSS sign status: %v", err)
 			return
 		}
 		if resp.Signature != nil {
@@ -433,9 +433,14 @@ func (s *SafeboxProcessor) process(ctx context.Context) {
 			s.logger.Debugf("SafeboxProcessor process - SIGNATURE INFO")
 			s.logger.Debugf("SafeboxProcessor process - SIGNATURE TYPE: %T", resp.Signature)
 			s.logger.Debugf("SafeboxProcessor process - UNSIGNED TX TYPE: %T", s.tssSession.GetUnsignedTx())
-			s.logger.Debugf("SafeboxProcessor process - UNSIGNED TX CHAIN ID: %v", s.tssSession.GetUnsignedTx().ChainId())
 
-			signedTx, err := s.tssSigner.ApplySignResult(ctx, s.tssSession.GetUnsignedTx(), resp.Signature)
+			unsignedTx := s.tssSession.GetUnsignedTx()
+			if unsignedTx == nil {
+				s.logger.Errorf("SafeboxProcessor process - Unsigned transaction is nil")
+				return
+			}
+
+			signedTx, err := s.tssSigner.ApplySignResult(ctx, unsignedTx, resp.Signature)
 			if err != nil {
 				s.logger.Errorf("SafeboxProcessor process - Failed to apply TSS sign result: %v, RequestId: %s", err, s.tssSession.GetRequestId())
 				return
