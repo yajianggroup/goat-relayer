@@ -2,9 +2,9 @@ package safebox
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/big"
-	"strings"
 	"sync"
 	"time"
 
@@ -47,9 +47,9 @@ type SafeboxProcessor struct {
 	logger *log.Entry
 
 	tssSigner  *tss.Signer
-	tssMu      sync.Mutex
+	tssMu      sync.RWMutex
 	tssStatus  bool
-	tssSession *types.TssSession
+	tssSession types.MsgSignInterface
 	tssAddress string
 	tssSignCh  chan interface{}
 }
@@ -107,7 +107,7 @@ func (s *SafeboxProcessor) taskLoop(ctx context.Context) {
 		case <-ticker.C:
 			s.process(ctx)
 		case msg := <-s.tssSignCh:
-			tssSession := msg.(types.TssSession)
+			tssSession := msg.(types.MsgSignSafeboxTask)
 			s.handleTssSign(ctx, tssSession)
 		}
 	}
@@ -121,11 +121,11 @@ func (s *SafeboxProcessor) CheckTssStatus(ctx context.Context) error {
 		return fmt.Errorf("TSS signing session is nil")
 	}
 
-	if s.tssSession.SignedTx != nil {
+	if s.tssSession.GetSignedTx() != nil {
 		// TODO: signed tx found, check pending tx status, if tx cannot be found on chain, reset tss and session
 		return fmt.Errorf("signed transaction already found, should reset tss and session")
 	}
-	if s.tssSession.SignExpiredTs < time.Now().Unix() {
+	if s.tssSession.CheckExpired() {
 		s.ResetTssAndSession(ctx)
 		return fmt.Errorf("TSS signing session expired, should reset tss and session")
 	}
@@ -139,30 +139,28 @@ func (s *SafeboxProcessor) ResetTssAndSession(ctx context.Context) {
 	s.tssMu.Unlock()
 }
 
-func (s *SafeboxProcessor) SetTssSession(task *db.SafeboxTask, messageToSign []byte, unsignTx *ethtypes.Transaction) {
+func (s *SafeboxProcessor) SetTssSession(requestId string, task *db.SafeboxTask, messageToSign []byte, unsignTx *ethtypes.Transaction) {
 	s.tssMu.Lock()
 	defer s.tssMu.Unlock()
 
 	s.tssStatus = true
-	s.tssSession = &types.TssSession{
-		TaskId:           task.TaskId,
-		SessionId:        uuid.New().String(),
-		SignExpiredTs:    time.Now().Unix() + 5*60,
-		MessageToSign:    messageToSign,
-		UnsignedTx:       unsignTx,
-		Status:           task.Status,
-		Amount:           task.Amount,
-		TimelockEndTime:  task.TimelockEndTime,
-		Pubkey:           task.Pubkey,
-		DepositAddress:   task.DepositAddress,
-		FundingTxid:      task.FundingTxid,
-		FundingOutIndex:  task.FundingOutIndex,
-		TimelockTxid:     task.TimelockTxid,
-		TimelockOutIndex: task.TimelockOutIndex,
+	taskBytes, err := json.Marshal(task)
+	if err != nil {
+		s.logger.Errorf("SafeboxProcessor SetTssSession - Failed to marshal task: %v", err)
+		return
+	}
+	s.tssSession = &types.MsgSignSafeboxTask{
+		MsgSign: types.MsgSign{
+			RequestId:  requestId,
+			CreateTime: time.Now().Unix(),
+			SigData:    messageToSign,
+			UnsignedTx: unsignTx,
+		},
+		SafeboxTask: taskBytes,
 	}
 
-	s.logger.Infof("Set TSS session: SessionId=%s, TaskId=%d, ExpiresAt=%d",
-		s.tssSession.SessionId, s.tssSession.TaskId, s.tssSession.SignExpiredTs)
+	s.logger.Infof("Set TSS session: RequestId=%s, TaskId=%d",
+		s.tssSession.GetRequestId(), task.TaskId)
 }
 
 func (s *SafeboxProcessor) BuildUnsignedTx(ctx context.Context, task *db.SafeboxTask) (*ethtypes.Transaction, []byte, error) {
@@ -422,56 +420,44 @@ func (s *SafeboxProcessor) process(ctx context.Context) {
 			s.logger.Errorf("SafeboxProcessor process - No active TSS session")
 			return
 		}
-		s.logger.Infof("SafeboxProcessor process - Querying TSS sign status, SessionId: %s", s.tssSession.SessionId)
-		resp, err := s.tssSigner.QuerySignResult(ctx, s.tssSession.SessionId)
+		s.logger.Infof("SafeboxProcessor process - Querying TSS sign status, RequestId: %s", s.tssSession.GetRequestId())
+		resp, err := s.tssSigner.QuerySignResult(ctx, s.tssSession.GetRequestId())
 		if err != nil {
-			s.logger.Errorf("SafeboxProcessor process - Failed to query TSS sign status: %v, SessionId: %s", err, s.tssSession.SessionId)
+			s.logger.Errorf("SafeboxProcessor process - Failed to query TSS sign status: %v, RequestId: %s", err, s.tssSession.GetRequestId())
 			return
 		}
 		if resp.Signature != nil {
-			s.logger.Infof("SafeboxProcessor process - Signature received, applying to transaction, SessionId: %s", s.tssSession.SessionId)
+			s.logger.Infof("SafeboxProcessor process - Signature received, applying to transaction, RequestId: %s", s.tssSession.GetRequestId())
 
 			// Record signature information
 			s.logger.Debugf("SafeboxProcessor process - SIGNATURE INFO")
 			s.logger.Debugf("SafeboxProcessor process - SIGNATURE TYPE: %T", resp.Signature)
-			s.logger.Debugf("SafeboxProcessor process - UNSIGNED TX TYPE: %T", s.tssSession.UnsignedTx)
-			s.logger.Debugf("SafeboxProcessor process - UNSIGNED TX CHAIN ID: %v", s.tssSession.UnsignedTx.ChainId())
+			s.logger.Debugf("SafeboxProcessor process - UNSIGNED TX TYPE: %T", s.tssSession.GetUnsignedTx())
+			s.logger.Debugf("SafeboxProcessor process - UNSIGNED TX CHAIN ID: %v", s.tssSession.GetUnsignedTx().ChainId())
 
-			signedTx, err := s.tssSigner.ApplySignResult(ctx, s.tssSession.UnsignedTx, resp.Signature)
+			signedTx, err := s.tssSigner.ApplySignResult(ctx, s.tssSession.GetUnsignedTx(), resp.Signature)
 			if err != nil {
-				s.logger.Errorf("SafeboxProcessor process - Failed to apply TSS sign result: %v, SessionId: %s", err, s.tssSession.SessionId)
+				s.logger.Errorf("SafeboxProcessor process - Failed to apply TSS sign result: %v, RequestId: %s", err, s.tssSession.GetRequestId())
 				return
 			}
 
 			// Compare transaction information before and after signing
 			s.logger.Debugf("SafeboxProcessor process - TX BEFORE/AFTER SIGNING")
-			s.logger.Debugf("SafeboxProcessor process - UNSIGNED TX HASH: %s", s.tssSession.UnsignedTx.Hash().Hex())
+			s.logger.Debugf("SafeboxProcessor process - UNSIGNED TX HASH: %s", s.tssSession.GetUnsignedTx().Hash().Hex())
 			s.logger.Debugf("SafeboxProcessor process - SIGNED TX HASH: %s", signedTx.Hash().Hex())
 
-			signer := ethtypes.LatestSignerForChainID(signedTx.ChainId())
-			sender, err := ethtypes.Sender(signer, signedTx)
-			if err != nil {
-				s.logger.Errorf("SafeboxProcessor process - FAILED TO RECOVER SENDER: %v", err)
-			} else {
-				s.logger.Debugf("SafeboxProcessor process - RECOVERED SENDER: %s", sender.Hex())
-				s.logger.Debugf("SafeboxProcessor process - TSS ADDRESS: %s", s.tssAddress)
-				if sender.Hex() != strings.ToLower(s.tssAddress) && sender.Hex() != strings.ToUpper(s.tssAddress) {
-					s.logger.Errorf("SafeboxProcessor process - ADDRESSES DON'T MATCH!")
-				}
-			}
-
-			s.tssSession.SignedTx = signedTx
-			s.logger.Infof("SafeboxProcessor process - Successfully applied signature to transaction, SessionId: %s", s.tssSession.SessionId)
+			s.tssSession.SetSignedTx(signedTx)
+			s.logger.Infof("SafeboxProcessor process - Successfully applied signature to transaction, RequestId: %s", s.tssSession.GetRequestId())
 
 			// Submit signed tx to layer2
-			err = s.SendRawTx(ctx, s.tssSession.SignedTx)
+			err = s.SendRawTx(ctx, s.tssSession.GetSignedTx())
 			if err != nil {
-				s.logger.Errorf("SafeboxProcessor process - Failed to send signed transaction: %v, SessionId: %s", err, s.tssSession.SessionId)
+				s.logger.Errorf("SafeboxProcessor process - Failed to send signed transaction: %v, RequestId: %s", err, s.tssSession.GetRequestId())
 				return
 			}
 			return
 		}
-		s.logger.Infof("SafeboxProcessor process - No signature received yet, SessionId: %s", s.tssSession.SessionId)
+		s.logger.Infof("SafeboxProcessor process - No signature received yet, RequestId: %s", s.tssSession.GetRequestId())
 		s.ResetTssAndSession(ctx)
 		return
 	}
@@ -495,16 +481,17 @@ func (s *SafeboxProcessor) process(ctx context.Context) {
 		return
 	}
 
-	s.SetTssSession(task, messageToSign, unsignTx)
+	requestId := fmt.Sprintf("SAFEBOX:%d:%s", task.TaskId, uuid.New().String())
+	s.SetTssSession(requestId, task, messageToSign, unsignTx)
 
-	s.logger.Infof("SafeboxProcessor process - Created TSS session: SessionId=%s, TaskId=%d, ExpiresAt=%d",
-		s.tssSession.SessionId, s.tssSession.TaskId, s.tssSession.SignExpiredTs)
+	s.logger.Infof("SafeboxProcessor process - Created TSS session: RequestId=%s, TaskId=%d",
+		s.tssSession.GetRequestId(), task.TaskId)
 
 	// broadcast unsigned tx to voters with "session_id", "expired_ts"
 	s.logger.Infof("SafeboxProcessor process - Broadcasting safebox task to voters")
 	err = p2p.PublishMessage(ctx, p2p.Message[any]{
 		MessageType: p2p.MessageTypeSafeboxTask,
-		RequestId:   fmt.Sprintf("SAFEBOX:%d:%s", task.TaskId, s.tssSession.SessionId),
+		RequestId:   requestId,
 		DataType:    "MsgSafeboxTask",
 		Data:        s.tssSession,
 	})
@@ -515,11 +502,11 @@ func (s *SafeboxProcessor) process(ctx context.Context) {
 		return
 	}
 	s.logger.Infof("SafeboxProcessor process - Broadcasted safebox task: RequestId=SAFEBOX:%d:%s",
-		task.TaskId, s.tssSession.SessionId)
+		task.TaskId, s.tssSession.GetRequestId())
 
 	// start tss sign session immediately
 	s.logger.Infof("SafeboxProcessor process - Starting TSS signing session")
-	_, err = s.tssSigner.StartSign(ctx, messageToSign, s.tssSession.SessionId)
+	_, err = s.tssSigner.StartSign(ctx, messageToSign, s.tssSession.GetRequestId())
 	if err != nil {
 		s.logger.Errorf("SafeboxProcessor process - Failed to start TSS sign: %v", err)
 		// reset TSS status, because TSS signing session failed to start
@@ -527,7 +514,7 @@ func (s *SafeboxProcessor) process(ctx context.Context) {
 		s.logger.Infof("SafeboxProcessor process - Reset TSS status due to failed StartSign call")
 		return
 	}
-	s.logger.Infof("SafeboxProcessor process - Successfully started TSS signing session: SessionId=%s", s.tssSession.SessionId)
+	s.logger.Infof("SafeboxProcessor process - Successfully started TSS signing session: RequestId=%s", s.tssSession.GetRequestId())
 }
 
 // check TSS address balance
@@ -548,7 +535,7 @@ func (s *SafeboxProcessor) CheckTssBalance(ctx context.Context) {
 	}
 }
 
-func (s *SafeboxProcessor) GetTssSession() *types.TssSession {
+func (s *SafeboxProcessor) GetTssSession() types.MsgSignInterface {
 	return s.tssSession
 }
 
