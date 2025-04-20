@@ -129,7 +129,7 @@ type SafeboxTask struct {
 	TimelockTxid     string    `gorm:"not null;index:timelock_txid_out_index" json:"timelock_txid"`
 	TimelockOutIndex uint64    `gorm:"not null;index:timelock_txid_out_index" json:"timelock_out_index"`
 	Status           string    `gorm:"not null" json:"status"`
-	OrderId          string    `gorm:"not null;index:safeboxtask_orderid_index" json:"order_id"` // update when signing, it always can be query from SendOrder by BTC txid
+	OrderId          string    `gorm:"index:safeboxtask_orderid_index" json:"order_id"` // update when signing, it always can be query from SendOrder by BTC txid
 	UpdatedAt        time.Time `gorm:"not null" json:"updated_at"`
 }
 

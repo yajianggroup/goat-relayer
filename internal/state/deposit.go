@@ -190,7 +190,8 @@ func (s *State) UpdateSafeboxTaskCancelled(taskId uint64) error {
 			return err
 		}
 		if err == gorm.ErrRecordNotFound {
-			return fmt.Errorf("safebox task not found")
+			log.Error("safebox task not found, ignore")
+			return nil
 		}
 		taskDeposit.Status = db.TASK_STATUS_CLOSED
 		taskDeposit.UpdatedAt = time.Now()
@@ -243,7 +244,7 @@ func (s *State) UpdateSafeboxTaskInitOK(taskId uint64, timelockTxid string, time
 			return fmt.Errorf("task deposit not found")
 		}
 		if taskDeposit.Status != db.TASK_STATUS_INIT && taskDeposit.Status != db.TASK_STATUS_RECEIVED_OK && taskDeposit.Status != db.TASK_STATUS_RECEIVED && taskDeposit.Status != db.TASK_STATUS_CREATE {
-			return fmt.Errorf("task deposit status is not received or create")
+			return fmt.Errorf("task deposit status is not init or received_ok or received or create")
 		}
 		taskDeposit.TimelockTxid = timelockTxid
 		taskDeposit.TimelockOutIndex = timelockOutIndex
@@ -292,7 +293,7 @@ func (s *State) UpdateSafeboxTaskInit(timelockAddress string, timelockTxid strin
 			return fmt.Errorf("task deposit not found")
 		}
 		if taskDeposit.Status != db.TASK_STATUS_RECEIVED_OK && taskDeposit.Status != db.TASK_STATUS_RECEIVED && taskDeposit.Status != db.TASK_STATUS_CREATE {
-			return fmt.Errorf("task deposit status is not received or create")
+			return fmt.Errorf("task deposit status is not received_ok or received or create")
 		}
 		taskDeposit.TimelockTxid = timelockTxid
 		taskDeposit.TimelockOutIndex = timelockOutIndex
