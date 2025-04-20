@@ -123,9 +123,13 @@ func (dm *DatabaseManager) runMigrations() error {
 		migrates["20241220_2345_add_utxo_records"] = migrations.AddUtxoRecords
 	}
 
+	if config.AppConfig.L2ChainId.String() == "48816" && config.AppConfig.BTCNetworkType == "testnet3" {
+		migrates["20240420_add_safeboxtask_orderid"] = migrations.AddSafeboxTaskOrderId
+	}
+
 	for name, migrate := range migrates {
 		if err := migrationManagers["wallet"].RunMigration(name, migrate); err != nil {
-			return fmt.Errorf("failed to run UTXO records migration: %w", err)
+			return fmt.Errorf("failed to run migration %s: %w", name, err)
 		}
 	}
 
