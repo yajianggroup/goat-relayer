@@ -190,7 +190,8 @@ func (s *State) UpdateSafeboxTaskCancelled(taskId uint64) error {
 			return err
 		}
 		if err == gorm.ErrRecordNotFound {
-			return fmt.Errorf("safebox task not found")
+			log.Error("safebox task not found, ignore")
+			return nil
 		}
 		taskDeposit.Status = db.TASK_STATUS_CLOSED
 		taskDeposit.UpdatedAt = time.Now()
