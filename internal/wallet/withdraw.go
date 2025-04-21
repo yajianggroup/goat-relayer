@@ -25,6 +25,7 @@ const (
 	WITHDRAW_MAX_VOUT            = 32
 	SAFEBOX_TASK_MAX_VOUT        = 1
 	SAFEBOX_TASK_IMMEDIATE_COUNT = 1
+	SAFEBOX_EXTERNAL_AMOUNT      = 100000
 )
 
 func (w *WalletServer) withdrawLoop(ctx context.Context) {
@@ -274,15 +275,16 @@ func (w *WalletServer) initWithdrawSig() {
 			log.Infof("WalletServer initWithdrawSig no safebox tx after filter can start")
 			return
 		}
-		// create SendOrder for selectedWithdraws
-		selectOptimalUTXOs, totalSelectedAmount, _, changeAmount, estimateFee, witnessSize, err := SelectOptimalUTXOs(utxos, receiverTypes, withdrawAmount, actualPrice, len(selectedTasks))
+
+		// create SendOrder for selectedSafebox
+		// NOTE: add external funds to cover the network fee for safebox transactions
+		selectOptimalUTXOs, totalSelectedAmount, _, changeAmount, estimateFee, witnessSize, err := SelectOptimalUTXOs(utxos, receiverTypes, withdrawAmount, SAFEBOX_EXTERNAL_AMOUNT, actualPrice, len(selectedTasks))
 		if err != nil {
 			log.Errorf("WalletServer initWithdrawSig SelectOptimalUTXOs for safebox task error: %v", err)
 			return
 		}
-		log.Infof("WalletServer initWithdrawSig SelectOptimalUTXOs for safebox task, totalSelectedAmount: %d, withdrawAmount: %d, changeAmount: %d, selectedUtxos: %d", totalSelectedAmount, withdrawAmount, changeAmount, len(selectOptimalUTXOs))
+		log.Infof("WalletServer initWithdrawSig SelectOptimalUTXOs for safebox task, totalSelectedAmount: %d, withdrawAmount: %d, changeAmount: %d, selectedUtxos: %d", totalSelectedAmount, withdrawAmount, 0, changeAmount, len(selectOptimalUTXOs))
 
-		// create SendOrder for selectedUtxos consolidation
 		tx, actualFee, _, err := CreateRawTransaction(selectOptimalUTXOs, nil, selectedTasks, p2wpkhAddress.EncodeAddress(), changeAmount, estimateFee, int64(safeboxTxFee), witnessSize, network)
 		if err != nil {
 			log.Errorf("WalletServer initWithdrawSig CreateRawTransaction for safebox task error: %v", err)
@@ -318,7 +320,7 @@ func (w *WalletServer) initWithdrawSig() {
 			return
 		}
 		// create SendOrder for selectedWithdraws
-		selectOptimalUTXOs, totalSelectedAmount, _, changeAmount, estimateFee, witnessSize, err := SelectOptimalUTXOs(utxos, receiverTypes, withdrawAmount, actualPrice, len(selectedWithdraws))
+		selectOptimalUTXOs, totalSelectedAmount, _, changeAmount, estimateFee, witnessSize, err := SelectOptimalUTXOs(utxos, receiverTypes, withdrawAmount, 0, actualPrice, len(selectedWithdraws))
 		if err != nil {
 			log.Errorf("WalletServer initWithdrawSig SelectOptimalUTXOs for withdraw error: %v", err)
 			return

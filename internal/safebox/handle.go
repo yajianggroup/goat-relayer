@@ -12,7 +12,7 @@ import (
 )
 
 func (s *SafeboxProcessor) handleTssSign(ctx context.Context, msg types.MsgSignSafeboxTask) {
-	s.logger.Infof("SafeboxProcessor handleTssSign - Start Tss Sign, SessionId: %s, TaskId: %d", msg.RequestId, msg)
+	s.logger.Infof("SafeboxProcessor handleTssSign - Start Tss Sign, SessionId: %s, TaskId: %v", msg.RequestId, msg)
 
 	var task *db.SafeboxTask
 	err := json.Unmarshal(msg.SafeboxTask, &task)
