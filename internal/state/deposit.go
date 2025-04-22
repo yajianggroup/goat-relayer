@@ -190,7 +190,7 @@ func (s *State) UpdateSafeboxTaskCancelled(taskId uint64) error {
 			return err
 		}
 		if err == gorm.ErrRecordNotFound {
-			log.Error("safebox task not found, ignore")
+			log.Warnf("safebox task not found, ignore")
 			return nil
 		}
 		taskDeposit.Status = db.TASK_STATUS_CLOSED
@@ -343,6 +343,15 @@ func (s *State) UpdateSafeboxTaskReceived(txid, evmAddr string, txout uint64, am
 			return nil
 		}
 
+		if taskDeposit.Status != db.TASK_STATUS_CREATE {
+			log.WithFields(log.Fields{
+				"evmAddr":      evmAddr,
+				"fundingTxid":  taskDeposit.FundingTxid,
+				"fundingTxout": taskDeposit.FundingOutIndex,
+				"amount":       taskDeposit.Amount,
+			}).Warn("UpdateSafeboxTaskReceived, already got a valid deposit for the processing safebox task")
+			return nil
+		}
 		// check if deadline is over
 		if time.Now().Unix() > int64(taskDeposit.Deadline) {
 			// close it
