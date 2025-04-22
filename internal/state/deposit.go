@@ -343,6 +343,9 @@ func (s *State) UpdateSafeboxTaskReceived(txid, evmAddr string, txout uint64, am
 			return nil
 		}
 
+		if taskDeposit.Status != db.TASK_STATUS_CREATE {
+			return fmt.Errorf("task deposit status is not create")
+		}
 		// check if deadline is over
 		if time.Now().Unix() > int64(taskDeposit.Deadline) {
 			// close it
