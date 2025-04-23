@@ -246,9 +246,36 @@ func (s *SafeboxProcessor) BuildUnsignedTx(ctx context.Context, task *db.Safebox
 		}
 		s.logger.Debugf("SafeboxProcessor buildUnsignedTx - Packed input data length: %d bytes", len(input))
 	case db.TASK_STATUS_CONFIRMED:
-		input, err = safeBoxAbi.Pack("processTimelockTx", big.NewInt(int64(task.TaskId)), big.NewInt(int64(task.Amount)), [32]byte{}, uint32(task.FundingOutIndex))
+		// Get block height and generate SPV proof
+		order, err := s.state.GetSendOrderByTxIdOrExternalId(task.TimelockTxid)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to pack initTimelockTx input: %v", err)
+			return nil, nil, fmt.Errorf("failed to get send order info: %v", err)
+		}
+		btcBlockData, err := s.state.QueryBtcBlockDataByHeight(order.BtcBlock)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to get btc block data, height: %s, err: %v, ", order.BtcBlock, err)
+		}
+
+		txHashes := make([]string, 0)
+		err = json.Unmarshal([]byte(btcBlockData.TxHashes), &txHashes)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to unmarshal tx hashes: %v", err)
+		}
+
+		_, proof, txIndex, err := types.GenerateSPVProof(task.TimelockTxid, txHashes)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to generate SPV proof: %v", err)
+		}
+
+		// Convert proof to [][32]byte format
+		proofBytes := make([][32]byte, len(proof)/32)
+		for i := 0; i < len(proof)/32; i++ {
+			copy(proofBytes[i][:], proof[i*32:(i+1)*32])
+		}
+
+		input, err = safeBoxAbi.Pack("processTimelockTx", big.NewInt(int64(task.TaskId)), big.NewInt(int64(order.BtcBlock)), proofBytes, big.NewInt(int64(txIndex)))
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to pack processTimelockTx input: %v", err)
 		}
 	default:
 		return nil, nil, fmt.Errorf("invalid task status: %s", task.Status)

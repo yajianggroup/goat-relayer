@@ -1094,6 +1094,11 @@ func (s *State) updateOtherStatusByOrder(tx *gorm.DB, orderId string, status str
 			log.Errorf("State updateOtherStatusByOrder Withdraw by order id: %s, status: %s, error: %v", orderId, status, err)
 			return err
 		}
+		err = tx.Model(&db.SafeboxTask{}).Where("order_id = ?", orderId).Updates(&db.SafeboxTask{Status: status, UpdatedAt: time.Now()}).Error
+		if err != nil {
+			log.Errorf("State updateOtherStatusByOrder Safebox Task by order id: %s, status: %s, error: %v", orderId, status, err)
+			return err
+		}
 	}
 	err = tx.Model(&db.Vin{}).Where("order_id = ?", orderId).Updates(&db.Vin{Status: status, UpdatedAt: time.Now()}).Error
 	if err != nil {
@@ -1177,6 +1182,11 @@ func (s *State) updateOtherStatusByTxid(tx *gorm.DB, txid string, status string)
 		tx = s.dbm.GetWalletDB()
 	}
 	err := tx.Model(&db.Withdraw{}).Where("txid = ?", txid).Updates(&db.Withdraw{Status: status, UpdatedAt: time.Now()}).Error
+	if err != nil {
+		log.Errorf("State updateOtherStatusByTxid Withdraw by order id: %s, status: %s, error: %v", txid, status, err)
+		return err
+	}
+	err = tx.Model(&db.SafeboxTask{}).Where("txid = ?", txid).Updates(&db.SafeboxTask{Status: status, UpdatedAt: time.Now()}).Error
 	if err != nil {
 		log.Errorf("State updateOtherStatusByTxid Withdraw by order id: %s, status: %s, error: %v", txid, status, err)
 		return err

@@ -227,7 +227,11 @@ func (c *FireblocksClient) CheckPending(txid string, externalTxId string, update
 			if rpcErr, ok := err.(*btcjson.RPCError); ok {
 				switch rpcErr.Code {
 				case btcjson.ErrRPCTxAlreadyInChain:
-					return false, 0, 0, nil
+					blockHeight, err = strconv.ParseUint(txDetails.BlockInfo.BlockHeight, 10, 64)
+					if err != nil {
+						return false, 0, 0, fmt.Errorf("parse block height error: %v, txid: %s", err, txid)
+					}
+					return false, uint64(txDetails.NumOfConfirmations), blockHeight, nil
 				case btcjson.ErrRPCVerifyRejected:
 					if strings.Contains(rpcErr.Message, "mandatory-script-verify-flag-failed") {
 						log.Warnf("Transaction signature verification failed, reverting for re-signing: %v, txid: %s", rpcErr, txid)

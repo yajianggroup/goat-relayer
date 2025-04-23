@@ -101,9 +101,15 @@ func (s *SafeboxProcessor) handleTssSign(ctx context.Context, msg types.MsgSignS
 		}
 		s.logger.Infof("SafeboxProcessor handleTssSign - Successfully sign task TASK_STATUS_INIT, RequestId: %s", msg.RequestId)
 	case db.TASK_STATUS_CONFIRMED:
+		// check timelock tx is confirmed
+		s.logger.Infof("SafeboxProcessor handleTssSign - Processing TASK_STATUS_CONFIRMED - SessionId: %s", msg.RequestId)
+		_, err = s.tssSigner.StartSign(ctx, msg.SigData, msg.RequestId)
+		if err != nil {
+			s.logger.Errorf("SafeboxProcessor handleTssSign - Start sign failed, RequestId: %s, TaskStatus: %s, Error: %v",
+				msg.RequestId, task.Status, err)
+			return
+		}
 		s.logger.Infof("SafeboxProcessor handleTssSign - Processing TASK_STATUS_CONFIRMED - RequestId: %s", msg.RequestId)
-		// TODO: check timelock tx is confirmed
-
 	default:
 		s.logger.Errorf("SafeboxProcessor handleTssSign - Unknown task status RequestId: %s, Status: %s",
 			msg.RequestId, task.Status)
