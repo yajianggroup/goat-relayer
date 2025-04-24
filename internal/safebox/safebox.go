@@ -255,11 +255,11 @@ func (s *SafeboxProcessor) BuildUnsignedTx(ctx context.Context, task *db.Safebox
 		}
 		btcBlockHash, err := s.btcClient.GetBlockHash(int64(order.BtcBlock))
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get btc block data, height: %s, err: %v, ", order.BtcBlock, err)
+			return nil, nil, fmt.Errorf("failed to get btc block data, height: %d, err: %v, ", order.BtcBlock, err)
 		}
 		btcBlock, err := s.btcClient.GetBlock(btcBlockHash)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get btc block data, height: %s, err: %v, ", order.BtcBlock, err)
+			return nil, nil, fmt.Errorf("failed to get btc block data, height: %d, err: %v, ", order.BtcBlock, err)
 		}
 		txHashes := make([]string, 0)
 		for _, tx := range btcBlock.Transactions {
@@ -281,6 +281,12 @@ func (s *SafeboxProcessor) BuildUnsignedTx(ctx context.Context, task *db.Safebox
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to pack processTimelockTx input: %v", err)
 		}
+		s.logger.WithFields(log.Fields{
+			"task_id":          task.TaskId,
+			"btc_block_height": order.BtcBlock,
+			"proof":            proofBytes,
+			"tx_index":         txIndex,
+		}).Debugf("SafeboxProcessor buildUnsignedTx - Packed input data")
 	default:
 		return nil, nil, fmt.Errorf("invalid task status: %s", task.Status)
 	}
