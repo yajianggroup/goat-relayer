@@ -496,7 +496,7 @@ func (s *SafeboxProcessor) process(ctx context.Context) {
 
 	// query task from db (first one ID asc, until confirmed), build unsigned tx
 	s.logger.Infof("SafeboxProcessor process - Querying tasks from database")
-	tasks, err := s.state.GetSafeboxTaskByStatus(1, db.TASK_STATUS_RECEIVED)
+	tasks, err := s.state.GetSafeboxTaskByStatus(1, db.TASK_STATUS_RECEIVED, db.TASK_STATUS_CONFIRMED)
 	if err != nil {
 		s.logger.Errorf("SafeboxProcessor process - Failed to get safebox tasks: %v", err)
 		return
@@ -505,48 +505,48 @@ func (s *SafeboxProcessor) process(ctx context.Context) {
 		s.logger.Infof("SafeboxProcessor process - No safebox tasks found")
 		return
 	}
-	task := tasks[0]
+	for _, task := range tasks {
+		unsignTx, messageToSign, err := s.BuildUnsignedTx(ctx, task)
+		if err != nil {
+			s.logger.Errorf("Failed to build unsigned transaction: %v", err)
+			return
+		}
 
-	unsignTx, messageToSign, err := s.BuildUnsignedTx(ctx, task)
-	if err != nil {
-		s.logger.Errorf("Failed to build unsigned transaction: %v", err)
-		return
+		requestId := fmt.Sprintf("SAFEBOX:%d:%s", task.TaskId, uuid.New().String())
+		s.SetTssSession(requestId, task, messageToSign, unsignTx)
+
+		s.logger.Infof("SafeboxProcessor process - Created TSS session: RequestId=%s, TaskId=%d",
+			s.tssSession.GetRequestId(), task.TaskId)
+
+		// broadcast unsigned tx to voters with "session_id", "expired_ts"
+		s.logger.Infof("SafeboxProcessor process - Broadcasting safebox task to voters")
+		err = p2p.PublishMessage(ctx, p2p.Message[any]{
+			MessageType: p2p.MessageTypeSafeboxTask,
+			RequestId:   requestId,
+			DataType:    "MsgSafeboxTask",
+			Data:        s.tssSession,
+		})
+		if err != nil {
+			s.logger.Errorf("SafeboxProcessor process - Failed to broadcast safebox task: %v", err)
+			// broadcast failed, reset TSS status
+			s.ResetTssAndSession(ctx)
+			return
+		}
+		s.logger.Infof("SafeboxProcessor process - Broadcasted safebox task: RequestId=SAFEBOX:%d:%s",
+			task.TaskId, s.tssSession.GetRequestId())
+
+		// start tss sign session immediately
+		s.logger.Infof("SafeboxProcessor process - Starting TSS signing session")
+		_, err = s.tssSigner.StartSign(ctx, messageToSign, s.tssSession.GetRequestId())
+		if err != nil {
+			s.logger.Errorf("SafeboxProcessor process - Failed to start TSS sign: %v", err)
+			// reset TSS status, because TSS signing session failed to start
+			s.ResetTssAndSession(ctx)
+			s.logger.Infof("SafeboxProcessor process - Reset TSS status due to failed StartSign call")
+			return
+		}
+		s.logger.Infof("SafeboxProcessor process - Successfully started TSS signing session: RequestId=%s", s.tssSession.GetRequestId())
 	}
-
-	requestId := fmt.Sprintf("SAFEBOX:%d:%s", task.TaskId, uuid.New().String())
-	s.SetTssSession(requestId, task, messageToSign, unsignTx)
-
-	s.logger.Infof("SafeboxProcessor process - Created TSS session: RequestId=%s, TaskId=%d",
-		s.tssSession.GetRequestId(), task.TaskId)
-
-	// broadcast unsigned tx to voters with "session_id", "expired_ts"
-	s.logger.Infof("SafeboxProcessor process - Broadcasting safebox task to voters")
-	err = p2p.PublishMessage(ctx, p2p.Message[any]{
-		MessageType: p2p.MessageTypeSafeboxTask,
-		RequestId:   requestId,
-		DataType:    "MsgSafeboxTask",
-		Data:        s.tssSession,
-	})
-	if err != nil {
-		s.logger.Errorf("SafeboxProcessor process - Failed to broadcast safebox task: %v", err)
-		// broadcast failed, reset TSS status
-		s.ResetTssAndSession(ctx)
-		return
-	}
-	s.logger.Infof("SafeboxProcessor process - Broadcasted safebox task: RequestId=SAFEBOX:%d:%s",
-		task.TaskId, s.tssSession.GetRequestId())
-
-	// start tss sign session immediately
-	s.logger.Infof("SafeboxProcessor process - Starting TSS signing session")
-	_, err = s.tssSigner.StartSign(ctx, messageToSign, s.tssSession.GetRequestId())
-	if err != nil {
-		s.logger.Errorf("SafeboxProcessor process - Failed to start TSS sign: %v", err)
-		// reset TSS status, because TSS signing session failed to start
-		s.ResetTssAndSession(ctx)
-		s.logger.Infof("SafeboxProcessor process - Reset TSS status due to failed StartSign call")
-		return
-	}
-	s.logger.Infof("SafeboxProcessor process - Successfully started TSS signing session: RequestId=%s", s.tssSession.GetRequestId())
 }
 
 // check TSS address balance
