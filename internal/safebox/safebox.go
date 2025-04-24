@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/goatnetwork/goat-relayer/internal/config"
 	"github.com/goatnetwork/goat-relayer/internal/db"
 	"github.com/goatnetwork/goat-relayer/internal/layer2"
@@ -41,6 +42,7 @@ type SafeboxProcessor struct {
 	state          *state.State
 	libp2p         *p2p.LibP2PService
 	layer2Listener *layer2.Layer2Listener
+	btcClient      *rpcclient.Client
 	once           sync.Once
 	safeboxMu      sync.Mutex
 
@@ -54,12 +56,12 @@ type SafeboxProcessor struct {
 	tssSignCh  chan interface{}
 }
 
-func NewSafeboxProcessor(state *state.State, libp2p *p2p.LibP2PService, layer2Listener *layer2.Layer2Listener) *SafeboxProcessor {
+func NewSafeboxProcessor(state *state.State, libp2p *p2p.LibP2PService, layer2Listener *layer2.Layer2Listener, btcClient *rpcclient.Client) *SafeboxProcessor {
 	return &SafeboxProcessor{
 		state:          state,
 		libp2p:         libp2p,
 		layer2Listener: layer2Listener,
-
+		btcClient:      btcClient,
 		logger: log.WithFields(log.Fields{
 			"module": "safebox",
 		}),
@@ -251,15 +253,17 @@ func (s *SafeboxProcessor) BuildUnsignedTx(ctx context.Context, task *db.Safebox
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to get send order info: %v", err)
 		}
-		btcBlockData, err := s.state.QueryBtcBlockDataByHeight(order.BtcBlock)
+		btcBlockHash, err := s.btcClient.GetBlockHash(int64(order.BtcBlock))
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to get btc block data, height: %s, err: %v, ", order.BtcBlock, err)
 		}
-
-		txHashes := make([]string, 0)
-		err = json.Unmarshal([]byte(btcBlockData.TxHashes), &txHashes)
+		btcBlock, err := s.btcClient.GetBlock(btcBlockHash)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to unmarshal tx hashes: %v", err)
+			return nil, nil, fmt.Errorf("failed to get btc block data, height: %s, err: %v, ", order.BtcBlock, err)
+		}
+		txHashes := make([]string, 0)
+		for _, tx := range btcBlock.Transactions {
+			txHashes = append(txHashes, tx.TxHash().String())
 		}
 
 		_, proof, txIndex, err := types.GenerateSPVProof(task.TimelockTxid, txHashes)

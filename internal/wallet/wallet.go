@@ -6,7 +6,6 @@ import (
 
 	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/goatnetwork/goat-relayer/internal/bls"
-	"github.com/goatnetwork/goat-relayer/internal/config"
 	"github.com/goatnetwork/goat-relayer/internal/p2p"
 	"github.com/goatnetwork/goat-relayer/internal/state"
 	log "github.com/sirupsen/logrus"
@@ -38,20 +37,7 @@ type WalletServer struct {
 	withdrawSigTimeoutChan chan interface{}
 }
 
-func NewWalletServer(libp2p *p2p.LibP2PService, st *state.State, signer *bls.Signer) *WalletServer {
-	// create bitcoin client using btc module connection
-	connConfig := &rpcclient.ConnConfig{
-		Host:         config.AppConfig.BTCRPC,
-		User:         config.AppConfig.BTCRPC_USER,
-		Pass:         config.AppConfig.BTCRPC_PASS,
-		HTTPPostMode: true,
-		DisableTLS:   true,
-	}
-	btcClient, err := rpcclient.New(connConfig, nil)
-	if err != nil {
-		log.Fatalf("Failed to start bitcoin client: %v", err)
-	}
-
+func NewWalletServer(libp2p *p2p.LibP2PService, st *state.State, signer *bls.Signer, btcClient *rpcclient.Client) *WalletServer {
 	return &WalletServer{
 		libp2p:           libp2p,
 		state:            st,

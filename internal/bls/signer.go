@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/btcsuite/btcd/rpcclient"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/goatnetwork/goat-relayer/internal/config"
@@ -38,7 +39,7 @@ type Signer struct {
 	sigMu         sync.RWMutex
 }
 
-func NewSigner(libp2p *p2p.LibP2PService, layer2Listener *layer2.Layer2Listener, state *state.State) *Signer {
+func NewSigner(libp2p *p2p.LibP2PService, layer2Listener *layer2.Layer2Listener, state *state.State, btcClient *rpcclient.Client) *Signer {
 	byt, err := hex.DecodeString(config.AppConfig.RelayerBlsSk)
 	if err != nil {
 		log.Fatalf("Decode bls sk error: %v", err)
@@ -48,7 +49,7 @@ func NewSigner(libp2p *p2p.LibP2PService, layer2Listener *layer2.Layer2Listener,
 	pk := new(goatcryp.PublicKey).From(sk).Compress()
 	pkHex := hex.EncodeToString(pk)
 	log.Infof("Signer init, bls pk: %s, voter address: %s", pkHex, config.AppConfig.RelayerAddress)
-	safeboxProcessor := safebox.NewSafeboxProcessor(state, libp2p, layer2Listener)
+	safeboxProcessor := safebox.NewSafeboxProcessor(state, libp2p, layer2Listener, btcClient)
 
 	// epoch := state.GetEpochVoter()
 
