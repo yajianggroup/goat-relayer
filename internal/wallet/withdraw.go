@@ -283,7 +283,7 @@ func (w *WalletServer) initWithdrawSig() {
 			log.Errorf("WalletServer initWithdrawSig SelectOptimalUTXOs for safebox task error: %v", err)
 			return
 		}
-		log.Infof("WalletServer initWithdrawSig SelectOptimalUTXOs for safebox task, totalSelectedAmount: %d, withdrawAmount: %d, changeAmount: %d, selectedUtxos: %d", totalSelectedAmount, withdrawAmount, 0, changeAmount, len(selectOptimalUTXOs))
+		log.Infof("WalletServer initWithdrawSig SelectOptimalUTXOs for safebox task, totalSelectedAmount: %d, withdrawAmount: %d, changeAmount: %d, selectedUtxos: %d", totalSelectedAmount, withdrawAmount, changeAmount, len(selectOptimalUTXOs))
 
 		tx, actualFee, _, err := CreateRawTransaction(selectOptimalUTXOs, nil, selectedTasks, p2wpkhAddress.EncodeAddress(), changeAmount, estimateFee, int64(safeboxTxFee), witnessSize, network)
 		if err != nil {

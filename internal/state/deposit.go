@@ -363,7 +363,12 @@ func (s *State) UpdateSafeboxTaskReceived(txid, evmAddr string, txout uint64, am
 		// check if amount is enough
 		if amount != taskDeposit.Amount {
 			// not match, ignore
-			return fmt.Errorf("amount not match, task deposit amount: %d, amount: %d", taskDeposit.Amount, amount)
+			log.WithFields(log.Fields{
+				"taskId":             taskDeposit.TaskId,
+				"taskRequiredAmount": taskDeposit.Amount,
+				"depositAmount":      amount,
+			}).Warn("UpdateSafeboxTaskReceived, amount not match")
+			return nil
 		}
 
 		taskDeposit.Status = db.TASK_STATUS_RECEIVED
