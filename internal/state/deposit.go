@@ -265,8 +265,8 @@ func (s *State) UpdateSafeboxTaskProcessed(taskId uint64) error {
 		if err == gorm.ErrRecordNotFound {
 			return fmt.Errorf("task deposit not found")
 		}
-		if taskDeposit.Status != db.TASK_STATUS_CONFIRMED {
-			return fmt.Errorf("task deposit status is not confirmed")
+		if taskDeposit.Status != db.TASK_STATUS_CONFIRMED && taskDeposit.Status != db.TASK_STATUS_INIT_OK {
+			return fmt.Errorf("task deposit status is not confirmed or init_ok")
 		}
 		taskDeposit.Status = db.TASK_STATUS_PROCESSED
 		taskDeposit.UpdatedAt = time.Now()
