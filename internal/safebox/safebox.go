@@ -267,21 +267,39 @@ func (s *SafeboxProcessor) BuildUnsignedTx(ctx context.Context, task *db.Safebox
 			return nil, nil, fmt.Errorf("failed to generate SPV proof: %v", err)
 		}
 
-		// Convert proof to [][32]byte format
-		proofBytes := make([][32]byte, len(proof)/32)
-		for i := 0; i < len(proof)/32; i++ {
-			copy(proofBytes[i][:], proof[i*32:(i+1)*32])
+		// The contract expects the first parameter to be the task ID
+		taskIdBig := big.NewInt(int64(task.TaskId))
+
+		// The second parameter should be a bytes32 (merkleRoot)
+		// Convert merkleRoot from []byte to [32]byte
+		// var merkleRootBytes [32]byte
+		// copy(merkleRootBytes[:], merkleRoot)
+
+		// The third parameter should be bytes32[] (proof)
+		// Calculate how many 32-byte chunks are in the proof
+		numProofElements := len(proof) / 32
+		proofArray := make([][32]byte, numProofElements)
+
+		// Copy each 32-byte chunk into a separate [32]byte array
+		for i := 0; i < numProofElements; i++ {
+			var element [32]byte
+			copy(element[:], proof[i*32:i*32+32])
+			proofArray[i] = element
 		}
 
-		input, err = safeBoxAbi.Pack("processTimelockTx", big.NewInt(int64(task.TaskId)), merkleRoot, proofBytes, big.NewInt(int64(txIndex)))
+		// The fourth parameter is the transaction index
+		txIndexBig := big.NewInt(int64(txIndex))
+
+		// Now pack all parameters for the ABI call
+		input, err = safeBoxAbi.Pack("processTimelockTx", taskIdBig, merkleRoot, proofArray, txIndexBig)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to pack processTimelockTx input: %v", err)
 		}
 		s.logger.WithFields(log.Fields{
-			"task_id":          task.TaskId,
-			"btc_block_height": order.BtcBlock,
-			"proof":            proofBytes,
-			"tx_index":         txIndex,
+			"task_id":     task.TaskId,
+			"merkle_root": merkleRoot,
+			"proof":       proofArray,
+			"tx_index":    txIndex,
 		}).Debugf("SafeboxProcessor buildUnsignedTx - Packed input data")
 	default:
 		return nil, nil, fmt.Errorf("invalid task status: %s", task.Status)
