@@ -1186,7 +1186,7 @@ func (s *State) updateOtherStatusByTxid(tx *gorm.DB, txid string, status string)
 		log.Errorf("State updateOtherStatusByTxid Withdraw by order id: %s, status: %s, error: %v", txid, status, err)
 		return err
 	}
-	err = tx.Model(&db.SafeboxTask{}).Where("txid = ?", txid).Updates(&db.SafeboxTask{Status: status, UpdatedAt: time.Now()}).Error
+	err = tx.Model(&db.SafeboxTask{}).Where("timelock_txid = ?", txid).Updates(&db.SafeboxTask{Status: status, UpdatedAt: time.Now()}).Error
 	if err != nil {
 		log.Errorf("State updateOtherStatusByTxid Withdraw by order id: %s, status: %s, error: %v", txid, status, err)
 		return err
