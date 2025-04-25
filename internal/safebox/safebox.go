@@ -272,8 +272,12 @@ func (s *SafeboxProcessor) BuildUnsignedTx(ctx context.Context, task *db.Safebox
 
 		// The second parameter should be a bytes32 (merkleRoot)
 		// Convert merkleRoot from []byte to [32]byte
-		// var merkleRootBytes [32]byte
-		// copy(merkleRootBytes[:], merkleRoot)
+		var merkleRootBytes [32]byte
+		if len(merkleRoot) >= 32 {
+			copy(merkleRootBytes[:], merkleRoot[:32])
+		} else {
+			copy(merkleRootBytes[:len(merkleRoot)], merkleRoot)
+		}
 
 		// The third parameter should be bytes32[] (proof)
 		// Calculate how many 32-byte chunks are in the proof
@@ -291,13 +295,13 @@ func (s *SafeboxProcessor) BuildUnsignedTx(ctx context.Context, task *db.Safebox
 		txIndexBig := big.NewInt(int64(txIndex))
 
 		// Now pack all parameters for the ABI call
-		input, err = safeBoxAbi.Pack("processTimelockTx", taskIdBig, merkleRoot, proofArray, txIndexBig)
+		input, err = safeBoxAbi.Pack("processTimelockTx", taskIdBig, merkleRootBytes, proofArray, txIndexBig)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to pack processTimelockTx input: %v", err)
 		}
 		s.logger.WithFields(log.Fields{
 			"task_id":     task.TaskId,
-			"merkle_root": merkleRoot,
+			"merkle_root": merkleRootBytes,
 			"proof":       proofArray,
 			"tx_index":    txIndex,
 		}).Debugf("SafeboxProcessor buildUnsignedTx - Packed input data")
