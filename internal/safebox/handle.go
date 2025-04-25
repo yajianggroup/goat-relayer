@@ -36,11 +36,11 @@ func (s *SafeboxProcessor) handleTssSign(ctx context.Context, msg types.MsgSignS
 		return
 	}
 
-	if task.Status != taskInDb.Status {
-		s.logger.Infof("SafeboxProcessor handleTssSign - Status mismatch, RequestId: %s, LocalStatus: %s, RemoteStatus: %s",
-			msg.RequestId, task.Status, taskInDb.Status)
-		return
-	}
+	// if task.Status != taskInDb.Status {
+	// 	s.logger.Infof("SafeboxProcessor handleTssSign - Status mismatch, RequestId: %s, LocalStatus: %s, RemoteStatus: %s",
+	// 		msg.RequestId, task.Status, taskInDb.Status)
+	// 	return
+	// }
 
 	if task.Amount != taskInDb.Amount {
 		s.logger.Errorf("SafeboxProcessor handleTssSign - Amount mismatch, RequestId: %s, LocalAmount: %d, RemoteAmount: %d",
