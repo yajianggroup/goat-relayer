@@ -64,7 +64,7 @@ func (s *Signer) handleSigStartSendOrder(ctx context.Context, e types.MsgSignSen
 		}
 		task := tasks[0]
 
-		unsignTx, sigData, err = s.safeboxProcessor.BuildUnsignedTx(ctx, task)
+		unsignTx, sigData, err = s.safeboxProcessor.BuildUnsignedTx(ctx, task, order.NoWitnessTx)
 		if err != nil {
 			log.Errorf("Signer handleSigStartSendOrder - Failed to build unsigned tx, request id: %s, err: %v", e.RequestId, err)
 			return err

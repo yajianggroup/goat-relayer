@@ -165,7 +165,7 @@ func (s *SafeboxProcessor) SetTssSession(requestId string, task *db.SafeboxTask,
 		s.tssSession.GetRequestId(), task.TaskId)
 }
 
-func (s *SafeboxProcessor) BuildUnsignedTx(ctx context.Context, task *db.SafeboxTask) (*ethtypes.Transaction, []byte, error) {
+func (s *SafeboxProcessor) BuildUnsignedTx(ctx context.Context, task *db.SafeboxTask, rawTxs ...[]byte) (*ethtypes.Transaction, []byte, error) {
 	// Get contract abi
 	safeBoxAbi, err := abis.TaskManagerContractMetaData.GetAbi()
 	if err != nil {
@@ -216,14 +216,7 @@ func (s *SafeboxProcessor) BuildUnsignedTx(ctx context.Context, task *db.Safebox
 	case db.TASK_STATUS_INIT, db.TASK_STATUS_RECEIVED_OK:
 		// Fullfill input data
 		// Convert slice to fixed length array
-		var timelockTxHash [32]byte
 		var witnessScript [7][32]byte
-		txHashBytes, err := types.DecodeBtcHash(task.TimelockTxid)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to decode timelock transaction hash: %v", err)
-		}
-		copy(timelockTxHash[:], txHashBytes)
-
 		// check witnessScript length
 		totalBytes := len(task.WitnessScript)
 		if totalBytes > 224 {
@@ -241,8 +234,11 @@ func (s *SafeboxProcessor) BuildUnsignedTx(ctx context.Context, task *db.Safebox
 			copy(witnessScript[i][:], task.WitnessScript[start:end])
 		}
 
+		if len(rawTxs) != 1 {
+			return nil, nil, fmt.Errorf("expected 1 raw transaction, got %d, rawTxs: %v", len(rawTxs), rawTxs)
+		}
 		s.logger.Debugf("SafeboxProcessor buildUnsignedTx - Packed input data: task id: %d, timelockTxHash: %s, timelockOutIndex: %d, witnessScript: %v", task.TaskId, task.TimelockTxid, task.TimelockOutIndex, witnessScript)
-		input, err = safeBoxAbi.Pack("initTimelockTx", big.NewInt(int64(task.TaskId)), timelockTxHash, uint32(task.TimelockOutIndex), witnessScript)
+		input, err = safeBoxAbi.Pack("initTimelockTx", big.NewInt(int64(task.TaskId)), rawTxs[0], uint32(task.TimelockOutIndex), witnessScript)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to pack initTimelockTx input: %v", err)
 		}
@@ -266,7 +262,7 @@ func (s *SafeboxProcessor) BuildUnsignedTx(ctx context.Context, task *db.Safebox
 			txHashes = append(txHashes, tx.TxHash().String())
 		}
 
-		_, proof, txIndex, err := types.GenerateSPVProof(task.TimelockTxid, txHashes)
+		merkleRoot, proof, txIndex, err := types.GenerateSPVProof(task.TimelockTxid, txHashes)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to generate SPV proof: %v", err)
 		}
@@ -277,7 +273,7 @@ func (s *SafeboxProcessor) BuildUnsignedTx(ctx context.Context, task *db.Safebox
 			copy(proofBytes[i][:], proof[i*32:(i+1)*32])
 		}
 
-		input, err = safeBoxAbi.Pack("processTimelockTx", big.NewInt(int64(task.TaskId)), big.NewInt(int64(order.BtcBlock)), proofBytes, big.NewInt(int64(txIndex)))
+		input, err = safeBoxAbi.Pack("processTimelockTx", big.NewInt(int64(task.TaskId)), merkleRoot, proofBytes, big.NewInt(int64(txIndex)))
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to pack processTimelockTx input: %v", err)
 		}
