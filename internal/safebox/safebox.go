@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/goatnetwork/goat-relayer/internal/config"
 	"github.com/goatnetwork/goat-relayer/internal/db"
@@ -245,24 +246,24 @@ func (s *SafeboxProcessor) BuildUnsignedTx(ctx context.Context, task *db.Safebox
 		s.logger.Debugf("SafeboxProcessor buildUnsignedTx - Packed input data length: %d bytes", len(input))
 	case db.TASK_STATUS_CONFIRMED:
 		// Get block height and generate SPV proof
-		order, err := s.state.GetSendOrderByTxIdOrExternalId(task.TimelockTxid)
+		txHash, err := chainhash.NewHashFromStr(task.TimelockTxid)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to decode timelock transaction hash: %v", err)
+		}
+		tx, err := s.btcClient.GetRawTransactionVerbose(txHash)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to get send order info: %v", err)
 		}
-		btcBlockHash, err := s.btcClient.GetBlockHash(int64(order.BtcBlock))
+		blockHash, err := chainhash.NewHashFromStr(tx.BlockHash)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get btc block data, height: %d, err: %v, ", order.BtcBlock, err)
+			return nil, nil, fmt.Errorf("failed to create hash from block hash string: %v", err)
 		}
-		btcBlock, err := s.btcClient.GetBlock(btcBlockHash)
+		btcBlock, err := s.btcClient.GetBlockVerbose(blockHash)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get btc block data, height: %d, err: %v, ", order.BtcBlock, err)
-		}
-		txHashes := make([]string, 0)
-		for _, tx := range btcBlock.Transactions {
-			txHashes = append(txHashes, tx.TxHash().String())
+			return nil, nil, fmt.Errorf("failed to get btc block data, height: %d, err: %v, ", btcBlock.Height, err)
 		}
 
-		merkleRoot, proof, txIndex, err := types.GenerateSPVProof(task.TimelockTxid, txHashes)
+		merkleRoot, proof, txIndex, err := types.GenerateSPVProof(task.TimelockTxid, btcBlock.Tx)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to generate SPV proof: %v", err)
 		}
