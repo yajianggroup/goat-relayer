@@ -454,6 +454,32 @@ func (lis *Layer2Listener) filterEvmEvents(ctx context.Context, hash string) err
 				return err
 			}
 			log.Infof("Successfully handled TimelockInitialized event")
+		case lis.contractTaskManagerAbi.Events["TimelockProcessed"].ID:
+			timelockProcessedEvent := abis.TaskManagerContractTimelockProcessed{}
+			err := lis.contractTaskManagerAbi.UnpackIntoInterface(&timelockProcessedEvent, "TimelockProcessed", vlog.Data)
+			if err != nil {
+				log.Errorf("failed to unpack timelock processed event: %v", err)
+				return err
+			}
+			err = lis.handleTimelockProcessed(ctx, timelockProcessedEvent.TaskId)
+			if err != nil {
+				log.Errorf("failed to handle timelock confirmed ok event: %v", err)
+				return err
+			}
+			log.Infof("Successfully handled TimelockConfirmedOK event")
+		case lis.contractTaskManagerAbi.Events["Burned"].ID:
+			burnedEvent := abis.TaskManagerContractBurned{}
+			err := lis.contractTaskManagerAbi.UnpackIntoInterface(&burnedEvent, "Burned", vlog.Data)
+			if err != nil {
+				log.Errorf("failed to unpack burned event: %v", err)
+				return err
+			}
+			err = lis.handleBurned(ctx, burnedEvent.TaskId)
+			if err != nil {
+				log.Errorf("failed to handle burned event: %v", err)
+				return err
+			}
+			log.Infof("Successfully handled Burned event")
 		default:
 			log.Infof("Unknown event: %v", vlog.Topics)
 		}

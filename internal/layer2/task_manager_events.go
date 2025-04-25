@@ -13,6 +13,32 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+func (lis *Layer2Listener) handleBurned(ctx context.Context, taskId *big.Int) error {
+	log.Infof("Layer2Listener handleTimelockCompleted - Event for taskId: %v", taskId)
+
+	err := lis.state.UpdateSafeboxTaskCompleted(taskId.Uint64())
+	if err != nil {
+		log.Errorf("Layer2Listener handleTimelockCompleted - Failed to update safebox task: %v", err)
+		return err
+	}
+
+	log.Infof("Layer2Listener handleTimelockCompleted - Successfully updated safebox task for taskId: %v", taskId)
+	return nil
+}
+
+func (lis *Layer2Listener) handleTimelockProcessed(ctx context.Context, taskId *big.Int) error {
+	log.Infof("Layer2Listener handleTimelockProcessed - Event for taskId: %v", taskId)
+
+	err := lis.state.UpdateSafeboxTaskProcessed(taskId.Uint64())
+	if err != nil {
+		log.Errorf("Layer2Listener handleTimelockProcessed - Failed to update safebox task: %v", err)
+		return err
+	}
+
+	log.Infof("Layer2Listener handleTimelockProcessed - Successfully updated safebox task for taskId: %v", taskId)
+	return nil
+}
+
 func (lis *Layer2Listener) handleTimelockInitialized(ctx context.Context, taskId *big.Int, timelockTxid []byte, timelockOutIndex uint64) error {
 	log.Infof("Layer2Listener handleTimelockInitialized - Event for taskId: %v", taskId)
 

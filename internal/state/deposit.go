@@ -231,6 +231,50 @@ func (s *State) CreateSafeboxTask(taskId uint64, partnerId string, timelockEndTi
 	return err
 }
 
+func (s *State) UpdateSafeboxTaskCompleted(taskId uint64) error {
+	s.walletMu.Lock()
+	defer s.walletMu.Unlock()
+
+	err := s.dbm.GetWalletDB().Transaction(func(tx *gorm.DB) error {
+		taskDeposit, err := s.queryProcessingSafeboxTaskByTaskId(tx, taskId)
+		if err != nil && err != gorm.ErrRecordNotFound {
+			return err
+		}
+		if err == gorm.ErrRecordNotFound {
+			return fmt.Errorf("task deposit not found")
+		}
+		if taskDeposit.Status != db.TASK_STATUS_PROCESSED && taskDeposit.Status != db.TASK_STATUS_CONFIRMED {
+			return fmt.Errorf("task deposit status is not confirmed_ok or confirmed")
+		}
+		taskDeposit.Status = db.TASK_STATUS_COMPLETED
+		taskDeposit.UpdatedAt = time.Now()
+		return tx.Save(&taskDeposit).Error
+	})
+	return err
+}
+
+func (s *State) UpdateSafeboxTaskProcessed(taskId uint64) error {
+	s.walletMu.Lock()
+	defer s.walletMu.Unlock()
+
+	err := s.dbm.GetWalletDB().Transaction(func(tx *gorm.DB) error {
+		taskDeposit, err := s.queryProcessingSafeboxTaskByTaskId(tx, taskId)
+		if err != nil && err != gorm.ErrRecordNotFound {
+			return err
+		}
+		if err == gorm.ErrRecordNotFound {
+			return fmt.Errorf("task deposit not found")
+		}
+		if taskDeposit.Status != db.TASK_STATUS_INIT_OK && taskDeposit.Status != db.TASK_STATUS_INIT {
+			return fmt.Errorf("task deposit status is not init_ok or init")
+		}
+		taskDeposit.Status = db.TASK_STATUS_PROCESSED
+		taskDeposit.UpdatedAt = time.Now()
+		return tx.Save(&taskDeposit).Error
+	})
+	return err
+}
+
 func (s *State) UpdateSafeboxTaskInitOK(taskId uint64, timelockTxid string, timelockOutIndex uint64) error {
 	s.walletMu.Lock()
 	defer s.walletMu.Unlock()
@@ -509,7 +553,7 @@ func (s *State) queryProcessingSafeboxTaskByTimelockAddress(tx *gorm.DB, timeloc
 		tx = s.dbm.GetWalletDB()
 	}
 	var task db.SafeboxTask
-	status := []string{db.TASK_STATUS_CONFIRMED_OK, db.TASK_STATUS_COMPLETED, db.TASK_STATUS_CLOSED}
+	status := []string{db.TASK_STATUS_PROCESSED, db.TASK_STATUS_COMPLETED, db.TASK_STATUS_CLOSED}
 	err := tx.Where("timelock_address = ? and status NOT IN (?)", timelockAddress, status).First(&task).Error
 	if err != nil {
 		return nil, err
@@ -522,7 +566,7 @@ func (s *State) queryProcessingSafeboxTaskByTaskId(tx *gorm.DB, taskId uint64) (
 		tx = s.dbm.GetWalletDB()
 	}
 	var task db.SafeboxTask
-	status := []string{db.TASK_STATUS_CONFIRMED_OK, db.TASK_STATUS_COMPLETED, db.TASK_STATUS_CLOSED}
+	status := []string{db.TASK_STATUS_PROCESSED, db.TASK_STATUS_COMPLETED, db.TASK_STATUS_CLOSED}
 	err := tx.Where("task_id = ? and status NOT IN (?)", taskId, status).First(&task).Error
 	if err != nil {
 		return nil, err
@@ -535,7 +579,7 @@ func (s *State) queryProcessingSafeboxTaskByEvmAddr(tx *gorm.DB, evmAddr string)
 		tx = s.dbm.GetWalletDB()
 	}
 	var task db.SafeboxTask
-	status := []string{db.TASK_STATUS_CONFIRMED_OK, db.TASK_STATUS_COMPLETED, db.TASK_STATUS_CLOSED}
+	status := []string{db.TASK_STATUS_PROCESSED, db.TASK_STATUS_COMPLETED, db.TASK_STATUS_CLOSED}
 	err := tx.Where("deposit_address = ? and status NOT IN (?)", evmAddr, status).First(&task).Error
 	if err != nil {
 		return nil, err
