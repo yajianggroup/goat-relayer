@@ -270,7 +270,60 @@ func (s *State) UpdateSafeboxTaskProcessed(taskId uint64) error {
 		}
 		taskDeposit.Status = db.TASK_STATUS_PROCESSED
 		taskDeposit.UpdatedAt = time.Now()
-		return tx.Save(&taskDeposit).Error
+		err = tx.Save(&taskDeposit).Error
+		if err != nil {
+			return err
+		}
+
+		orders, err := s.getAllOrdersByTxid(tx, taskDeposit.TimelockTxid)
+		if err != nil {
+			return err
+		}
+		if len(orders) == 0 {
+			return nil
+		}
+
+		// order found
+		for _, order := range orders {
+			// update withdraw status to processed, withdraw always not change if tx id is same
+			err = s.updateWithdrawStatusByOrderId(tx, db.WITHDRAW_STATUS_PROCESSED, order.OrderId)
+			if err != nil {
+				return err
+			}
+			if order.Status != db.ORDER_STATUS_INIT && order.Status != db.ORDER_STATUS_PENDING && order.Status != db.ORDER_STATUS_CONFIRMED {
+				continue
+			}
+
+			order.Status = db.ORDER_STATUS_PROCESSED
+			order.UpdatedAt = time.Now()
+
+			err = s.saveOrder(tx, order)
+			if err != nil {
+				return err
+			}
+			err = s.updateOtherStatusByOrder(tx, order.OrderId, db.ORDER_STATUS_PROCESSED, true)
+			if err != nil {
+				return err
+			}
+			vins, err := s.getVinsByOrderId(tx, order.OrderId)
+			if err != nil {
+				return err
+			}
+			for _, vin := range vins {
+				// update utxo to spent
+				err = s.updateUtxoStatusSpent(tx, vin.Txid, vin.OutIndex, order.BtcBlock)
+				if err != nil {
+					return err
+				}
+			}
+		}
+
+		// not found update by txid
+		err = s.updateOtherStatusByTxid(tx, taskDeposit.TimelockTxid, db.ORDER_STATUS_PROCESSED)
+		if err != nil {
+			return err
+		}
+		return nil
 	})
 	return err
 }
