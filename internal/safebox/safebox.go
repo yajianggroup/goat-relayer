@@ -1,6 +1,7 @@
 package safebox
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -258,12 +259,15 @@ func (s *SafeboxProcessor) BuildUnsignedTx(ctx context.Context, task *db.Safebox
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to create hash from block hash string: %v", err)
 		}
-		btcBlock, err := s.btcClient.GetBlockVerbose(blockHash)
+		btcBlockVerbose, err := s.btcClient.GetBlockVerbose(blockHash)
 		if err != nil {
-			return nil, nil, fmt.Errorf("failed to get btc block data, height: %d, err: %v, ", btcBlock.Height, err)
+			return nil, nil, fmt.Errorf("failed to get btc block data verbose, err: %v", err)
 		}
-
-		merkleRoot, proof, txIndex, err := types.GenerateSPVProof(task.TimelockTxid, btcBlock.Tx)
+		btcBlock, err := s.btcClient.GetBlock(blockHash)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to get btc block data, height: %d, err: %v", btcBlockVerbose.Height, err)
+		}
+		_, proof, txIndex, err := types.GenerateSPVProof(task.TimelockTxid, btcBlockVerbose.Tx)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to generate SPV proof: %v", err)
 		}
@@ -273,8 +277,15 @@ func (s *SafeboxProcessor) BuildUnsignedTx(ctx context.Context, task *db.Safebox
 
 		// The second parameter should be a bytes32 (merkleRoot)
 		// Convert merkleRoot from []byte to [32]byte
-		var merkleRootBytes [32]byte
-		copy(merkleRootBytes[:], merkleRoot[:32])
+		headerBuffer := new(bytes.Buffer)
+		err = btcBlock.Serialize(headerBuffer)
+		if err != nil {
+			log.Errorf("Failed to serialize block header: %v", err)
+			return nil, nil, fmt.Errorf("failed to serialize raw header: %v", err)
+		}
+		headerBytes := headerBuffer.Bytes()
+
+		blockHeight := big.NewInt(btcBlockVerbose.Height)
 
 		// The third parameter should be bytes32[] (proof)
 		// Calculate how many 32-byte chunks are in the proof
@@ -292,15 +303,16 @@ func (s *SafeboxProcessor) BuildUnsignedTx(ctx context.Context, task *db.Safebox
 		txIndexBig := big.NewInt(int64(txIndex))
 
 		// Now pack all parameters for the ABI call
-		input, err = safeBoxAbi.Pack("processTimelockTx", taskIdBig, merkleRootBytes, proofArray, txIndexBig)
+		input, err = safeBoxAbi.Pack("processTimelockTx", taskIdBig, headerBytes, blockHeight, proofArray, txIndexBig)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to pack processTimelockTx input: %v", err)
 		}
 		s.logger.WithFields(log.Fields{
-			"task_id":     task.TaskId,
-			"merkle_root": merkleRootBytes,
-			"proof":       proofArray,
-			"tx_index":    txIndex,
+			"task_id":   task.TaskId,
+			"rawHeader": headerBytes,
+			"height":    blockHeight,
+			"proof":     proofArray,
+			"tx_index":  txIndex,
 		}).Debugf("SafeboxProcessor buildUnsignedTx - Packed input data")
 	default:
 		return nil, nil, fmt.Errorf("invalid task status: %s", task.Status)
