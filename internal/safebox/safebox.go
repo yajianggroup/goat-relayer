@@ -278,7 +278,7 @@ func (s *SafeboxProcessor) BuildUnsignedTx(ctx context.Context, task *db.Safebox
 		// The second parameter should be a bytes32 (merkleRoot)
 		// Convert merkleRoot from []byte to [32]byte
 		headerBuffer := new(bytes.Buffer)
-		err = btcBlock.Serialize(headerBuffer)
+		err = btcBlock.Header.Serialize(headerBuffer)
 		if err != nil {
 			log.Errorf("Failed to serialize block header: %v", err)
 			return nil, nil, fmt.Errorf("failed to serialize raw header: %v", err)
