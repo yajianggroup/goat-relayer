@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/btcsuite/btcd/rpcclient"
-	"github.com/goatnetwork/goat-relayer/internal/config"
 	"github.com/goatnetwork/goat-relayer/internal/db"
 	"github.com/goatnetwork/goat-relayer/internal/p2p"
 	"github.com/goatnetwork/goat-relayer/internal/state"
@@ -19,23 +18,12 @@ type BTCListener struct {
 	notifier *BTCNotifier
 }
 
-func NewBTCListener(libp2p *p2p.LibP2PService, state *state.State, dbm *db.DatabaseManager) *BTCListener {
+func NewBTCListener(libp2p *p2p.LibP2PService, state *state.State, dbm *db.DatabaseManager, btcClient *rpcclient.Client) *BTCListener {
 	db := dbm.GetBtcCacheDB()
 	cache := NewBTCCache(db)
 	poller := NewBTCPoller(state, db)
 
-	connConfig := &rpcclient.ConnConfig{
-		Host:         config.AppConfig.BTCRPC,
-		User:         config.AppConfig.BTCRPC_USER,
-		Pass:         config.AppConfig.BTCRPC_PASS,
-		HTTPPostMode: true,
-		DisableTLS:   true,
-	}
-	client, err := rpcclient.New(connConfig, nil)
-	if err != nil {
-		log.Fatalf("Failed to start bitcoin client: %v", err)
-	}
-	notifier := NewBTCNotifier(client, cache, poller)
+	notifier := NewBTCNotifier(btcClient, cache, poller)
 
 	return &BTCListener{
 		libp2p:   libp2p,

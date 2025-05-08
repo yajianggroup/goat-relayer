@@ -7,6 +7,7 @@ import (
 	"sync"
 	"syscall"
 
+	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/goatnetwork/goat-relayer/internal/bls"
 	"github.com/goatnetwork/goat-relayer/internal/btc"
 	"github.com/goatnetwork/goat-relayer/internal/config"
@@ -15,6 +16,7 @@ import (
 	"github.com/goatnetwork/goat-relayer/internal/layer2"
 	"github.com/goatnetwork/goat-relayer/internal/p2p"
 	"github.com/goatnetwork/goat-relayer/internal/rpc"
+	"github.com/goatnetwork/goat-relayer/internal/safebox"
 	"github.com/goatnetwork/goat-relayer/internal/state"
 	"github.com/goatnetwork/goat-relayer/internal/voter"
 	"github.com/goatnetwork/goat-relayer/internal/wallet"
@@ -22,30 +24,43 @@ import (
 )
 
 type Application struct {
-	DatabaseManager *db.DatabaseManager
-	State           *state.State
-	Signer          *bls.Signer
-	Layer2Listener  *layer2.Layer2Listener
-	HTTPServer      *http.HTTPServer
-	LibP2PService   *p2p.LibP2PService
-	BTCListener     *btc.BTCListener
-	UTXOService     *rpc.UtxoServer
-	WalletService   *wallet.WalletServer
-	VoterProcessor  *voter.VoterProcessor
+	DatabaseManager  *db.DatabaseManager
+	State            *state.State
+	Signer           *bls.Signer
+	Layer2Listener   *layer2.Layer2Listener
+	HTTPServer       *http.HTTPServer
+	LibP2PService    *p2p.LibP2PService
+	BTCListener      *btc.BTCListener
+	UTXOService      *rpc.UtxoServer
+	WalletService    *wallet.WalletServer
+	VoterProcessor   *voter.VoterProcessor
+	SafeboxProcessor *safebox.SafeboxProcessor
 }
 
 func NewApplication() *Application {
 	config.InitConfig()
+	// create bitcoin client using btc module connection
+	connConfig := &rpcclient.ConnConfig{
+		Host:         config.AppConfig.BTCRPC,
+		User:         config.AppConfig.BTCRPC_USER,
+		Pass:         config.AppConfig.BTCRPC_PASS,
+		HTTPPostMode: true,
+		DisableTLS:   true,
+	}
+	btcClient, err := rpcclient.New(connConfig, nil)
+	if err != nil {
+		log.Fatalf("Failed to start bitcoin client: %v", err)
+	}
 
 	dbm := db.NewDatabaseManager()
 	state := state.InitializeState(dbm)
 	libP2PService := p2p.NewLibP2PService(state)
 	layer2Listener := layer2.NewLayer2Listener(libP2PService, state, dbm)
-	signer := bls.NewSigner(libP2PService, layer2Listener, state)
+	signer := bls.NewSigner(libP2PService, layer2Listener, state, btcClient)
 	httpServer := http.NewHTTPServer(libP2PService, state, dbm)
-	btcListener := btc.NewBTCListener(libP2PService, state, dbm)
+	btcListener := btc.NewBTCListener(libP2PService, state, dbm, btcClient)
 	utxoService := rpc.NewUtxoServer(state, layer2Listener)
-	walletService := wallet.NewWalletServer(libP2PService, state, signer)
+	walletService := wallet.NewWalletServer(libP2PService, state, signer, btcClient)
 	voterProcessor := voter.NewVoterProcessor(libP2PService, state, signer)
 
 	return &Application{

@@ -78,7 +78,7 @@ func (w *WalletServer) processBlock(btcBlock types.BtcBlockExt, doneCh chan stru
 		// isVin means it will save to vin|vout table
 
 		isUtxo, isVin := false, false
-		isWithdrawl, isDeposit, isConsolidation := false, false, false
+		isWithdrawl, isSafebox, isDeposit, isConsolidation := false, false, false, false
 
 		// query db send order to check isWithdrawl, isConsolidation
 		sendOrder, err := w.state.GetSendOrderByTxIdOrExternalId(tx.TxID())
@@ -91,6 +91,9 @@ func (w *WalletServer) processBlock(btcBlock types.BtcBlockExt, doneCh chan stru
 			}
 			if sendOrder.OrderType == db.ORDER_TYPE_CONSOLIDATION {
 				isConsolidation = true
+			}
+			if sendOrder.OrderType == db.ORDER_TYPE_SAFEBOX {
+				isSafebox = true
 			}
 		}
 
@@ -270,7 +273,7 @@ func (w *WalletServer) processBlock(btcBlock types.BtcBlockExt, doneCh chan stru
 		}
 
 		// Note, if isUtxo && isVin, it is withdrawal||consolidation with change out to self
-		if isWithdrawl || isConsolidation {
+		if isWithdrawl || isSafebox || isConsolidation {
 			log.Debugf("Update send order confirmed, txid: %s", tx.TxID())
 			err = w.state.UpdateSendOrderConfirmed(tx.TxID(), btcBlock.BlockNumber)
 			if err != nil {

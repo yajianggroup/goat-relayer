@@ -150,17 +150,20 @@ func ConsolidateUTXOsByCount(utxos []*db.Utxo, networkFee int64, maxVin, trigerN
 //	selectedUtxos - selected utxos for withdrawal
 //	totalSelectedAmount - total amount of selected utxos
 //	withdrawAmount - total amount to withdraw (not minus tx fee yet)
+//	externalAmount - use to select sufficient utxos for customized transaction
 //	changeAmount - change amount after withdrawal
 //	estimatedFee - estimate fee
 //	witnessSize - witness size
 //	error - error if any
-func SelectOptimalUTXOs(utxos []*db.Utxo, receiverTypes []string, withdrawAmount, networkFee int64, withdrawTotal int) ([]*db.Utxo, int64, int64, int64, float64, int64, error) {
+func SelectOptimalUTXOs(utxos []*db.Utxo, receiverTypes []string, withdrawAmount, externalAmount, networkFee int64, withdrawTotal int) ([]*db.Utxo, int64, int64, int64, float64, int64, error) {
 	var selectedUTXOs []*db.Utxo
 	var totalSelectedAmount int64 = 0
 	var witnessSize int64 = 0
 	var txSize float64 = 0
 	var maxVin int = 10
-	if withdrawAmount > 50*1e8 {
+
+	requiredAmount := withdrawAmount + externalAmount
+	if requiredAmount > 50*1e8 {
 		// max vin is 50 for large amount than 50 BTC
 		maxVin = 50
 	}
@@ -177,10 +180,10 @@ func SelectOptimalUTXOs(utxos []*db.Utxo, receiverTypes []string, withdrawAmount
 
 	found := false
 
-	// try to find a utxo or two utxos combination that just meets withdrawAmount
+	// try to find a utxo or two utxos combination that just meets requiredAmount
 	for i := 0; i < len(utxos); i++ {
-		// if current utxo amount is greater than or equal to withdrawAmount, directly select it
-		if utxos[i].Amount >= withdrawAmount {
+		// if current utxo amount is greater than or equal to requiredAmount, directly select it
+		if utxos[i].Amount >= requiredAmount {
 			selectedUTXOs = []*db.Utxo{utxos[i]}
 			totalSelectedAmount = utxos[i].Amount
 			utxoTypes = []string{utxos[i].ReceiverType}
@@ -189,11 +192,11 @@ func SelectOptimalUTXOs(utxos []*db.Utxo, receiverTypes []string, withdrawAmount
 			break
 		}
 	}
-	// try to find two utxos combination that just meets withdrawAmount
+	// try to find two utxos combination that just meets requiredAmount
 	if !found {
-		// if two utxos amount is greater than or equal to withdrawAmount, select them
+		// if two utxos amount is greater than or equal to requiredAmount, select them
 		for i := 1; i < len(utxos); i++ {
-			if utxos[i-1].Amount+utxos[i].Amount >= withdrawAmount {
+			if utxos[i-1].Amount+utxos[i].Amount >= requiredAmount {
 				selectedUTXOs = []*db.Utxo{utxos[i-1], utxos[i]}
 				totalSelectedAmount = utxos[i-1].Amount + utxos[i].Amount
 				utxoTypes = []string{utxos[i-1].ReceiverType, utxos[i].ReceiverType}
@@ -207,7 +210,7 @@ func SelectOptimalUTXOs(utxos []*db.Utxo, receiverTypes []string, withdrawAmount
 	if found {
 		txSize, witnessSize = types.TransactionSizeEstimateV2(len(selectedUTXOs), receiverTypes, withdrawTotal, utxoTypes)
 		estimatedFee = txSize * float64(networkFee)
-		// totalTarget = withdrawAmount + estimatedFee // not used, fee should minus from withdraw txout value
+		// totalTarget = requiredAmount + estimatedFee // not used, fee should minus from withdraw txout value
 	} else {
 		// if not found a suitable utxo or combination, accumulate utxos by amount from large to small
 		sort.Slice(utxos, func(i, j int) bool {
@@ -216,7 +219,7 @@ func SelectOptimalUTXOs(utxos []*db.Utxo, receiverTypes []string, withdrawAmount
 
 		// accumulate utxos by amount from large to small until totalTarget is met
 		for _, utxo := range utxos {
-			if totalSelectedAmount >= withdrawAmount {
+			if totalSelectedAmount >= requiredAmount {
 				break
 			}
 			selectedUTXOs = append(selectedUTXOs, utxo)
@@ -227,8 +230,8 @@ func SelectOptimalUTXOs(utxos []*db.Utxo, receiverTypes []string, withdrawAmount
 			txSize, witnessSize = types.TransactionSizeEstimateV2(len(selectedUTXOs), receiverTypes, withdrawTotal, utxoTypes)
 			estimatedFee = txSize * float64(networkFee)
 
-			// recalculate totalTarget (withdrawAmount + estimatedFee)
-			// totalTarget = withdrawAmount + estimatedFee // not used, fee should minus from withdraw txout value
+			// recalculate totalTarget (requiredAmount + estimatedFee)
+			// totalTarget = requiredAmount + estimatedFee // not used, fee should minus from withdraw txout value
 
 			// limit max vin
 			if len(selectedUTXOs) >= maxVin {
@@ -253,14 +256,13 @@ func SelectOptimalUTXOs(utxos []*db.Utxo, receiverTypes []string, withdrawAmount
 		}
 
 		// if find a smaller utxo, update the smallest utxo
-		if smallestUTXO == nil || utxo.Amount < smallestUTXO.Amount {
+		if utxo.Amount > networkFee*(296+31) && (smallestUTXO == nil || utxo.Amount < smallestUTXO.Amount) {
 			smallestUTXO = utxo
 		}
 	}
 
 	// append the smallest utxo
 	if smallestUTXO != nil && smallestUTXO.Amount > 0 &&
-		smallestUTXO.Amount > networkFee*(296+31) &&
 		smallestUTXO.Amount < types.SMALL_UTXO_DEFINE {
 		selectedUTXOs = append(selectedUTXOs, smallestUTXO)
 		totalSelectedAmount += smallestUTXO.Amount
@@ -271,11 +273,11 @@ func SelectOptimalUTXOs(utxos []*db.Utxo, receiverTypes []string, withdrawAmount
 		estimatedFee = txSize * float64(networkFee)
 
 		// recalculate the total target (withdraw amount + estimated fee)
-		// totalTarget = withdrawAmount + estimatedFee // not used, fee should minus from withdraw txout value
+		// totalTarget = requiredAmount + estimatedFee // not used, fee should minus from withdraw txout value
 	}
 
 	// after selecting, check if we have enough UTXO to cover the total target
-	if totalSelectedAmount < withdrawAmount {
+	if totalSelectedAmount < requiredAmount {
 		return nil, 0, 0, 0, estimatedFee, 0, fmt.Errorf("not enough utxos to satisfy the withdrawal amount and network fee, withdraw amount: %d, selected amount: %d, estimated fee: %f", withdrawAmount, totalSelectedAmount, estimatedFee)
 	}
 
@@ -391,6 +393,33 @@ func SelectWithdrawals(withdrawals []*db.Withdraw, networkFee types.BtcNetworkFe
 	return nil, nil, 0, 0, fmt.Errorf("no withdrawals found that meet the conditions")
 }
 
+// SelectSafeboxTxs select optimal safebox txs for safebox tx
+//
+// Parameters:
+//
+//	withdrawals - all withdrawals can start
+//	networkFee - network fee
+
+func SelectSafeboxTasks(tasks []*db.SafeboxTask, networkFee types.BtcNetworkFee, maxVout, immediateCount int, net *chaincfg.Params) ([]*db.SafeboxTask, []string, int64, int64, error) {
+	if networkFee.HalfHourFee > uint64(config.AppConfig.BTCMaxNetworkFee) {
+		return nil, nil, 0, 0, fmt.Errorf("network fee is too high, cannot generate safebox timelock tx")
+	}
+
+	// sort safebox tasks by deadline in ascending order
+	sort.Slice(tasks, func(i, j int) bool {
+		return tasks[i].Deadline < tasks[j].Deadline
+	})
+
+	selectedTasks := tasks[:immediateCount]
+	receiverTypes := make([]string, len(selectedTasks))
+	withdrawAmount := int64(0)
+	for i, task := range selectedTasks {
+		receiverTypes[i], _ = types.GetAddressType(task.TimelockAddress, net)
+		withdrawAmount += int64(task.Amount)
+	}
+	return selectedTasks, receiverTypes, withdrawAmount, int64(networkFee.HalfHourFee), nil
+}
+
 // CreateRawTransaction create raw transaction
 //
 // Parameters:
@@ -409,6 +438,7 @@ func SelectWithdrawals(withdrawals []*db.Withdraw, networkFee types.BtcNetworkFe
 func CreateRawTransaction(
 	utxos []*db.Utxo,
 	withdrawals []*db.Withdraw,
+	tasks []*db.SafeboxTask,
 	changeAddress string,
 	changeAmount int64,
 	estimatedFee float64,
@@ -461,6 +491,18 @@ func CreateRawTransaction(
 		// re-set TxFee field
 		withdrawal.TxFee = withdrawal.Amount - uint64(val)
 		tx.AddTxOut(wire.NewTxOut(val, pkScript))
+	}
+
+	for _, task := range tasks {
+		addr, err := btcutil.DecodeAddress(task.TimelockAddress, net)
+		if err != nil {
+			return nil, 0, 0, err
+		}
+		pkScript, err := txscript.PayToAddrScript(addr)
+		if err != nil {
+			return nil, 0, 0, err
+		}
+		tx.AddTxOut(wire.NewTxOut(int64(task.Amount), pkScript))
 	}
 
 	val := int64(changeAmount) - changeFee

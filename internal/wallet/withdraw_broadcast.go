@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -227,7 +226,27 @@ func (c *FireblocksClient) CheckPending(txid string, externalTxId string, update
 			if rpcErr, ok := err.(*btcjson.RPCError); ok {
 				switch rpcErr.Code {
 				case btcjson.ErrRPCTxAlreadyInChain:
-					return false, 0, 0, nil
+					txHash, err := chainhash.NewHashFromStr(txid)
+					if err != nil {
+						return false, 0, 0, fmt.Errorf("new hash from str error: %v, raw txid: %s", err, txid)
+					}
+
+					txRawResult, err := c.btcRpc.GetRawTransactionVerbose(txHash)
+					if err != nil {
+						return false, 0, 0, fmt.Errorf("get raw transaction verbose error: %v, raw txid: %s", err, txid)
+					}
+
+					blockHash, err := chainhash.NewHashFromStr(txRawResult.BlockHash)
+					if err != nil {
+						return false, 0, 0, fmt.Errorf("get block hash error: %v, raw block hash: %s", err, txRawResult.BlockHash)
+					}
+
+					// query block
+					block, err := c.btcRpc.GetBlockVerbose(blockHash)
+					if err != nil {
+						return false, 0, 0, fmt.Errorf("get block verbose error: %v, block hash: %s", err, blockHash.String())
+					}
+					return false, uint64(block.Confirmations), uint64(block.Height), nil
 				case btcjson.ErrRPCVerifyRejected:
 					if strings.Contains(rpcErr.Message, "mandatory-script-verify-flag-failed") {
 						log.Warnf("Transaction signature verification failed, reverting for re-signing: %v, txid: %s", rpcErr, txid)
@@ -243,12 +262,28 @@ func (c *FireblocksClient) CheckPending(txid string, externalTxId string, update
 		return false, 0, 0, nil
 	}
 
-	blockHeight, err = strconv.ParseUint(txDetails.BlockInfo.BlockHeight, 10, 64)
+	txHash, err := chainhash.NewHashFromStr(txid)
 	if err != nil {
-		return false, 0, 0, fmt.Errorf("parse block height error: %v, txid: %s", err, txid)
+		return false, 0, 0, fmt.Errorf("new hash from str error: %v, raw txid: %s", err, txid)
 	}
 
-	return false, uint64(txDetails.NumOfConfirmations), blockHeight, nil
+	txRawResult, err := c.btcRpc.GetRawTransactionVerbose(txHash)
+	if err != nil {
+		return false, 0, 0, fmt.Errorf("get raw transaction verbose error: %v, raw txid: %s", err, txid)
+	}
+
+	blockHash, err := chainhash.NewHashFromStr(txRawResult.BlockHash)
+	if err != nil {
+		return false, 0, 0, fmt.Errorf("get block hash error: %v, raw block hash: %s", err, txRawResult.BlockHash)
+	}
+
+	// query block
+	block, err := c.btcRpc.GetBlockVerbose(blockHash)
+	if err != nil {
+		return false, 0, 0, fmt.Errorf("get block verbose error: %v, block hash: %s", err, blockHash.String())
+	}
+
+	return false, uint64(block.Confirmations), uint64(block.Height), nil
 }
 
 func NewOrderBroadcaster(btcClient *rpcclient.Client, state *state.State) OrderBroadcaster {
