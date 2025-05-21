@@ -21,6 +21,7 @@ import (
 const (
 	CONSOLIDATION_TRIGGER_COUNT  = 100
 	CONSOLIDATION_MAX_VIN        = 500
+	CONSOLIDATION_THRESHOLD      = 50000000
 	WITHDRAW_IMMEDIATE_COUNT     = 32
 	WITHDRAW_MAX_VOUT            = 32
 	SAFEBOX_TASK_MAX_VOUT        = 1
@@ -244,7 +245,7 @@ func (w *WalletServer) initWithdrawSig() {
 		// consolidation fee is always half hour fee
 		consolidationFee := networkFee.HalfHourFee
 
-		selectedUtxos, totalAmount, finalAmount, witnessSize, err := ConsolidateUTXOsByCount(utxos, int64(consolidationFee), CONSOLIDATION_MAX_VIN, CONSOLIDATION_TRIGGER_COUNT)
+		selectedUtxos, totalAmount, finalAmount, witnessSize, err := ConsolidateUTXOsByCount(utxos, int64(consolidationFee), CONSOLIDATION_THRESHOLD, CONSOLIDATION_MAX_VIN, CONSOLIDATION_TRIGGER_COUNT)
 		if err != nil {
 			log.Errorf("WalletServer initWithdrawSig ConsolidateUTXOsByCount error: %v", err)
 			return
