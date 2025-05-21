@@ -93,7 +93,23 @@ func ConsolidateSmallUTXOs(utxos []*db.Utxo, networkFee, threshold int64, maxVin
 }
 
 // ConsolidateUTXOsByCount consolidate utxos by count
-func ConsolidateUTXOsByCount(utxos []*db.Utxo, networkFee int64, maxVin, trigerNum int) (selectedUTXOs []*db.Utxo, totalAmount int64, finalAmount int64, witnessSize int64, err error) {
+//
+// Parameters:
+//
+//	utxos - all unspent utxos
+//	networkFee - network fee
+//	threshold - threshold for small utxos
+//	maxVin - maximum vin count
+//	trigerNum - minimum small utxo
+//
+// Returns:
+//
+//	selectedUtxos - selected utxos for consolidation
+//	totalAmount - total amount of selected utxos
+//	finalAmount - final amount after consolidation, after deducting the network fee
+//	witnessSize - witness size
+//	error - error if any
+func ConsolidateUTXOsByCount(utxos []*db.Utxo, networkFee, threshold int64, maxVin, trigerNum int) (selectedUTXOs []*db.Utxo, totalAmount int64, finalAmount int64, witnessSize int64, err error) {
 	if networkFee > int64(config.AppConfig.BTCMaxNetworkFee) {
 		return nil, 0, 0, 0, fmt.Errorf("network fee is too high, cannot consolidate")
 	}
@@ -106,8 +122,10 @@ func ConsolidateUTXOsByCount(utxos []*db.Utxo, networkFee int64, maxVin, trigerN
 		if utxo.ReceiverType != types.WALLET_TYPE_P2WPKH && utxo.ReceiverType != types.WALLET_TYPE_P2WSH && utxo.ReceiverType != types.WALLET_TYPE_P2PKH {
 			continue
 		}
-		selectedUTXOs = append(selectedUTXOs, utxo)
-		totalAmount += utxo.Amount
+		if utxo.Amount < threshold {
+			selectedUTXOs = append(selectedUTXOs, utxo)
+			totalAmount += utxo.Amount
+		}
 		// vin count limit
 		if len(selectedUTXOs) >= maxVin {
 			break
