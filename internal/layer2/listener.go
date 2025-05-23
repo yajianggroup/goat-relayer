@@ -39,6 +39,8 @@ import (
 	authtx "github.com/cosmos/cosmos-sdk/x/auth/tx"
 	authtypes "github.com/cosmos/cosmos-sdk/x/auth/types"
 
+	"bytes"
+
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/goatnetwork/goat-relayer/internal/tss"
 )
@@ -286,11 +288,11 @@ func (lis *Layer2Listener) listenConsensusEvents(ctx context.Context) {
 			}
 
 			layer2Info := lis.state.GetL2Info()
-			if len(layer2Info.DepositMagic) == 0 || layer2Info.MinDepositAmount == 1 {
-				paramsResp, err := lis.QueryParams(ctx)
-				if err != nil || paramsResp.Params.MinDepositAmount == 0 || len(paramsResp.Params.DepositMagicPrefix) == 0 {
-					log.Fatalf("Failed to query params: %v", err)
-				}
+			paramsResp, err := lis.QueryParams(ctx)
+			if err != nil || paramsResp.Params.MinDepositAmount == 0 || len(paramsResp.Params.DepositMagicPrefix) == 0 {
+				log.Fatalf("Failed to query params: %v", err)
+			}
+			if layer2Info.MinDepositAmount != paramsResp.Params.MinDepositAmount || !bytes.Equal(layer2Info.DepositMagic, paramsResp.Params.DepositMagicPrefix) {
 				err = lis.processParams(paramsResp.Params)
 				if err != nil {
 					log.Fatalf("Failed to process params: %v", err)
