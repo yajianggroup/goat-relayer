@@ -18,6 +18,7 @@ import (
 	"github.com/goatnetwork/goat-relayer/internal/config"
 	"github.com/goatnetwork/goat-relayer/internal/db"
 	"github.com/goatnetwork/goat-relayer/internal/types"
+	bitcointypes "github.com/goatnetwork/goat/x/bitcoin/types"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -543,8 +544,14 @@ func CreateRawTransaction(
 	if err != nil {
 		return nil, 0, 0, err
 	}
+	txSize := len(noWitnessTx)
+	// tx size should be smaller than MaxAllowedBtcTxSize in consensus
+	if txSize < bitcointypes.MinBtcTxSize || txSize > bitcointypes.MaxAllowedBtcTxSize {
+		return nil, 0, 0, fmt.Errorf("invalid non-witness tx size, tx size: %d", txSize)
+	}
+
 	// recaulate real tx price and compare with user fee
-	actualTxPrice := float64(estimatedFee) / (float64(len(noWitnessTx)) + float64(witnessSize)/4)
+	actualTxPrice := float64(estimatedFee) / (float64(txSize) + float64(witnessSize)/4)
 
 	for _, withdrawal := range withdrawals {
 		if actualTxPrice > float64(withdrawal.TxPrice) {
