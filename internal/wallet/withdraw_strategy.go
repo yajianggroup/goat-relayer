@@ -22,6 +22,66 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// TransactionError defines transaction error type
+type TransactionError struct {
+	Code    TransactionErrorCode
+	Message string
+	Err     error
+}
+
+// TransactionErrorCode defines error codes
+type TransactionErrorCode int
+
+const (
+	// Basic errors
+	ErrInvalidUTXO TransactionErrorCode = iota + 1
+	ErrInvalidAddress
+	ErrInvalidScript
+
+	// Amount related errors
+	ErrDustAmount
+	ErrInsufficientFee
+	ErrExcessiveFee
+
+	// Transaction size related errors
+	ErrInvalidTxSize
+	ErrTxTooLarge
+
+	// Fee related errors
+	ErrTxPriceTooHigh
+	ErrFeeTooHigh
+)
+
+// Implements error interface
+func (e *TransactionError) Error() string {
+	if e.Err != nil {
+		return fmt.Sprintf("%s: %v", e.Message, e.Err)
+	}
+	return e.Message
+}
+
+// TransactionParams defines transaction parameters structure
+type TransactionParams struct {
+	UTXOs          []*db.Utxo
+	Withdrawals    []*db.Withdraw
+	Tasks          []*db.SafeboxTask
+	ChangeAddress  string
+	ChangeAmount   int64
+	EstimatedFee   float64
+	WitnessSize    int64
+	NetworkFee     int64
+	Net            *chaincfg.Params
+	UtxoAmount     int64
+	WithdrawAmount int64
+}
+
+// TransactionResult defines transaction result structure
+type TransactionResult struct {
+	Tx           *wire.MsgTx
+	ActualFee    uint64
+	DustWithdraw uint
+}
+
 // ConsolidateSmallUTXOs consolidate small utxos
 //
 // Parameters:
@@ -439,126 +499,254 @@ func SelectSafeboxTasks(tasks []*db.SafeboxTask, networkFee types.BtcNetworkFee,
 	return selectedTasks, receiverTypes, withdrawAmount, int64(networkFee.HalfHourFee), nil
 }
 
-// CreateRawTransaction create raw transaction
-//
-// Parameters:
-//
-//	utxos - all unspent utxos
-//	withdrawals - all withdrawals
-//	changeAddress - change address
-//	changeAmount - change amount
-//	net - bitcoin network
-//
-// Returns:
-//
-//	tx - raw transaction
-//	dustWithdraw - value lower than dust limit withdraw id
-//	error - error if any
-func CreateRawTransaction(
-	utxos []*db.Utxo,
-	withdrawals []*db.Withdraw,
-	tasks []*db.SafeboxTask,
-	changeAddress string,
-	changeAmount int64,
-	estimatedFee float64,
-	witnessSize int64,
-	networkFee int64,
-	net *chaincfg.Params) (*wire.MsgTx, uint64, uint, error) {
-	tx := wire.NewMsgTx(wire.TxVersion)
+// createBaseTransaction
+func createBaseTransaction() *wire.MsgTx {
+	return wire.NewMsgTx(wire.TxVersion)
+}
 
-	// add utxos as transaction inputs
+// addTransactionInputs
+func addTransactionInputs(tx *wire.MsgTx, utxos []*db.Utxo) error {
 	for _, utxo := range utxos {
 		hash, err := chainhash.NewHashFromStr(utxo.Txid)
 		if err != nil {
-			return nil, 0, 0, err
+			return &TransactionError{
+				Code:    ErrInvalidUTXO,
+				Message: fmt.Sprintf("invalid UTXO txid: %s", utxo.Txid),
+				Err:     err,
+			}
 		}
 		outPoint := wire.NewOutPoint(hash, uint32(utxo.OutIndex))
 		txIn := wire.NewTxIn(outPoint, nil, nil)
 		txIn.Sequence = 0xffffff01
 		tx.AddTxIn(txIn)
 	}
+	return nil
+}
 
-	// actual fee for withdraw
+// calculateFees calculates transaction fees
+func calculateFees(params *TransactionParams) (int64, int64, error) {
 	actualFee := int64(0)
 	changeFee := int64(0)
-	if len(withdrawals) > 0 {
-		totalTxout := len(withdrawals)
+
+	if len(params.Withdrawals) > 0 {
+		totalTxout := len(params.Withdrawals)
 		// NOTE: not to share fee with change output
 		// if changeAmount > 0 {
 		// 	totalTxout++
 		// }
-		actualFee = int64(math.Ceil(estimatedFee / float64(totalTxout)))
+		actualFee = int64(math.Ceil(params.EstimatedFee / float64(totalTxout)))
 	} else {
-		// no withdrawals, use estimated fee for consolidation
-		changeFee = int64(math.Ceil(estimatedFee))
+		changeFee = int64(math.Ceil(params.EstimatedFee))
 	}
 
-	// add outputs (withdrawals)
-	for _, withdrawal := range withdrawals {
-		addr, err := btcutil.DecodeAddress(withdrawal.To, net)
+	return actualFee, changeFee, nil
+}
+
+// addTransactionOutputs adds transaction outputs
+func addTransactionOutputs(tx *wire.MsgTx, params *TransactionParams, actualFee, changeFee int64) error {
+	// Add withdrawal outputs
+	for _, withdrawal := range params.Withdrawals {
+		addr, err := btcutil.DecodeAddress(withdrawal.To, params.Net)
 		if err != nil {
-			return nil, 0, 0, err
+			return &TransactionError{
+				Code:    ErrInvalidAddress,
+				Message: fmt.Sprintf("invalid withdrawal address: %s", withdrawal.To),
+				Err:     err,
+			}
 		}
 		pkScript, err := txscript.PayToAddrScript(addr)
 		if err != nil {
-			return nil, 0, 0, err
+			return &TransactionError{
+				Code:    ErrInvalidScript,
+				Message: "failed to create payment script",
+				Err:     err,
+			}
 		}
 		val := int64(withdrawal.Amount) - actualFee
-		if val <= types.GetDustAmount(networkFee) {
-			return nil, 0, withdrawal.ID, fmt.Errorf("withdrawal amount too small after fee deduction: %d", val)
+		if val <= types.GetDustAmount(params.NetworkFee) {
+			return &TransactionError{
+				Code:    ErrDustAmount,
+				Message: fmt.Sprintf("withdrawal amount too small after fee deduction: %d", val),
+			}
 		}
-		// re-set TxFee field
 		withdrawal.TxFee = withdrawal.Amount - uint64(val)
 		tx.AddTxOut(wire.NewTxOut(val, pkScript))
 	}
 
-	for _, task := range tasks {
-		addr, err := btcutil.DecodeAddress(task.TimelockAddress, net)
+	// Add safebox task outputs
+	for _, task := range params.Tasks {
+		addr, err := btcutil.DecodeAddress(task.TimelockAddress, params.Net)
 		if err != nil {
-			return nil, 0, 0, err
+			return &TransactionError{
+				Code:    ErrInvalidAddress,
+				Message: fmt.Sprintf("invalid timelock address: %s", task.TimelockAddress),
+				Err:     err,
+			}
 		}
 		pkScript, err := txscript.PayToAddrScript(addr)
 		if err != nil {
-			return nil, 0, 0, err
+			return &TransactionError{
+				Code:    ErrInvalidScript,
+				Message: "failed to create payment script",
+				Err:     err,
+			}
 		}
 		tx.AddTxOut(wire.NewTxOut(int64(task.Amount), pkScript))
 	}
 
-	val := int64(changeAmount) - changeFee
-	// add change output
+	// Add change output
+	val := int64(params.ChangeAmount) - changeFee
 	if val > 0 {
-		changeAddr, err := btcutil.DecodeAddress(changeAddress, net)
+		changeAddr, err := btcutil.DecodeAddress(params.ChangeAddress, params.Net)
 		if err != nil {
-			return nil, 0, 0, err
+			return &TransactionError{
+				Code:    ErrInvalidAddress,
+				Message: fmt.Sprintf("invalid change address: %s", params.ChangeAddress),
+				Err:     err,
+			}
 		}
 		changePkScript, err := txscript.PayToAddrScript(changeAddr)
 		if err != nil {
-			return nil, 0, 0, err
+			return &TransactionError{
+				Code:    ErrInvalidScript,
+				Message: "failed to create change script",
+				Err:     err,
+			}
 		}
-		if val <= types.GetDustAmount(networkFee) {
-			return nil, 0, 0, fmt.Errorf("change amount too small after fee deduction: %d", val)
+		if val <= types.GetDustAmount(params.NetworkFee) {
+			return &TransactionError{
+				Code:    ErrDustAmount,
+				Message: fmt.Sprintf("change amount too small after fee deduction: %d", val),
+			}
 		}
 		tx.AddTxOut(wire.NewTxOut(val, changePkScript))
 	}
+
+	return nil
+}
+
+// validateTransactionSize validates transaction size
+func validateTransactionSize(tx *wire.MsgTx) error {
 	noWitnessTx, err := types.SerializeTransactionNoWitness(tx)
 	if err != nil {
-		return nil, 0, 0, err
-	}
-	txSize := len(noWitnessTx)
-	// tx size should be smaller than MaxAllowedBtcTxSize in consensus
-	if txSize < bitcointypes.MinBtcTxSize || txSize > bitcointypes.MaxAllowedBtcTxSize {
-		return nil, 0, 0, fmt.Errorf("invalid non-witness tx size, tx size: %d", txSize)
-	}
-
-	// recaulate real tx price and compare with user fee
-	actualTxPrice := float64(estimatedFee) / (float64(txSize) + float64(witnessSize)/4)
-
-	for _, withdrawal := range withdrawals {
-		if actualTxPrice > float64(withdrawal.TxPrice) {
-			return nil, 0, 0, fmt.Errorf("actual tx price is higher than withdrawal tx price, withdrawal id: %d, %f > %d", withdrawal.ID, actualTxPrice, withdrawal.TxPrice)
+		return &TransactionError{
+			Code:    ErrInvalidTxSize,
+			Message: "failed to serialize transaction",
+			Err:     err,
 		}
 	}
-	return tx, uint64(actualFee), 0, nil
+	txSize := len(noWitnessTx)
+	if txSize < bitcointypes.MinBtcTxSize || txSize > bitcointypes.MaxAllowedBtcTxSize {
+		return &TransactionError{
+			Code:    ErrTxTooLarge,
+			Message: fmt.Sprintf("invalid non-witness tx size: %d", txSize),
+		}
+	}
+	return nil
+}
+
+// validateTransactionFees validates transaction fees
+func validateTransactionFees(tx *wire.MsgTx, params *TransactionParams, actualFee int64) error {
+	noWitnessTx, _ := types.SerializeTransactionNoWitness(tx)
+	txSize := len(noWitnessTx)
+	actualTxPrice := float64(params.EstimatedFee) / (float64(txSize) + float64(params.WitnessSize)/4)
+
+	for _, withdrawal := range params.Withdrawals {
+		if actualTxPrice > float64(withdrawal.TxPrice) {
+			return &TransactionError{
+				Code: ErrTxPriceTooHigh,
+				Message: fmt.Sprintf("actual tx price is higher than withdrawal tx price, withdrawal id: %d, %f > %d",
+					withdrawal.ID, actualTxPrice, withdrawal.TxPrice),
+			}
+		}
+	}
+	return nil
+}
+
+// HandleTransactionError handles transaction errors
+func HandleTransactionError(params *TransactionParams, err error) (*wire.MsgTx, uint64, uint, error) {
+	if txErr, ok := err.(*TransactionError); ok {
+		switch txErr.Code {
+		case ErrDustAmount:
+			return handleDustAmountError(params, txErr)
+		case ErrTxPriceTooHigh:
+			return handleTxPriceError(params, txErr)
+		case ErrTxTooLarge:
+			return handleTxSizeError(params, txErr)
+		}
+	}
+	return nil, 0, 0, err
+}
+
+// handleDustAmountError handles dust amount errors
+func handleDustAmountError(params *TransactionParams, err *TransactionError) (*wire.MsgTx, uint64, uint, error) {
+	// Adjust change amount
+	params.ChangeAmount = types.GetDustAmount(params.NetworkFee) + 1
+	return CreateRawTransaction(params)
+}
+
+// handleTxPriceError handles transaction price errors
+func handleTxPriceError(params *TransactionParams, err *TransactionError) (*wire.MsgTx, uint64, uint, error) {
+	// Increase fee
+	params.EstimatedFee = params.EstimatedFee * 1.1
+	return CreateRawTransaction(params)
+}
+
+// handleTxSizeError handles transaction size errors
+func handleTxSizeError(params *TransactionParams, err *TransactionError) (*wire.MsgTx, uint64, uint, error) {
+	// Reduce UTXO count
+	if len(params.UTXOs) > 1 {
+		params.UTXOs = params.UTXOs[:len(params.UTXOs)-1]
+	}
+	return CreateRawTransaction(params)
+}
+
+// CreateRawTransaction creates raw transaction
+func CreateRawTransaction(params *TransactionParams) (*wire.MsgTx, uint64, uint, error) {
+	result, err := createTransaction(params)
+	if err != nil {
+		return HandleTransactionError(params, err)
+	}
+
+	return result.Tx, result.ActualFee, result.DustWithdraw, nil
+}
+
+// createTransaction core logic for creating transaction
+func createTransaction(params *TransactionParams) (*TransactionResult, error) {
+	// 1. Create base transaction
+	tx := createBaseTransaction()
+
+	// 2. Add inputs
+	if err := addTransactionInputs(tx, params.UTXOs); err != nil {
+		return nil, err
+	}
+
+	// 3. Calculate fees
+	actualFee, changeFee, err := calculateFees(params)
+	if err != nil {
+		return nil, err
+	}
+
+	// 4. Add outputs
+	if err := addTransactionOutputs(tx, params, actualFee, changeFee); err != nil {
+		return nil, err
+	}
+
+	// 5. Validate transaction size
+	if err := validateTransactionSize(tx); err != nil {
+		return nil, err
+	}
+
+	// 6. Validate transaction fees
+	if err := validateTransactionFees(tx, params, actualFee); err != nil {
+		return nil, err
+	}
+
+	return &TransactionResult{
+		Tx:           tx,
+		ActualFee:    uint64(actualFee),
+		DustWithdraw: 0,
+	}, nil
 }
 
 // SignTransactionByPrivKey, use PrivKey to sign the transaction, and select the corresponding signature method according to the UTXO type

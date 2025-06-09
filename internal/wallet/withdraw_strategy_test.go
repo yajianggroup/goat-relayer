@@ -197,7 +197,14 @@ func TestCreateRawTransaction(t *testing.T) {
 	net := &chaincfg.MainNetParams
 
 	// valid transaction creation
-	tx, _, dustWithdraw, err := wallet.CreateRawTransaction(utxos, withdrawals, nil, "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", 5000000, 1000, 10, 10, net)
+	tx, _, dustWithdraw, err := wallet.CreateRawTransaction(&wallet.TransactionParams{
+		UTXOs:         utxos,
+		Withdrawals:   withdrawals,
+		ChangeAddress: "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+		NetworkFee:    1000,
+		WitnessSize:   10,
+		Net:           net,
+	})
 	assert.NoError(t, err)
 	assert.NotNil(t, tx)
 	assert.Equal(t, uint(0), dustWithdraw)
@@ -225,7 +232,14 @@ func TestCreateRawTransaction(t *testing.T) {
 
 	// when withdrawal amount is too small (dust)
 	withdrawals[0].Amount = 500 // less than dust limit
-	_, _, dustWithdraw, err = wallet.CreateRawTransaction(utxos, withdrawals, nil, "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", 5000000, 1000, 10, 10, net)
+	_, _, dustWithdraw, err = wallet.CreateRawTransaction(&wallet.TransactionParams{
+		UTXOs:         utxos,
+		Withdrawals:   withdrawals,
+		ChangeAddress: "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+		NetworkFee:    1000,
+		WitnessSize:   10,
+		Net:           net,
+	})
 	assert.Error(t, err)
 	assert.Equal(t, uint(1), dustWithdraw) // the ID of the withdrawal with the small amount
 	assert.EqualError(t, err, fmt.Sprintf("withdrawal amount too small after fee deduction: %d", withdrawals[0].Amount-500))
