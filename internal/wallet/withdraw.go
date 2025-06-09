@@ -266,7 +266,7 @@ func (w *WalletServer) initWithdrawSig() {
 			UtxoAmount:     totalAmount,
 			WithdrawAmount: 0,
 		}
-		tx, actualFee, _, err := CreateRawTransaction(consolidationParams)
+		tx, actualFee, err := CreateRawTransaction(consolidationParams)
 		if err != nil {
 			log.Errorf("WalletServer initWithdrawSig CreateRawTransaction for consolidation error: %v", err)
 			return
@@ -311,7 +311,7 @@ func (w *WalletServer) initWithdrawSig() {
 			Net:           network,
 			UtxoAmount:    totalSelectedAmount,
 		}
-		tx, actualFee, _, err := CreateRawTransaction(safeboxParams)
+		tx, actualFee, err := CreateRawTransaction(safeboxParams)
 		if err != nil {
 			log.Errorf("WalletServer initWithdrawSig CreateRawTransaction for safebox task error: %v", err)
 			return
@@ -367,16 +367,20 @@ func (w *WalletServer) initWithdrawSig() {
 			UtxoAmount:     totalSelectedAmount,
 			WithdrawAmount: withdrawAmount,
 		}
-		tx, actualFee, dustWithdrawId, err := CreateRawTransaction(withdrawParams)
+		tx, actualFee, err := CreateRawTransaction(withdrawParams)
 		if err != nil {
 			log.Errorf("WalletServer initWithdrawSig CreateRawTransaction for withdraw error: %v", err)
-			if dustWithdrawId > 0 {
+			if txErr, ok := err.(*TransactionError); ok && txErr.Code == ErrWithdrawDustAmount {
 				// update this withdraw to closed
-				err = w.state.CloseWithdraw(dustWithdrawId, "dust limit")
+				for _, withdraw := range withdrawParams.Withdrawals {
+					if int64(withdraw.Amount) <= types.GetDustAmount(int64(withdrawParams.NetworkFee)) {
+						err = w.state.CloseWithdrawByRequestId(withdraw.RequestId, "dust limit")
+					}
+				}
 				if err != nil {
-					log.Errorf("WalletServer initWithdrawSig CloseWithdraw for dust limit withdraw %d, error: %v", dustWithdrawId, err)
+					log.Errorf("WalletServer initWithdrawSig CloseWithdraw for dust limit withdraw error: %v", err)
 				} else {
-					log.Infof("WalletServer initWithdrawSig CloseWithdraw for dust limit withdraw %d ok, ave tx fee %d", dustWithdrawId, int64(estimateFee)/int64(len(selectedWithdraws)))
+					log.Infof("WalletServer initWithdrawSig CloseWithdraw for dust limit withdraw ok, ave tx fee %d", int64(estimateFee)/int64(len(selectedWithdraws)))
 				}
 			}
 			return

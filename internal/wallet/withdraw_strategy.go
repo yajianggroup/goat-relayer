@@ -37,19 +37,17 @@ const (
 	ErrInvalidUTXO TransactionErrorCode = iota + 1
 	ErrInvalidAddress
 	ErrInvalidScript
+	ErrInvalidTx
 
 	// Amount related errors
-	ErrDustAmount
-	ErrInsufficientFee
-	ErrExcessiveFee
+	ErrWithdrawDustAmount
+	ErrChangeDustAmount
 
 	// Transaction size related errors
-	ErrInvalidTxSize
 	ErrTxTooLarge
 
 	// Fee related errors
 	ErrTxPriceTooHigh
-	ErrFeeTooHigh
 )
 
 // Implements error interface
@@ -77,9 +75,8 @@ type TransactionParams struct {
 
 // TransactionResult defines transaction result structure
 type TransactionResult struct {
-	Tx           *wire.MsgTx
-	ActualFee    uint64
-	DustWithdraw uint
+	Tx        *wire.MsgTx
+	ActualFee uint64
 }
 
 // ConsolidateSmallUTXOs consolidate small utxos
@@ -565,7 +562,7 @@ func addTransactionOutputs(tx *wire.MsgTx, params *TransactionParams, actualFee,
 		val := int64(withdrawal.Amount) - actualFee
 		if val <= types.GetDustAmount(params.NetworkFee) {
 			return &TransactionError{
-				Code:    ErrDustAmount,
+				Code:    ErrWithdrawDustAmount,
 				Message: fmt.Sprintf("withdrawal amount too small after fee deduction: %d", val),
 			}
 		}
@@ -615,7 +612,7 @@ func addTransactionOutputs(tx *wire.MsgTx, params *TransactionParams, actualFee,
 		}
 		if val <= types.GetDustAmount(params.NetworkFee) {
 			return &TransactionError{
-				Code:    ErrDustAmount,
+				Code:    ErrChangeDustAmount,
 				Message: fmt.Sprintf("change amount too small after fee deduction: %d", val),
 			}
 		}
@@ -630,7 +627,7 @@ func validateTransactionSize(tx *wire.MsgTx) error {
 	noWitnessTx, err := types.SerializeTransactionNoWitness(tx)
 	if err != nil {
 		return &TransactionError{
-			Code:    ErrInvalidTxSize,
+			Code:    ErrInvalidTx,
 			Message: "failed to serialize transaction",
 			Err:     err,
 		}
@@ -664,36 +661,29 @@ func validateTransactionFees(tx *wire.MsgTx, params *TransactionParams, actualFe
 }
 
 // HandleTransactionError handles transaction errors
-func HandleTransactionError(params *TransactionParams, err error) (*wire.MsgTx, uint64, uint, error) {
+func HandleTransactionError(params *TransactionParams, err error) (*wire.MsgTx, uint64, error) {
 	if txErr, ok := err.(*TransactionError); ok {
 		switch txErr.Code {
-		case ErrDustAmount:
-			return handleDustAmountError(params, txErr)
+		default:
+			return nil, 0, err
 		case ErrTxPriceTooHigh:
 			return handleTxPriceError(params, txErr)
 		case ErrTxTooLarge:
 			return handleTxSizeError(params, txErr)
 		}
 	}
-	return nil, 0, 0, err
-}
-
-// handleDustAmountError handles dust amount errors
-func handleDustAmountError(params *TransactionParams, err *TransactionError) (*wire.MsgTx, uint64, uint, error) {
-	// Adjust change amount
-	params.ChangeAmount = types.GetDustAmount(params.NetworkFee) + 1
-	return CreateRawTransaction(params)
+	return nil, 0, nil
 }
 
 // handleTxPriceError handles transaction price errors
-func handleTxPriceError(params *TransactionParams, err *TransactionError) (*wire.MsgTx, uint64, uint, error) {
+func handleTxPriceError(params *TransactionParams, err *TransactionError) (*wire.MsgTx, uint64, error) {
 	// Increase fee
 	params.EstimatedFee = params.EstimatedFee * 1.1
 	return CreateRawTransaction(params)
 }
 
 // handleTxSizeError handles transaction size errors
-func handleTxSizeError(params *TransactionParams, err *TransactionError) (*wire.MsgTx, uint64, uint, error) {
+func handleTxSizeError(params *TransactionParams, err *TransactionError) (*wire.MsgTx, uint64, error) {
 	// Reduce UTXO count
 	if len(params.UTXOs) > 1 {
 		params.UTXOs = params.UTXOs[:len(params.UTXOs)-1]
@@ -702,13 +692,13 @@ func handleTxSizeError(params *TransactionParams, err *TransactionError) (*wire.
 }
 
 // CreateRawTransaction creates raw transaction
-func CreateRawTransaction(params *TransactionParams) (*wire.MsgTx, uint64, uint, error) {
+func CreateRawTransaction(params *TransactionParams) (*wire.MsgTx, uint64, error) {
 	result, err := createTransaction(params)
 	if err != nil {
 		return HandleTransactionError(params, err)
 	}
 
-	return result.Tx, result.ActualFee, result.DustWithdraw, nil
+	return result.Tx, result.ActualFee, nil
 }
 
 // createTransaction core logic for creating transaction
@@ -743,9 +733,8 @@ func createTransaction(params *TransactionParams) (*TransactionResult, error) {
 	}
 
 	return &TransactionResult{
-		Tx:           tx,
-		ActualFee:    uint64(actualFee),
-		DustWithdraw: 0,
+		Tx:        tx,
+		ActualFee: uint64(actualFee),
 	}, nil
 }
 
