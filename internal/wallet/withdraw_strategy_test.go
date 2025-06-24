@@ -197,10 +197,20 @@ func TestCreateRawTransaction(t *testing.T) {
 	net := &chaincfg.MainNetParams
 
 	// valid transaction creation
-	tx, _, dustWithdraw, err := wallet.CreateRawTransaction(utxos, withdrawals, nil, "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", 5000000, 1000, 10, 10, net)
+	tx, _, err := wallet.CreateRawTransaction(&wallet.TransactionParams{
+		UTXOs:         utxos,
+		Withdrawals:   withdrawals,
+		Tasks:         nil,
+		ChangeAddress: "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+		ChangeAmount:  5000000,
+		EstimatedFee:  1000,
+		WitnessSize:   10,
+		NetworkFee:    10,
+		Net:           net,
+		UtxoAmount:    80000000, // 50000000 + 30000000
+	})
 	assert.NoError(t, err)
 	assert.NotNil(t, tx)
-	assert.Equal(t, uint(0), dustWithdraw)
 
 	// validate transaction inputs and outputs
 	assert.Equal(t, 2, len(tx.TxIn))  // 2 inputs
@@ -224,11 +234,21 @@ func TestCreateRawTransaction(t *testing.T) {
 	}
 
 	// when withdrawal amount is too small (dust)
-	withdrawals[0].Amount = 500 // less than dust limit
-	_, _, dustWithdraw, err = wallet.CreateRawTransaction(utxos, withdrawals, nil, "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa", 5000000, 1000, 10, 10, net)
+	withdrawals[1].Amount = 500 // less than dust limit
+	_, _, err = wallet.CreateRawTransaction(&wallet.TransactionParams{
+		UTXOs:         utxos,
+		Withdrawals:   withdrawals,
+		Tasks:         nil,
+		ChangeAddress: "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+		ChangeAmount:  5000000,
+		EstimatedFee:  1000,
+		WitnessSize:   10,
+		NetworkFee:    10,
+		Net:           net,
+		UtxoAmount:    80000000, // 50000000 + 30000000
+	})
 	assert.Error(t, err)
-	assert.Equal(t, uint(1), dustWithdraw) // the ID of the withdrawal with the small amount
-	assert.EqualError(t, err, fmt.Sprintf("withdrawal amount too small after fee deduction: %d", withdrawals[0].Amount-500))
+	assert.EqualError(t, err, fmt.Sprintf("withdrawal amount too small after fee deduction: %d", withdrawals[1].Amount-500))
 }
 
 // Test SignTransactionByPrivKey function

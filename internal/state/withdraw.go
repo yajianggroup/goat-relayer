@@ -12,7 +12,7 @@ import (
 
 type WithdrawStateStore interface {
 	CleanProcessingWithdraw() error
-	CloseWithdraw(id uint, reason string) error
+	CloseWithdrawByRequestId(requestId uint64, reason string) error
 	CreateWithdrawal(sender string, receiver string, block, id, txPrice, amount uint64) error
 	CreateSendOrder(order *db.SendOrder, selectedUtxos []*db.Utxo, selectedWithdraws []*db.Withdraw, safeboxTasks []*db.SafeboxTask, vins []*db.Vin, vouts []*db.Vout, isProposer bool) error
 	RecoverSendOrder(order *db.SendOrder, vins []*db.Vin, vouts []*db.Vout, withdrawIds []uint64) error
@@ -902,13 +902,13 @@ func (s *State) GetLatestWithdrawSendOrderConfirmed() (*db.SendOrder, error) {
 	return sendOrder, nil
 }
 
-func (s *State) CloseWithdraw(id uint, reason string) error {
+func (s *State) CloseWithdrawByRequestId(requestId uint64, reason string) error {
 	s.walletMu.RLock()
 	defer s.walletMu.RUnlock()
 
-	err := s.dbm.GetWalletDB().Model(&db.Withdraw{}).Where("id = ?", id).Updates(&db.Withdraw{Status: db.WITHDRAW_STATUS_CLOSED, Reason: reason, UpdatedAt: time.Now()}).Error
+	err := s.dbm.GetWalletDB().Model(&db.Withdraw{}).Where("request_id = ?", requestId).Updates(&db.Withdraw{Status: db.WITHDRAW_STATUS_CLOSED, Reason: reason, UpdatedAt: time.Now()}).Error
 	if err != nil && err != gorm.ErrRecordNotFound {
-		log.Errorf("State CloseWithdraw Withdraw by id: %d, reason: %s, error: %v", id, reason, err)
+		log.Errorf("State CloseWithdraw Withdraw by request id: %d, reason: %s, error: %v", requestId, reason, err)
 		return err
 	}
 	return nil

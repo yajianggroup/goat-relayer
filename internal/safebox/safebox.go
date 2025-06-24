@@ -591,7 +591,7 @@ func (s *SafeboxProcessor) CheckTssBalance(ctx context.Context) {
 	goatEthClient := s.layer2Listener.GetGoatEthClient()
 	balance, err := goatEthClient.BalanceAt(ctx, common.HexToAddress(s.tssAddress), nil)
 	if err != nil {
-		s.logger.Fatalf("SafeboxProcessor checkTssBalance - TSS ADDRESS BALANCE CHECK ERROR: %v", err)
+		s.logger.Warnf("SafeboxProcessor checkTssBalance - TSS ADDRESS BALANCE CHECK ERROR: %v", err)
 		return
 	}
 
@@ -599,8 +599,8 @@ func (s *SafeboxProcessor) CheckTssBalance(ctx context.Context) {
 	s.logger.Debugf("SafeboxProcessor checkTssBalance - TSS ADDRESS BALANCE: %s ETH", ethBalance.Text('f', 18))
 
 	if balance.Cmp(big.NewInt(0)) == 0 {
-		s.logger.Fatalf("SafeboxProcessor checkTssBalance - WARNING: TSS ADDRESS HAS ZERO BALANCE!")
-		s.logger.Fatalf("SafeboxProcessor checkTssBalance - PLEASE SEND BALANCE TO: %s", s.tssAddress)
+		s.logger.Warnf("SafeboxProcessor checkTssBalance - WARNING: TSS ADDRESS HAS ZERO BALANCE!")
+		s.logger.Warnf("SafeboxProcessor checkTssBalance - PLEASE SEND BALANCE TO: %s", s.tssAddress)
 	}
 }
 
