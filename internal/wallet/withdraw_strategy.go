@@ -1,6 +1,7 @@
 package wallet
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -988,6 +989,12 @@ func ApplyFireblocksSignaturesToTx(tx *wire.MsgTx, utxos []*db.Utxo, fbSignedMes
 		}
 	}
 
+	txbuf := bytes.NewBuffer(nil)
+	if err := tx.Serialize(txbuf); err != nil {
+		log.Errorf("error serializing transaction %s: %v", tx.TxID(), err)
+	} else {
+		log.Debugf("Serialized transaction: %s, raw hex: %s", tx.TxID(), hex.EncodeToString(txbuf.Bytes()))
+	}
 	return nil
 }
 
