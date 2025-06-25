@@ -1,6 +1,7 @@
 package wallet
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"encoding/json"
@@ -220,6 +221,12 @@ func (c *FireblocksClient) CheckPending(txid string, externalTxId string, update
 		err = ApplyFireblocksSignaturesToTx(tx, utxos, txDetails.SignedMessages, types.GetBTCNetwork(config.AppConfig.BTCNetworkType))
 		if err != nil {
 			return false, 0, 0, fmt.Errorf("apply fireblocks signatures to tx error: %v, txid: %s", err, txid)
+		}
+		txbuf := bytes.NewBuffer(nil)
+		if err := tx.Serialize(txbuf); err != nil {
+			log.Errorf("error serializing transaction %s: %v", tx.TxID(), err)
+		} else {
+			log.Debugf("Serialized transaction: %s, raw hex: %s", tx.TxID(), hex.EncodeToString(txbuf.Bytes()))
 		}
 		_, err = c.btcRpc.SendRawTransaction(tx, false)
 		if err != nil {
