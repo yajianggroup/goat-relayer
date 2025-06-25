@@ -40,4 +40,11 @@ docker-build-x:
 docker-test:
 	docker run --rm -v $(shell pwd):/app -w /app golang:$(GO_IMAGE_VERSION) go test -v ./...
 
+# Build P2WSH address generator tool
+p2wsh:
+	$(GOBUILD) -o bin/p2wsh cmd/p2wsh/main.go
+
+# Build all tools
+tools: p2wsh
+
 .PHONY: all build clean test deps run docker-build docker-build-all docker-build-x docker-test

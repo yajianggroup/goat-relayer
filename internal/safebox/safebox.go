@@ -76,7 +76,7 @@ func NewSafeboxProcessor(state *state.State, libp2p *p2p.LibP2PService, layer2Li
 func (s *SafeboxProcessor) Start(ctx context.Context) {
 	tssAddress, err := s.tssSigner.GetTssAddress(ctx)
 	if err != nil {
-		s.logger.Fatalf("SafeboxProcessor, get tss address error: %v", err)
+		s.logger.Warnf("SafeboxProcessor, get tss address error: %v", err)
 	}
 	s.tssAddress = tssAddress
 	s.logger.Infof("SafeboxProcessor - TSS ADDRESS: %s", s.tssAddress)
