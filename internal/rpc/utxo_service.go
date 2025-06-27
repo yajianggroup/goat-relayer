@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/rpcclient"
+	"github.com/btcsuite/btcd/wire"
 	"github.com/goatnetwork/goat-relayer/internal/config"
 	"github.com/goatnetwork/goat-relayer/internal/layer2"
 	"github.com/goatnetwork/goat-relayer/internal/p2p"
@@ -58,6 +60,29 @@ func NewUtxoServer(state *state.State, layer2Listener *layer2.Layer2Listener, bt
 }
 
 func (s *UtxoServer) NewTransaction(ctx context.Context, req *pb.NewTransactionRequest) (*pb.NewTransactionResponse, error) {
+	if req.RawTransaction != "" {
+		rawTxBytes, err := hex.DecodeString(req.RawTransaction)
+		if err != nil {
+			log.Errorf("Failed to decode raw transaction: %v", err)
+			return nil, fmt.Errorf("invalid raw transaction format: %v", err)
+		}
+
+		var computedTx wire.MsgTx
+		if err := computedTx.Deserialize(bytes.NewReader(rawTxBytes)); err != nil {
+			log.Errorf("Failed to deserialize frontend transaction: %v", err)
+			return nil, fmt.Errorf("failed to deserialize frontend transaction: %v", err)
+		}
+
+		computedTxid := computedTx.TxHash().String()
+
+		if computedTxid != req.TransactionId {
+			log.Errorf("Frontend txid mismatch: expected %s, got %s", req.TransactionId, computedTxid)
+			return nil, fmt.Errorf("frontend transaction ID mismatch: expected %s, got %s", req.TransactionId, computedTxid)
+		}
+
+		log.Infof("Frontend transaction validation passed: txid=%s", req.TransactionId)
+	}
+
 	txHash, err := chainhash.NewHashFromStr(req.TransactionId)
 	if err != nil {
 		log.Errorf("Failed to parse transaction ID: %v", err)
@@ -77,8 +102,16 @@ func (s *UtxoServer) NewTransaction(ctx context.Context, req *pb.NewTransactionR
 	}
 
 	if tx.TxHash().String() != req.TransactionId {
-		log.Errorf("Transaction ID mismatch: expected %s, got %s", req.TransactionId, tx.TxHash().String())
-		return nil, fmt.Errorf("transaction ID mismatch")
+		log.Errorf("RPC transaction ID mismatch: expected %s, got %s", req.TransactionId, tx.TxHash().String())
+		return nil, fmt.Errorf("RPC transaction ID mismatch")
+	}
+
+	if req.RawTransaction != "" {
+		if txRawResult.Hex != req.RawTransaction {
+			log.Errorf("Transaction data mismatch between frontend and RPC: frontend=%s, rpc=%s", req.RawTransaction, txRawResult.Hex)
+			return nil, fmt.Errorf("transaction data mismatch between frontend and RPC")
+		}
+		log.Infof("Transaction data validation passed: frontend and RPC data match")
 	}
 
 	evmAddresses, err := splitEvmAddresses(req.EvmAddress)
