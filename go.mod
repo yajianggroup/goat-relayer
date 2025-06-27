@@ -29,6 +29,7 @@ require (
 	google.golang.org/protobuf v1.36.5
 	gorm.io/driver/sqlite v1.5.6
 	gorm.io/gorm v1.25.11
+	gotest.tools/v3 v3.5.1
 )
 
 require (
@@ -138,7 +139,6 @@ require (
 	golang.org/x/term v0.29.0 // indirect
 	google.golang.org/genproto v0.0.0-20240227224415-6ceb2ff114de // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20241202173237-19429a94021a // indirect
-	gotest.tools/v3 v3.5.1 // indirect
 	nhooyr.io/websocket v1.8.6 // indirect
 	pgregory.net/rapid v1.1.0 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect

@@ -59,7 +59,7 @@ func NewApplication() *Application {
 	signer := bls.NewSigner(libP2PService, layer2Listener, state, btcClient)
 	httpServer := http.NewHTTPServer(libP2PService, state, dbm)
 	btcListener := btc.NewBTCListener(libP2PService, state, dbm, btcClient)
-	utxoService := rpc.NewUtxoServer(state, layer2Listener)
+	utxoService := rpc.NewUtxoServer(state, layer2Listener, btcClient)
 	walletService := wallet.NewWalletServer(libP2PService, state, signer, btcClient)
 	voterProcessor := voter.NewVoterProcessor(libP2PService, state, signer)
 

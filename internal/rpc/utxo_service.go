@@ -1,7 +1,6 @@
 package rpc
 
 import (
-	"bytes"
 	"context"
 	"encoding/hex"
 	"fmt"
@@ -13,7 +12,8 @@ import (
 
 	"net"
 
-	"github.com/btcsuite/btcd/wire"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/goatnetwork/goat-relayer/internal/config"
 	"github.com/goatnetwork/goat-relayer/internal/layer2"
 	"github.com/goatnetwork/goat-relayer/internal/p2p"
@@ -29,6 +29,7 @@ type UtxoServer struct {
 	pb.UnimplementedBitcoinLightWalletServer
 	state          *state.State
 	layer2Listener *layer2.Layer2Listener
+	btcClient      *rpcclient.Client
 }
 
 func (s *UtxoServer) Start(ctx context.Context) {
@@ -48,23 +49,36 @@ func (s *UtxoServer) Start(ctx context.Context) {
 	}
 }
 
-func NewUtxoServer(state *state.State, layer2Listener *layer2.Layer2Listener) *UtxoServer {
+func NewUtxoServer(state *state.State, layer2Listener *layer2.Layer2Listener, btcClient *rpcclient.Client) *UtxoServer {
 	return &UtxoServer{
 		state:          state,
 		layer2Listener: layer2Listener,
+		btcClient:      btcClient,
 	}
 }
 
 func (s *UtxoServer) NewTransaction(ctx context.Context, req *pb.NewTransactionRequest) (*pb.NewTransactionResponse, error) {
-	rawTxBytes, err := hex.DecodeString(req.RawTransaction)
+	txHash, err := chainhash.NewHashFromStr(req.TransactionId)
 	if err != nil {
-		return nil, err
+		log.Errorf("Failed to parse transaction ID: %v", err)
+		return nil, fmt.Errorf("invalid transaction ID: %v", err)
 	}
 
-	var tx wire.MsgTx
-	if err := tx.Deserialize(bytes.NewReader(rawTxBytes)); err != nil {
-		log.Errorf("Failed to decode transaction: %v", err)
-		return nil, err
+	txRawResult, err := s.btcClient.GetRawTransactionVerbose(txHash)
+	if err != nil {
+		log.Errorf("Failed to get raw transaction from RPC: %v", err)
+		return nil, fmt.Errorf("failed to get transaction from RPC: %v", err)
+	}
+
+	tx, err := types.ConvertTxRawResultToMsgTx(txRawResult)
+	if err != nil {
+		log.Errorf("Failed to convert transaction: %v", err)
+		return nil, fmt.Errorf("failed to convert transaction: %v", err)
+	}
+
+	if tx.TxHash().String() != req.TransactionId {
+		log.Errorf("Transaction ID mismatch: expected %s, got %s", req.TransactionId, tx.TxHash().String())
+		return nil, fmt.Errorf("transaction ID mismatch")
 	}
 
 	evmAddresses, err := splitEvmAddresses(req.EvmAddress)
@@ -74,7 +88,7 @@ func (s *UtxoServer) NewTransaction(ctx context.Context, req *pb.NewTransactionR
 	}
 
 	for _, evmAddr := range evmAddresses {
-		isTrue, signVersion, outIdxToAmount, err := s.VerifyDeposit(tx, evmAddr)
+		isTrue, signVersion, outIdxToAmount, err := s.VerifyDeposit(*tx, evmAddr)
 		if err != nil || !isTrue {
 			log.Errorf("Failed to verify deposit: %v", err)
 			return nil, err
@@ -91,13 +105,14 @@ func (s *UtxoServer) NewTransaction(ctx context.Context, req *pb.NewTransactionR
 				continue
 			}
 
-			err = s.state.AddUnconfirmDeposit(req.TransactionId, req.RawTransaction, evmAddr, signVersion, outIdx, amount)
+			rawTxHex := txRawResult.Hex
+			err = s.state.AddUnconfirmDeposit(req.TransactionId, rawTxHex, evmAddr, signVersion, outIdx, amount)
 			if err != nil {
 				log.Errorf("Failed to add unconfirmed deposit: %v", err)
 				continue
 			}
 			deposit := types.MsgUtxoDeposit{
-				RawTx:       req.RawTransaction,
+				RawTx:       rawTxHex,
 				TxId:        req.TransactionId,
 				EvmAddr:     evmAddr,
 				SignVersion: signVersion,
