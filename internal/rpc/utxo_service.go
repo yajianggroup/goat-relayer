@@ -101,11 +101,6 @@ func (s *UtxoServer) NewTransaction(ctx context.Context, req *pb.NewTransactionR
 		return nil, fmt.Errorf("failed to convert transaction: %v", err)
 	}
 
-	if tx.TxHash().String() != req.TransactionId {
-		log.Errorf("RPC transaction ID mismatch: expected %s, got %s", req.TransactionId, tx.TxHash().String())
-		return nil, fmt.Errorf("RPC transaction ID mismatch")
-	}
-
 	if req.RawTransaction != "" {
 		if txRawResult.Hex != req.RawTransaction {
 			log.Errorf("Transaction data mismatch between frontend and RPC: frontend=%s, rpc=%s", req.RawTransaction, txRawResult.Hex)
