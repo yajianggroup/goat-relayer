@@ -432,7 +432,8 @@ func ConvertBTCFeeRateToSatPerVByte(feeRateBTCPerKB float64) (uint64, error) {
 	if err != nil {
 		return 0, fmt.Errorf("invalid fee rate amount: %v", err)
 	}
-	// Convert from satoshi/kB to satoshi/vByte (1 kB = 1000 vBytes)
-	satPerVByte := uint64(int64(btcAmount) / 1000)
+	// Convert from satoshi/kB to satoshi/vByte with proper rounding
+	// Add 500 before dividing by 1000 to implement rounding (equivalent to +0.5 before truncation)
+	satPerVByte := uint64((int64(btcAmount) + 500) / 1000)
 	return satPerVByte, nil
 }
