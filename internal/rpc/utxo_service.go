@@ -141,7 +141,7 @@ func (s *UtxoServer) NewTransaction(ctx context.Context, req *pb.NewTransactionR
 			}
 			deposit := types.MsgUtxoDeposit{
 				RawTx:       rawTxHex,
-				TxId:        req.TransactionId,
+				TxId:        tx.TxHash().String(),
 				EvmAddr:     evmAddr,
 				SignVersion: signVersion,
 				OutputIndex: outIdx,
