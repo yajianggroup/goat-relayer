@@ -61,7 +61,11 @@ func TestBTCClient(t *testing.T) {
 	if err != nil {
 		t.Errorf("Failed to estimate smart fee: %v", err)
 	}
-	satoshiPerVByte := uint64((*feeEstimate.FeeRate * 1e8) / 1000)
+	// Use the helper function for precise fee calculation
+	satoshiPerVByte, err := types.ConvertBTCFeeRateToSatPerVByte(*feeEstimate.FeeRate)
+	if err != nil {
+		t.Errorf("Failed to convert fee rate: %v", err)
+	}
 	t.Logf("Estimate smart fee: %+v, satoshi per vbyte: %d", feeEstimate, satoshiPerVByte)
 
 	blockHash, err := btcClient.GetBlockHash(height)

@@ -92,19 +92,28 @@ func getFeeRateFromBtcNode(btcClient *rpcclient.Client) (*types.BtcNetworkFee, e
 	if err != nil || feeEstimate == nil || feeEstimate.FeeRate == nil {
 		return nil, fmt.Errorf("failed to estimate smart fee 1: %v", err)
 	}
-	fastestFee := uint64((*feeEstimate.FeeRate * 1e8) / 1000)
+	fastestFee, err := types.ConvertBTCFeeRateToSatPerVByte(*feeEstimate.FeeRate)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert fee rate 1: %v", err)
+	}
 
 	feeEstimate, err = btcClient.EstimateSmartFee(3, &btcjson.EstimateModeConservative)
 	if err != nil || feeEstimate == nil || feeEstimate.FeeRate == nil {
 		return nil, fmt.Errorf("failed to estimate smart fee 3: %v", err)
 	}
-	halfHourFee := uint64((*feeEstimate.FeeRate * 1e8) / 1000)
+	halfHourFee, err := types.ConvertBTCFeeRateToSatPerVByte(*feeEstimate.FeeRate)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert fee rate 3: %v", err)
+	}
 
 	feeEstimate, err = btcClient.EstimateSmartFee(6, &btcjson.EstimateModeConservative)
 	if err != nil || feeEstimate == nil || feeEstimate.FeeRate == nil {
 		return nil, fmt.Errorf("failed to estimate smart fee 6: %v", err)
 	}
-	hourFee := uint64((*feeEstimate.FeeRate * 1e8) / 1000)
+	hourFee, err := types.ConvertBTCFeeRateToSatPerVByte(*feeEstimate.FeeRate)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert fee rate 6: %v", err)
+	}
 
 	return &types.BtcNetworkFee{
 		FastestFee:  fastestFee,
