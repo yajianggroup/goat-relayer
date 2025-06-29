@@ -72,8 +72,15 @@ func convertVoutToTxOut(vout btcjson.Vout) (*wire.TxOut, error) {
 	}
 
 	// Create wire.TxOut
+	// Use btcutil.Amount for precise BTC to satoshi conversion
+	// This avoids floating point precision issues entirely
+	btcAmount, err := btcutil.NewAmount(vout.Value)
+	if err != nil {
+		return nil, fmt.Errorf("invalid BTC amount: %v", err)
+	}
+
 	txOut := &wire.TxOut{
-		Value:    int64(vout.Value * 1e8), // Convert BTC to satoshis
+		Value:    int64(btcAmount), // btcutil.Amount is already in satoshis
 		PkScript: scriptPubKeyBytes,
 	}
 

@@ -423,3 +423,17 @@ func Threshold(total int) int {
 	// >= 2/3
 	return (total*2 + 2) / 3
 }
+
+// ConvertBTCFeeRateToSatPerVByte converts a fee rate from BTC/kB to satoshi/vByte
+// using btcutil.Amount for precise conversion without floating point precision loss
+func ConvertBTCFeeRateToSatPerVByte(feeRateBTCPerKB float64) (uint64, error) {
+	// Use btcutil.Amount for precise BTC to satoshi conversion
+	btcAmount, err := btcutil.NewAmount(feeRateBTCPerKB)
+	if err != nil {
+		return 0, fmt.Errorf("invalid fee rate amount: %v", err)
+	}
+	// Convert from satoshi/kB to satoshi/vByte with proper rounding
+	// Add 500 before dividing by 1000 to implement rounding (equivalent to +0.5 before truncation)
+	satPerVByte := uint64((int64(btcAmount) + 500) / 1000)
+	return satPerVByte, nil
+}

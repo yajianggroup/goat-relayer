@@ -13,6 +13,8 @@ import (
 
 	"net"
 
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/goatnetwork/goat-relayer/internal/config"
 	"github.com/goatnetwork/goat-relayer/internal/layer2"
@@ -29,6 +31,7 @@ type UtxoServer struct {
 	pb.UnimplementedBitcoinLightWalletServer
 	state          *state.State
 	layer2Listener *layer2.Layer2Listener
+	btcClient      *rpcclient.Client
 }
 
 func (s *UtxoServer) Start(ctx context.Context) {
@@ -48,23 +51,62 @@ func (s *UtxoServer) Start(ctx context.Context) {
 	}
 }
 
-func NewUtxoServer(state *state.State, layer2Listener *layer2.Layer2Listener) *UtxoServer {
+func NewUtxoServer(state *state.State, layer2Listener *layer2.Layer2Listener, btcClient *rpcclient.Client) *UtxoServer {
 	return &UtxoServer{
 		state:          state,
 		layer2Listener: layer2Listener,
+		btcClient:      btcClient,
 	}
 }
 
 func (s *UtxoServer) NewTransaction(ctx context.Context, req *pb.NewTransactionRequest) (*pb.NewTransactionResponse, error) {
-	rawTxBytes, err := hex.DecodeString(req.RawTransaction)
-	if err != nil {
-		return nil, err
+	if req.RawTransaction != "" {
+		rawTxBytes, err := hex.DecodeString(req.RawTransaction)
+		if err != nil {
+			log.Errorf("Failed to decode raw transaction: %v", err)
+			return nil, fmt.Errorf("invalid raw transaction format: %v", err)
+		}
+
+		var computedTx wire.MsgTx
+		if err := computedTx.Deserialize(bytes.NewReader(rawTxBytes)); err != nil {
+			log.Errorf("Failed to deserialize frontend transaction: %v", err)
+			return nil, fmt.Errorf("failed to deserialize frontend transaction: %v", err)
+		}
+
+		computedTxid := computedTx.TxHash().String()
+
+		if computedTxid != req.TransactionId {
+			log.Errorf("Frontend txid mismatch: expected %s, got %s", req.TransactionId, computedTxid)
+			return nil, fmt.Errorf("frontend transaction ID mismatch: expected %s, got %s", req.TransactionId, computedTxid)
+		}
+
+		log.Infof("Frontend transaction validation passed: txid=%s", req.TransactionId)
 	}
 
-	var tx wire.MsgTx
-	if err := tx.Deserialize(bytes.NewReader(rawTxBytes)); err != nil {
-		log.Errorf("Failed to decode transaction: %v", err)
-		return nil, err
+	txHash, err := chainhash.NewHashFromStr(req.TransactionId)
+	if err != nil {
+		log.Errorf("Failed to parse transaction ID: %v", err)
+		return nil, fmt.Errorf("invalid transaction ID: %v", err)
+	}
+
+	txRawResult, err := s.btcClient.GetRawTransactionVerbose(txHash)
+	if err != nil {
+		log.Errorf("Failed to get raw transaction from RPC: %v", err)
+		return nil, fmt.Errorf("failed to get transaction from RPC: %v", err)
+	}
+
+	tx, err := types.ConvertTxRawResultToMsgTx(txRawResult)
+	if err != nil {
+		log.Errorf("Failed to convert transaction: %v", err)
+		return nil, fmt.Errorf("failed to convert transaction: %v", err)
+	}
+
+	if req.RawTransaction != "" {
+		if txRawResult.Hex != req.RawTransaction {
+			log.Errorf("Transaction data mismatch between frontend and RPC: frontend=%s, rpc=%s", req.RawTransaction, txRawResult.Hex)
+			return nil, fmt.Errorf("transaction data mismatch between frontend and RPC")
+		}
+		log.Infof("Transaction data validation passed: frontend and RPC data match")
 	}
 
 	evmAddresses, err := splitEvmAddresses(req.EvmAddress)
@@ -74,7 +116,7 @@ func (s *UtxoServer) NewTransaction(ctx context.Context, req *pb.NewTransactionR
 	}
 
 	for _, evmAddr := range evmAddresses {
-		isTrue, signVersion, outIdxToAmount, err := s.VerifyDeposit(tx, evmAddr)
+		isTrue, signVersion, outIdxToAmount, err := s.VerifyDeposit(*tx, evmAddr)
 		if err != nil || !isTrue {
 			log.Errorf("Failed to verify deposit: %v", err)
 			return nil, err
@@ -91,14 +133,15 @@ func (s *UtxoServer) NewTransaction(ctx context.Context, req *pb.NewTransactionR
 				continue
 			}
 
-			err = s.state.AddUnconfirmDeposit(req.TransactionId, req.RawTransaction, evmAddr, signVersion, outIdx, amount)
+			rawTxHex := txRawResult.Hex
+			err = s.state.AddUnconfirmDeposit(req.TransactionId, rawTxHex, evmAddr, signVersion, outIdx, amount)
 			if err != nil {
 				log.Errorf("Failed to add unconfirmed deposit: %v", err)
 				continue
 			}
 			deposit := types.MsgUtxoDeposit{
-				RawTx:       req.RawTransaction,
-				TxId:        req.TransactionId,
+				RawTx:       rawTxHex,
+				TxId:        tx.TxHash().String(),
 				EvmAddr:     evmAddr,
 				SignVersion: signVersion,
 				OutputIndex: outIdx,
