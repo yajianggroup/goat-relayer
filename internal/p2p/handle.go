@@ -176,6 +176,12 @@ func startHeartbeat(ctx context.Context, node host.Host, topic *pubsub.Topic) {
 	for {
 		select {
 		case <-ticker.C:
+			peers := node.Network().Peers()
+			if len(peers) == 0 {
+				log.Warnf("No peers, please check your network connection")
+				continue
+			}
+
 			hbMsg := HeartbeatMessage{
 				PeerID:    node.ID().String(),
 				Message:   "heartbeat",
