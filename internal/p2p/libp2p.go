@@ -217,11 +217,24 @@ func (lp *LibP2PService) connectToBootNode(ctx context.Context, node host.Host, 
 }
 
 func (lp *LibP2PService) monitorConnection(ctx context.Context, node host.Host, addr string) {
-	peerInfo, err := parseAddr(addr)
+	// Generate transport addresses for comprehensive monitoring
+	peerAddrs, err := generateTransportAddresses(addr)
 	if err != nil {
-		log.Errorf("Failed to parse bootnode address %s: %v", addr, err)
+		log.Errorf("Failed to generate transport addresses for %s: %v", addr, err)
 		return
 	}
+
+	if len(peerAddrs) == 0 {
+		log.Errorf("No valid addresses generated for monitoring %s", addr)
+		return
+	}
+
+	// Use the first address for peer ID (all have the same peer ID)
+	targetPeerID := peerAddrs[0].ID
+	var consecutiveFailures int
+	const maxConsecutiveFailures = 5
+
+	log.Infof("Starting connection monitoring for peer %s", targetPeerID)
 
 	for {
 		select {
@@ -229,18 +242,86 @@ func (lp *LibP2PService) monitorConnection(ctx context.Context, node host.Host, 
 			log.Infof("Context cancelled, stopping monitoring of %s", addr)
 			return
 		default:
-			if node.Network().Connectedness(peerInfo.ID) != network.Connected {
-				log.Warnf("Disconnected from %s, attempting to reconnect", addr)
+			// Enhanced connection status check
+			isConnected := lp.isReallyConnected(node, targetPeerID)
+
+			if !isConnected {
+				consecutiveFailures++
+				log.Warnf("Disconnected from %s (failure #%d), attempting to reconnect", addr, consecutiveFailures)
+
+				// Clean up any stale connections before reconnecting
+				lp.cleanupStaleConnections(node, targetPeerID)
+
+				// Attempt reconnection with exponential backoff
+				backoffDelay := time.Duration(consecutiveFailures) * 5 * time.Second
+				if backoffDelay > 30*time.Second {
+					backoffDelay = 30 * time.Second
+				}
+
 				err := lp.connectToBootNode(ctx, node, addr)
 				if err != nil {
 					log.Errorf("Failed to reconnect to %s: %v", addr, err)
-					time.Sleep(5 * time.Second)
+					if consecutiveFailures >= maxConsecutiveFailures {
+						log.Warnf("Max consecutive failures reached for %s, using longer backoff", addr)
+						time.Sleep(backoffDelay)
+					} else {
+						time.Sleep(backoffDelay)
+					}
 					continue
 				}
+
 				log.Infof("Successfully reconnected to %s", addr)
+				consecutiveFailures = 0 // Reset failure counter on success
+			} else {
+				consecutiveFailures = 0 // Reset failure counter when connected
 			}
+
+			// Check connection status every 20 seconds
 			time.Sleep(20 * time.Second)
 		}
+	}
+}
+
+// isReallyConnected performs a more thorough connectivity check
+func (lp *LibP2PService) isReallyConnected(node host.Host, peerID peer.ID) bool {
+	// Check basic connectivity
+	if node.Network().Connectedness(peerID) != network.Connected {
+		return false
+	}
+
+	// Check if we have active connections
+	conns := node.Network().ConnsToPeer(peerID)
+	if len(conns) == 0 {
+		return false
+	}
+
+	// Verify at least one connection is actually open
+	for _, conn := range conns {
+		if conn.IsClosed() {
+			continue
+		}
+		// Connection exists and is open
+		return true
+	}
+
+	return false
+}
+
+// cleanupStaleConnections removes any stale or broken connections
+func (lp *LibP2PService) cleanupStaleConnections(node host.Host, peerID peer.ID) {
+	conns := node.Network().ConnsToPeer(peerID)
+	for _, conn := range conns {
+		if conn.IsClosed() {
+			log.Debugf("Cleaning up closed connection to %s", peerID)
+			// Connection is already closed, libp2p should handle cleanup
+			continue
+		}
+	}
+
+	// Force disconnect to ensure clean state
+	if node.Network().Connectedness(peerID) != network.NotConnected {
+		log.Debugf("Force disconnecting from %s for clean reconnection", peerID)
+		_ = node.Network().ClosePeer(peerID)
 	}
 }
 

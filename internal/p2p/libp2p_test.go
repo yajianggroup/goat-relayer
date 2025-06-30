@@ -559,3 +559,125 @@ func TestGenerateTransportAddresses(t *testing.T) {
 		})
 	}
 }
+
+func TestConnectionMonitoringAndReconnect(t *testing.T) {
+	setupTestConfig()
+	defer os.RemoveAll(config.AppConfig.DbDir)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Create service for client
+	dbm := db.NewDatabaseManager()
+	mockState := state.InitializeState(dbm)
+	libp2pService := NewLibP2PService(mockState)
+
+	// Create initial bootnode
+	bootnode, _, err := createNodeWithPubSub(ctx)
+	require.NoError(t, err)
+
+	// Set up handshake handler on bootnode
+	bootnode.SetStreamHandler(protocol.ID(handshakeProtocol), func(s network.Stream) {
+		defer s.Close()
+		handleHandshake(s, bootnode)
+		time.Sleep(50 * time.Millisecond)
+	})
+
+	// Create client node
+	originalPort := config.AppConfig.Libp2pPort
+	originalDbDir := config.AppConfig.DbDir
+
+	config.AppConfig.Libp2pPort = 40004
+	config.AppConfig.DbDir = filepath.Join(os.TempDir(), "goat-relayer-test-monitor-client")
+	defer os.RemoveAll(config.AppConfig.DbDir)
+
+	clientNode, _, err := createNodeWithPubSub(ctx)
+	require.NoError(t, err)
+	defer clientNode.Close()
+
+	// Restore original config
+	config.AppConfig.Libp2pPort = originalPort
+	config.AppConfig.DbDir = originalDbDir
+
+	// Get bootnode address (TCP format, but should use QUIC)
+	bootnodeAddrs := bootnode.Addrs()
+	require.NotEmpty(t, bootnodeAddrs, "Bootnode should have addresses")
+
+	var bootnodeAddr string
+	for _, addr := range bootnodeAddrs {
+		if strings.Contains(addr.String(), "/tcp/") {
+			bootnodeAddr = fmt.Sprintf("%s/p2p/%s", addr.String(), bootnode.ID().String())
+			break
+		}
+	}
+
+	if bootnodeAddr == "" {
+		t.Skip("No suitable bootnode address found")
+		return
+	}
+
+	// Initial connection
+	err = libp2pService.connectToBootNode(ctx, clientNode, bootnodeAddr)
+	require.NoError(t, err, "Initial connection should succeed")
+
+	// Verify connection
+	peers := clientNode.Network().Peers()
+	require.Contains(t, peers, bootnode.ID(), "Client should be connected to bootnode")
+
+	t.Logf("Initial connection established via QUIC")
+
+	// Test connection status checking
+	isConnected := libp2pService.isReallyConnected(clientNode, bootnode.ID())
+	assert.True(t, isConnected, "Should detect connection as active")
+
+	// Simulate bootnode restart by closing it
+	t.Logf("Simulating bootnode restart...")
+	bootnode.Close()
+
+	// Wait a bit for disconnection to be detected
+	time.Sleep(2 * time.Second)
+
+	// Verify disconnection is detected
+	isConnected = libp2pService.isReallyConnected(clientNode, bootnode.ID())
+	assert.False(t, isConnected, "Should detect disconnection")
+
+	// Test cleanup function
+	assert.NotPanics(t, func() {
+		libp2pService.cleanupStaleConnections(clientNode, bootnode.ID())
+	}, "Cleanup should not panic")
+
+	t.Logf("Connection monitoring and cleanup test completed successfully")
+}
+
+func TestEnhancedConnectionStatusCheck(t *testing.T) {
+	setupTestConfig()
+	defer os.RemoveAll(config.AppConfig.DbDir)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Create service and nodes
+	dbm := db.NewDatabaseManager()
+	mockState := state.InitializeState(dbm)
+	libp2pService := NewLibP2PService(mockState)
+
+	node1, _, err := createNodeWithPubSub(ctx)
+	require.NoError(t, err)
+	defer node1.Close()
+
+	originalPort := config.AppConfig.Libp2pPort
+	config.AppConfig.Libp2pPort = 40005
+	node2, _, err := createNodeWithPubSub(ctx)
+	require.NoError(t, err)
+	defer node2.Close()
+	config.AppConfig.Libp2pPort = originalPort
+
+	// Test with no connection
+	isConnected := libp2pService.isReallyConnected(node1, node2.ID())
+	assert.False(t, isConnected, "Should detect no connection")
+
+	// Test cleanup function doesn't panic with non-existent peer
+	assert.NotPanics(t, func() {
+		libp2pService.cleanupStaleConnections(node1, node2.ID())
+	}, "Cleanup should handle non-existent peer gracefully")
+}
