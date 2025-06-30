@@ -382,7 +382,7 @@ func (b *BaseDepositProcessor) checkUnconfirmDeposit() {
 		// just validate v0, v1 will detect by relayer
 		isV0, outputIndex, amount, pkScript := types.IsUtxoGoatDepositV0Json(txRawResult, []btcutil.Address{p2wsh}, network)
 		if !isV0 {
-			log.Errorf("IsUtxoGoatDepositV0Json false, txid: %s", txRawResult.Txid)
+			log.Debugf("IsUtxoGoatDepositV0Json false, txid: %s", txRawResult.Txid)
 			b.nextUnfirmIdx = uint64(deposit.ID)
 			continue
 		}
