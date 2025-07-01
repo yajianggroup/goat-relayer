@@ -230,6 +230,88 @@ func TestSendHandshake(t *testing.T) {
 	}
 }
 
+func TestTopicReconnection(t *testing.T) {
+	config.AppConfig.DbDir = "test_db_topic_reconnect"
+	defer os.RemoveAll(config.AppConfig.DbDir)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	service := NewLibP2PService(nil)
+
+	// Create a test node
+	node, ps, err := createNodeWithPubSub(ctx)
+	require.NoError(t, err)
+	defer node.Close()
+
+	// Store global reference
+	pubsubService = ps
+
+	// Initialize topics
+	err = service.initializeTopics(ctx, node)
+	require.NoError(t, err)
+
+	// Verify topics are initialized
+	assert.NotNil(t, messageTopic)
+	assert.NotNil(t, hbTopic)
+	assert.NotNil(t, currentMessageSub)
+	assert.NotNil(t, currentHBSub)
+
+	// Test forced reconnection
+	err = service.ForceTopicReconnection(ctx, node)
+	assert.NoError(t, err)
+
+	// Verify topics are still valid after reconnection
+	assert.NotNil(t, messageTopic)
+	assert.NotNil(t, hbTopic)
+
+	t.Log("Topic reconnection test completed successfully")
+}
+
+func TestNetworkDiagnosisWithRecovery(t *testing.T) {
+	config.AppConfig.DbDir = "test_db_diagnosis_recovery"
+	defer os.RemoveAll(config.AppConfig.DbDir)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	service := NewLibP2PService(nil)
+
+	// Create a test node
+	node, ps, err := createNodeWithPubSub(ctx)
+	require.NoError(t, err)
+	defer node.Close()
+
+	// Store global reference
+	pubsubService = ps
+
+	// Initialize topics
+	err = service.initializeTopics(ctx, node)
+	require.NoError(t, err)
+
+	// Start network diagnosis in a separate goroutine
+	diagCtx, diagCancel := context.WithTimeout(ctx, 5*time.Second)
+	defer diagCancel()
+
+	done := make(chan bool)
+	go func() {
+		service.startNetworkDiagnosisWithRecovery(diagCtx, node)
+		done <- true
+	}()
+
+	// Wait a bit and then cancel
+	time.Sleep(2 * time.Second)
+	diagCancel()
+
+	// Wait for diagnosis to finish
+	select {
+	case <-done:
+		t.Log("Network diagnosis with recovery test completed successfully")
+	case <-time.After(3 * time.Second):
+		t.Error("Network diagnosis did not complete in time")
+	}
+}
+
 func TestNetworkDiagnosis(t *testing.T) {
 	setupTestConfig()
 	defer os.RemoveAll(config.AppConfig.DbDir)
@@ -256,7 +338,7 @@ func TestNetworkDiagnosis(t *testing.T) {
 	defer diagCancel()
 
 	// Run diagnosis in background
-	go libp2pService.startNetworkDiagnosis(diagCtx, node, topic)
+	go libp2pService.startNetworkDiagnosisWithRecovery(diagCtx, node)
 
 	// Wait a bit to let diagnosis run
 	time.Sleep(100 * time.Millisecond)
