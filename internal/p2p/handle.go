@@ -75,6 +75,11 @@ func (libp2p *LibP2PService) handlePubSubMessages(ctx context.Context, sub *pubs
 		default:
 			msg, err := sub.Next(ctx)
 			if err != nil {
+				// Check if subscription was cancelled or context was cancelled
+				if err.Error() == "subscription cancelled" || ctx.Err() != nil {
+					log.Info("Subscription cancelled, exiting handlePubSubMessages")
+					return
+				}
 				log.Errorf("Error reading message from pubsub: %v", err)
 				continue
 			}
@@ -121,6 +126,11 @@ func (libp2p *LibP2PService) handleHeartbeatMessages(ctx context.Context, sub *p
 		default:
 			msg, err := sub.Next(ctx)
 			if err != nil {
+				// Check if subscription was cancelled or context was cancelled
+				if err.Error() == "subscription cancelled" || ctx.Err() != nil {
+					log.Info("Subscription cancelled, exiting handleHeartbeatMessages")
+					return
+				}
 				log.Errorf("Error reading heartbeat message from pubsub: %v", err)
 				continue
 			}
