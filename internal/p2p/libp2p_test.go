@@ -46,19 +46,15 @@ func TestCreateNodeWithPubSub(t *testing.T) {
 		addrs := node.Addrs()
 		assert.NotEmpty(t, addrs, "Node should have listening addresses")
 
-		var hasTCP, hasQUIC bool
+		var hasTCP bool
 		for _, addr := range addrs {
 			addrStr := addr.String()
 			if strings.Contains(addrStr, "/tcp/") {
 				hasTCP = true
 			}
-			if strings.Contains(addrStr, "/quic-v1") {
-				hasQUIC = true
-			}
 		}
 
 		assert.True(t, hasTCP, "Node should support TCP transport")
-		assert.True(t, hasQUIC, "Node should support QUIC transport")
 	})
 
 	t.Run("NodeHasCorrectProtocols", func(t *testing.T) {
@@ -488,19 +484,19 @@ func TestGenerateTransportAddresses(t *testing.T) {
 			name:        "ValidTCPAddress",
 			inputAddr:   "/ip4/127.0.0.1/tcp/4001/p2p/12D3KooWTest",
 			expectError: false,
-			expectCount: 2, // Should generate both QUIC and TCP
+			expectCount: 1, // Should generate TCP
 		},
 		{
 			name:        "ValidQUICAddress",
 			inputAddr:   "/ip4/192.168.1.1/udp/4001/quic-v1/p2p/12D3KooWTest",
 			expectError: false,
-			expectCount: 2, // Should generate both QUIC and TCP
+			expectCount: 1, // Should generate TCP
 		},
 		{
 			name:        "IPv6Address",
 			inputAddr:   "/ip6/::1/tcp/4001/p2p/12D3KooWTest",
 			expectError: false,
-			expectCount: 2, // Should generate both QUIC and TCP for IPv6
+			expectCount: 1, // Should generate TCP for IPv6
 		},
 		{
 			name:        "InvalidAddress",
@@ -538,20 +534,15 @@ func TestGenerateTransportAddresses(t *testing.T) {
 						t.Logf("Generated address %d: %s", i, addr.Addrs[0])
 					}
 
-					// Verify we have both QUIC and TCP if count is 2
-					if tc.expectCount == 2 {
-						hasQUIC := false
+					// Verify we have TCP if count is 1
+					if tc.expectCount == 1 {
 						hasTCP := false
 						for _, addr := range addrs {
 							addrStr := addr.Addrs[0].String()
-							if strings.Contains(addrStr, "/quic-v1") {
-								hasQUIC = true
-							}
 							if strings.Contains(addrStr, "/tcp/") {
 								hasTCP = true
 							}
 						}
-						assert.True(t, hasQUIC, "Should generate QUIC address")
 						assert.True(t, hasTCP, "Should generate TCP address")
 					}
 				}
@@ -599,7 +590,7 @@ func TestConnectionMonitoringAndReconnect(t *testing.T) {
 	config.AppConfig.Libp2pPort = originalPort
 	config.AppConfig.DbDir = originalDbDir
 
-	// Get bootnode address (TCP format, but should use QUIC)
+	// Get bootnode address (TCP format)
 	bootnodeAddrs := bootnode.Addrs()
 	require.NotEmpty(t, bootnodeAddrs, "Bootnode should have addresses")
 
@@ -624,7 +615,7 @@ func TestConnectionMonitoringAndReconnect(t *testing.T) {
 	peers := clientNode.Network().Peers()
 	require.Contains(t, peers, bootnode.ID(), "Client should be connected to bootnode")
 
-	t.Logf("Initial connection established via QUIC")
+	t.Logf("Initial connection established via TCP")
 
 	// Test connection status checking
 	isConnected := libp2pService.isReallyConnected(clientNode, bootnode.ID())
