@@ -1,9 +1,7 @@
 package btc
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -39,6 +37,7 @@ type BTCPoller struct {
 	db          *gorm.DB
 	state       *state.State
 	confirmChan chan *types.BtcBlockExt
+	rpcService  *BTCRPCService
 
 	lastStartHeight   uint64
 	lastStartHeightMu sync.Mutex
@@ -52,11 +51,12 @@ type BTCPoller struct {
 	once         sync.Once
 }
 
-func NewBTCPoller(state *state.State, db *gorm.DB) *BTCPoller {
+func NewBTCPoller(state *state.State, db *gorm.DB, rpcService *BTCRPCService) *BTCPoller {
 	return &BTCPoller{
 		state:       state,
 		db:          db,
 		confirmChan: make(chan *types.BtcBlockExt, 64),
+		rpcService:  rpcService,
 
 		lastStartHeight: state.GetL2Info().StartBtcHeight,
 
@@ -138,42 +138,15 @@ func (p *BTCPoller) GetBlockHashForTx(txHash chainhash.Hash) (*chainhash.Hash, e
 	return blockHash, nil
 }
 func (p *BTCPoller) GetBlockHeader(blockHash *chainhash.Hash) (*wire.BlockHeader, error) {
-	var blockData db.BtcBlockData
-	if err := p.db.Where("block_hash = ?", blockHash.String()).First(&blockData).Error; err != nil {
-		return nil, fmt.Errorf("failed to retrieve block header from database: %v", err)
-	}
-
-	header := wire.BlockHeader{}
-	err := header.Deserialize(bytes.NewReader(blockData.Header))
-	if err != nil {
-		return nil, fmt.Errorf("failed to deserialize block header: %v", err)
-	}
-
-	return &header, nil
+	return p.rpcService.GetBlockHeader(blockHash)
 }
 
 func (p *BTCPoller) GetTxHashes(blockHash *chainhash.Hash) ([]chainhash.Hash, error) {
-	var txHashes []chainhash.Hash
-
-	var blockData db.BtcBlockData
-	if err := p.db.Where("block_hash = ?", blockHash.String()).First(&blockData).Error; err != nil {
-		return nil, fmt.Errorf("failed to retrieve block data from database: %v", err)
-	}
-
-	err := json.Unmarshal([]byte(blockData.TxHashes), &txHashes)
-	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal transaction hash list: %v", err)
-	}
-
-	return txHashes, nil
+	return p.rpcService.GetTxHashes(blockHash)
 }
 
 func (p *BTCPoller) GetBlock(height uint64) (*db.BtcBlockData, error) {
-	var blockData db.BtcBlockData
-	if err := p.db.Where("block_height = ?", height).First(&blockData).Error; err != nil {
-		return nil, fmt.Errorf("error retrieving block from database: %v", err)
-	}
-	return &blockData, nil
+	return p.rpcService.GetBlockData(height)
 }
 
 func (p *BTCPoller) handleConfirmedBlock(block *types.BtcBlockExt) {

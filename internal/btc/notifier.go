@@ -34,22 +34,20 @@ type BTCNotifier struct {
 	syncMu         sync.Mutex
 	initOnce       sync.Once
 
-	cache      *BTCCache
 	poller     *BTCPoller
 	feeFetcher NetworkFeeFetcher
 }
 
-func NewBTCNotifier(client *rpcclient.Client, cache *BTCCache, poller *BTCPoller) *BTCNotifier {
+func NewBTCNotifier(client *rpcclient.Client, poller *BTCPoller) *BTCNotifier {
 	var maxBlockHeight int64 = -1
 	var reindexBlocks []string
-	var lastBlock db.BtcBlockData
-	result := cache.db.Order("block_height desc").First(&lastBlock)
-	if result.Error != nil && result.Error != gorm.ErrRecordNotFound {
-		log.Fatalf("Failed to get max block height from db, %v", result.Error)
+
+	// No longer retrieve the maximum block height from the cache database, switch to getting it from RPC
+	blockCount, err := client.GetBlockCount()
+	if err != nil {
+		log.Fatalf("Failed to get block count from RPC, %v", err)
 	}
-	if result.Error == nil {
-		maxBlockHeight = int64(lastBlock.BlockHeight) - 1
-	}
+	maxBlockHeight = blockCount - 1
 
 	if maxBlockHeight < int64(config.AppConfig.BTCStartHeight) {
 		maxBlockHeight = int64(config.AppConfig.BTCStartHeight) - 1
@@ -61,26 +59,22 @@ func NewBTCNotifier(client *rpcclient.Client, cache *BTCCache, poller *BTCPoller
 		log.Infof("New btc notify reindex blocks are %v", reindexBlocks)
 	}
 
-	var syncStatus db.BtcSyncStatus
-	resultQuery := cache.db.First(&syncStatus)
-	if resultQuery.Error != nil && resultQuery.Error == gorm.ErrRecordNotFound {
-		syncStatus.ConfirmedHeight = int64(config.AppConfig.BTCStartHeight - 1)
-		syncStatus.UnconfirmHeight = int64(config.AppConfig.BTCStartHeight - 1)
-		syncStatus.UpdatedAt = time.Now()
-		cache.db.Create(&syncStatus)
-		log.Info("New btc notify sync status not found, create one")
-	} else if resultQuery.Error == nil {
-		// check btc light db latest block
-		confirmedBlock, err := poller.state.GetLatestConfirmedBtcBlock()
-		if err != nil {
-			log.Warnf("New btc notify sync status GetLatestConfirmedBtcBlock error: %v", err)
-		}
-		if confirmedBlock != nil && confirmedBlock.Height < uint64(syncStatus.ConfirmedHeight) {
-			syncStatus.ConfirmedHeight = int64(confirmedBlock.Height)
-			syncStatus.UpdatedAt = time.Now()
-			log.Warnf("New btc notify sync status set confirmed height to %d", confirmedBlock.Height)
-		}
+	syncStatus := db.BtcSyncStatus{
+		ConfirmedHeight: int64(config.AppConfig.BTCStartHeight - 1),
+		UnconfirmHeight: int64(config.AppConfig.BTCStartHeight - 1),
+		UpdatedAt:       time.Now(),
 	}
+
+	confirmedBlock, err := poller.state.GetLatestConfirmedBtcBlock()
+	if err != nil {
+		log.Warnf("New btc notify sync status GetLatestConfirmedBtcBlock error: %v", err)
+	}
+	if confirmedBlock != nil && confirmedBlock.Height < uint64(syncStatus.ConfirmedHeight) {
+		syncStatus.ConfirmedHeight = int64(confirmedBlock.Height)
+		syncStatus.UpdatedAt = time.Now()
+		log.Warnf("New btc notify sync status set confirmed height to %d", confirmedBlock.Height)
+	}
+
 	log.Infof("New btc notify sync status confirmed height is %d", syncStatus.ConfirmedHeight)
 
 	return &BTCNotifier{
@@ -90,14 +84,12 @@ func NewBTCNotifier(client *rpcclient.Client, cache *BTCCache, poller *BTCPoller
 		reindexBlocks:  reindexBlocks,
 		catchingStatus: true,
 		syncStatus:     &syncStatus,
-		cache:          cache,
 		poller:         poller,
 		feeFetcher:     NewMemPoolFeeFetcher(client),
 	}
 }
 
 func (bn *BTCNotifier) Start(ctx context.Context, blockDoneCh chan struct{}) {
-	bn.cache.Start(ctx)
 	go bn.poller.Start(ctx)
 	go bn.checkConfirmations(ctx, blockDoneCh)
 }
@@ -247,7 +239,6 @@ func (bn *BTCNotifier) processBlockAtHeight(height int64, blockDoneCh chan struc
 		log.Errorf("Error fetching block at height %d: %v", height, err)
 		return err
 	}
-	bn.cache.blockChan <- BlockWithHeight{Block: block, Height: uint64(height)}
 	bn.poller.confirmChan <- &types.BtcBlockExt{MsgBlock: *block, BlockNumber: uint64(height)}
 
 	<-blockDoneCh
@@ -262,7 +253,6 @@ func (bn *BTCNotifier) saveSyncStatus(newSyncHeight, confirmedHeight int64) {
 
 	bn.syncStatus.ConfirmedHeight = newSyncHeight
 	bn.syncStatus.UpdatedAt = time.Now()
-	bn.cache.db.Save(bn.syncStatus)
 
 	if newSyncHeight >= confirmedHeight {
 		bn.poller.state.UpdateBtcSyncing(false)
@@ -278,7 +268,7 @@ func (bn *BTCNotifier) fetchSubScriptForDeposit(depositResult *db.DepositResult)
 		return
 	}
 
-	tx, err := bn.client.GetRawTransactionVerbose(txHash)
+	tx, err := bn.poller.rpcService.GetRawTransactionVerbose(txHash)
 	if err != nil {
 		log.Errorf("Failed to fetch transaction details for Txid: %s, error: %v", depositResult.Txid, err)
 		return
@@ -287,7 +277,7 @@ func (bn *BTCNotifier) fetchSubScriptForDeposit(depositResult *db.DepositResult)
 	if len(tx.Vout) > int(depositResult.TxOut) {
 		blockHash, _ := chainhash.NewHashFromStr(tx.BlockHash)
 		// get deposit key by btc block height
-		block, err := bn.client.GetBlockVerbose(blockHash)
+		block, err := bn.poller.rpcService.GetBlockVerbose(blockHash)
 		if err != nil {
 			log.Errorf("Failed to get block details for Txid: %s, error: %v", depositResult.Txid, err)
 			return

@@ -63,7 +63,7 @@ func (w *WalletServer) finalizeWithdrawSig() {
 	}
 	log.Debugf("WalletServer finalizeWithdrawSig get latest confirmed send order, sendOrder: %+v", sendOrder)
 
-	btcBlockData, err := w.state.QueryBtcBlockDataByHeight(sendOrder.BtcBlock)
+	btcBlockData, err := w.rpcService.GetBlockData(sendOrder.BtcBlock)
 	if err != nil {
 		log.Errorf("WalletServer finalizeWithdrawSig query btc block data by height %d error: %v", sendOrder.BtcBlock, err)
 		return

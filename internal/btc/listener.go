@@ -20,10 +20,10 @@ type BTCListener struct {
 
 func NewBTCListener(libp2p *p2p.LibP2PService, state *state.State, dbm *db.DatabaseManager, btcClient *rpcclient.Client) *BTCListener {
 	db := dbm.GetBtcCacheDB()
-	cache := NewBTCCache(db)
-	poller := NewBTCPoller(state, db)
+	rpcService := NewBTCRPCService(btcClient)
+	poller := NewBTCPoller(state, db, rpcService)
 
-	notifier := NewBTCNotifier(btcClient, cache, poller)
+	notifier := NewBTCNotifier(btcClient, poller)
 
 	return &BTCListener{
 		libp2p:   libp2p,
