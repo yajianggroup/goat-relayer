@@ -19,10 +19,9 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
-	"github.com/libp2p/go-libp2p/p2p/host/autonat"
-	quic "github.com/libp2p/go-libp2p/p2p/transport/quic"
 	tcp "github.com/libp2p/go-libp2p/p2p/transport/tcp"
 	"github.com/multiformats/go-multiaddr"
+	manet "github.com/multiformats/go-multiaddr/net"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/goatnetwork/goat-relayer/internal/config"
@@ -178,7 +177,6 @@ func (lp *LibP2PService) connectToBootNode(ctx context.Context, node host.Host, 
 	var connected bool
 	var connectedPeerID peer.ID
 
-	// Try each transport protocol in order of preference: QUIC first (better NAT traversal), then TCP
 	for i, peerAddr := range peerAddrs {
 		log.Debugf("Attempting connection to %s via %s", peerAddr.ID, peerAddr.Addrs[0])
 
@@ -334,7 +332,6 @@ func parseAddr(addrStr string) (*peer.AddrInfo, error) {
 }
 
 // generateTransportAddresses creates multiple transport addresses from a single address
-// Priority order: QUIC first (better NAT traversal), then TCP
 func generateTransportAddresses(originalAddr string) ([]*peer.AddrInfo, error) {
 	// Parse the original address to extract IP and peer ID
 	addr, err := multiaddr.NewMultiaddr(originalAddr)
@@ -371,9 +368,7 @@ func generateTransportAddresses(originalAddr string) ([]*peer.AddrInfo, error) {
 		return nil, fmt.Errorf("no peer ID found in multiaddr: %v", err)
 	}
 
-	// Generate addresses for different transports (QUIC first for better NAT traversal)
 	addresses := []string{
-		fmt.Sprintf("/%s/%s/udp/%s/quic-v1/p2p/%s", ipVersion, ip, port, peerIDStr),
 		fmt.Sprintf("/%s/%s/tcp/%s/p2p/%s", ipVersion, ip, port, peerIDStr),
 	}
 
@@ -423,24 +418,35 @@ func createNodeWithPubSub(ctx context.Context) (host.Host, *pubsub.PubSub, error
 	}
 
 	listenAddr := fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", config.AppConfig.Libp2pPort)
-	listenAddrQUIC := fmt.Sprintf("/ip4/0.0.0.0/udp/%d/quic-v1", config.AppConfig.Libp2pPort)
+
+	addrsOpt := libp2p.AddrsFactory(func(in []multiaddr.Multiaddr) (out []multiaddr.Multiaddr) {
+		for _, a := range in {
+			if manet.IsPublicAddr(a) || manet.IsPrivateAddr(a) {
+				// exclude 0.0.0.0 / 127.0.0.1 / link-local
+				if !manet.IsIPLoopback(a) && !manet.IsIP6LinkLocal(a) && !manet.IsIPUnspecified(a) {
+					out = append(out, a)
+				}
+			}
+		}
+		// "/ip4/52.88.11.99/tcp/4001,/ip4/54.91.64.7/tcp/4001"
+		for _, s := range strings.FieldsFunc(os.Getenv("EXTERNAL_P2P_ADDR"), func(r rune) bool { return r == ',' || r == ' ' }) {
+			if m, err := multiaddr.NewMultiaddr(strings.TrimSpace(s)); err == nil {
+				out = append(out, m)
+			} else {
+				log.Warnf("bad multiaddr %q: %v", s, err)
+			}
+		}
+		return
+	})
 
 	// Enhanced libp2p options for better NAT traversal and connectivity
 	opts := []libp2p.Option{
 		libp2p.Identity(privKey),
 		// Enable multiple transports for better connectivity
 		libp2p.Transport(tcp.NewTCPTransport),
-		libp2p.Transport(quic.NewTransport),
-		// Listen on both TCP and QUIC
-		libp2p.ListenAddrStrings(listenAddr, listenAddrQUIC),
-		// Enable AutoNAT for automatic public address discovery
-		libp2p.EnableAutoNATv2(),
-		// Enable NAT port mapping (UPnP, NAT-PMP)
-		libp2p.EnableNATService(),
-		// Enable circuit relay v2 (both as client and limited relay)
-		libp2p.EnableRelayService(),
-		// Enable autorelay for automatic relay usage when behind NAT
-		libp2p.EnableAutoRelayWithStaticRelays([]peer.AddrInfo{}),
+		// Listen on TCP
+		libp2p.ListenAddrStrings(listenAddr),
+		addrsOpt,
 		// Security and muxer options
 		libp2p.DefaultSecurity,
 		libp2p.DefaultMuxers,
@@ -455,12 +461,7 @@ func createNodeWithPubSub(ctx context.Context) (host.Host, *pubsub.PubSub, error
 		return nil, nil, err
 	}
 
-	// Start AutoNAT service for NAT detection
-	if _, err := autonat.New(node); err != nil {
-		log.Warnf("Failed to create AutoNAT client: %v", err)
-	}
-
-	ps, err := pubsub.NewGossipSub(ctx, node)
+	ps, err := pubsub.NewGossipSub(ctx, node, pubsub.WithPeerExchange(true))
 	if err != nil {
 		return nil, nil, err
 	}
