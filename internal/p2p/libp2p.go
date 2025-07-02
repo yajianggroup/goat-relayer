@@ -38,6 +38,10 @@ const (
 )
 
 var messageTopic *pubsub.Topic
+var hbTopic *pubsub.Topic
+var pubsubService *pubsub.PubSub
+var currentMessageSub *pubsub.Subscription
+var currentHBSub *pubsub.Subscription
 
 type LibP2PService struct {
 	state *state.State
@@ -54,6 +58,10 @@ func (lp *LibP2PService) Start(ctx context.Context) {
 	if err != nil {
 		log.Fatalf("Failed to create libp2p node: %v", err)
 	}
+
+	// Store global references for topic reconnection
+	pubsubService = ps
+
 	printNodeAddrInfo(node)
 
 	node.SetStreamHandler(protocol.ID(handshakeProtocol), func(s network.Stream) {
@@ -64,32 +72,14 @@ func (lp *LibP2PService) Start(ctx context.Context) {
 
 	go lp.connectToBootNodes(ctx, node)
 
-	messageTopic, err = ps.Join(messageTopicName)
+	// Initialize topics and subscriptions
+	err = lp.initializeTopics(ctx, node)
 	if err != nil {
-		log.Fatalf("Failed to join message topic: %v", err)
+		log.Fatalf("Failed to initialize topics: %v", err)
 	}
 
-	sub, err := messageTopic.Subscribe()
-	if err != nil {
-		log.Fatalf("Failed to subscribe to message topic: %v", err)
-	}
-
-	hbTopic, err := ps.Join(heartbeatTopicName)
-	if err != nil {
-		log.Fatalf("Failed to join heartbeat topic: %v", err)
-	}
-
-	hbSub, err := hbTopic.Subscribe()
-	if err != nil {
-		log.Fatalf("Failed to subscribe to heartbeat topic: %v", err)
-	}
-
-	go lp.handlePubSubMessages(ctx, sub, node)
-	go lp.handleHeartbeatMessages(ctx, hbSub, node)
-	go startHeartbeat(ctx, node, hbTopic)
-
-	// Enhanced network diagnosis
-	go lp.startNetworkDiagnosis(ctx, node, messageTopic)
+	// Enhanced network diagnosis with topic recovery
+	go lp.startNetworkDiagnosisWithRecovery(ctx, node)
 
 	go func() {
 		time.Sleep(5 * time.Second)
@@ -123,6 +113,81 @@ func (lp *LibP2PService) Start(ctx context.Context) {
 		log.Errorf("Error closing libp2p node: %v", err)
 	}
 	log.Info("LibP2PService has stopped.")
+}
+
+// initializeTopics sets up topic subscriptions and message handlers
+func (lp *LibP2PService) initializeTopics(ctx context.Context, node host.Host) error {
+	var err error
+
+	// Join message topic
+	messageTopic, err = pubsubService.Join(messageTopicName)
+	if err != nil {
+		return fmt.Errorf("failed to join message topic: %v", err)
+	}
+
+	// Subscribe to message topic
+	currentMessageSub, err = messageTopic.Subscribe()
+	if err != nil {
+		return fmt.Errorf("failed to subscribe to message topic: %v", err)
+	}
+
+	// Join heartbeat topic
+	hbTopic, err = pubsubService.Join(heartbeatTopicName)
+	if err != nil {
+		return fmt.Errorf("failed to join heartbeat topic: %v", err)
+	}
+
+	// Subscribe to heartbeat topic
+	currentHBSub, err = hbTopic.Subscribe()
+	if err != nil {
+		return fmt.Errorf("failed to subscribe to heartbeat topic: %v", err)
+	}
+
+	// Start message handlers
+	go lp.handlePubSubMessages(ctx, currentMessageSub, node)
+	go lp.handleHeartbeatMessages(ctx, currentHBSub, node)
+	go startHeartbeat(ctx, node, hbTopic)
+
+	log.Infof("✅ Topics initialized successfully")
+	return nil
+}
+
+// reconnectTopics handles topic reconnection when subscriptions are lost
+func (lp *LibP2PService) reconnectTopics(ctx context.Context, node host.Host) error {
+	log.Warnf("🔄 Attempting to reconnect topics...")
+
+	// Close existing subscriptions if they exist
+	if currentMessageSub != nil {
+		currentMessageSub.Cancel()
+		currentMessageSub = nil
+	}
+	if currentHBSub != nil {
+		currentHBSub.Cancel()
+		currentHBSub = nil
+	}
+
+	// Close existing topics to allow re-joining
+	if messageTopic != nil {
+		messageTopic.Close()
+		messageTopic = nil
+	}
+	if hbTopic != nil {
+		hbTopic.Close()
+		hbTopic = nil
+	}
+
+	// Wait a moment for cleanup
+	time.Sleep(2 * time.Second)
+
+	// Reinitialize topics
+	return lp.initializeTopics(ctx, node)
+}
+
+// ForceTopicReconnection allows manual triggering of topic reconnection
+// This is useful for external monitoring or manual intervention
+func (lp *LibP2PService) ForceTopicReconnection(ctx context.Context, node host.Host) error {
+	log.Warnf("🔄 Manual topic reconnection triggered")
+	return lp.reconnectTopics(ctx, node)
 }
 
 func (lp *LibP2PService) connectToBootNodes(ctx context.Context, node host.Host) {
@@ -515,20 +580,32 @@ func printNodeAddrInfo(node host.Host) {
 	}
 }
 
-func (lp *LibP2PService) startNetworkDiagnosis(ctx context.Context, node host.Host, topic *pubsub.Topic) {
+// startNetworkDiagnosisWithRecovery monitors network status and automatically recovers from topic subscription loss
+func (lp *LibP2PService) startNetworkDiagnosisWithRecovery(ctx context.Context, node host.Host) {
 	ticker := time.NewTicker(60 * time.Second) // Every minute
 	defer ticker.Stop()
+
+	var lastTopicRecovery time.Time
+	const topicRecoveryInterval = 2 * time.Minute // Minimum interval between topic recovery attempts
 
 	for {
 		select {
 		case <-ticker.C:
 			peers := node.Network().Peers()
 			connectedPeers := 0
-			topics := topic.ListPeers()
+
+			var messageTopicPeers, hbTopicPeers []peer.ID
+			if messageTopic != nil {
+				messageTopicPeers = messageTopic.ListPeers()
+			}
+			if hbTopic != nil {
+				hbTopicPeers = hbTopic.ListPeers()
+			}
 
 			log.Infof("📊 Network Status Report:")
 			log.Infof("  🔗 Total connected peers: %d", len(peers))
-			log.Infof("  📢 Peers in message topic: %d", len(topics))
+			log.Infof("  📢 Peers in message topic: %d", len(messageTopicPeers))
+			log.Infof("  💓 Peers in heartbeat topic: %d", len(hbTopicPeers))
 
 			for _, peerID := range peers {
 				conns := node.Network().ConnsToPeer(peerID)
@@ -544,11 +621,31 @@ func (lp *LibP2PService) startNetworkDiagnosis(ctx context.Context, node host.Ho
 
 			log.Infof("  📈 Active connections: %d", connectedPeers)
 
-			// Warn about potential issues
+			// Check for potential issues and auto-recovery
 			if len(peers) == 0 {
 				log.Warnf("⚠️  No connected peers! Check your network configuration")
-			} else if len(topics) < len(peers) {
-				log.Warnf("⚠️  Not all peers are in message topic (%d/%d)", len(topics), len(peers))
+			} else if len(messageTopicPeers) == 0 || len(hbTopicPeers) == 0 {
+				log.Errorf("🚨 CRITICAL: Topic subscriptions lost! Message topic peers: %d, Heartbeat topic peers: %d",
+					len(messageTopicPeers), len(hbTopicPeers))
+
+				// Auto-recovery: attempt to reconnect topics if enough time has passed
+				if time.Since(lastTopicRecovery) > topicRecoveryInterval {
+					log.Warnf("🔄 Initiating automatic topic recovery...")
+					if err := lp.reconnectTopics(ctx, node); err != nil {
+						log.Errorf("❌ Topic recovery failed: %v", err)
+					} else {
+						log.Infof("✅ Topic recovery completed successfully")
+						lastTopicRecovery = time.Now()
+					}
+				} else {
+					timeUntilNext := topicRecoveryInterval - time.Since(lastTopicRecovery)
+					log.Warnf("⏰ Topic recovery on cooldown, next attempt in %v", timeUntilNext.Round(time.Second))
+				}
+			} else if len(messageTopicPeers) < len(peers) || len(hbTopicPeers) < len(peers) {
+				log.Warnf("⚠️  Some peers not in topics - Message: (%d/%d), Heartbeat: (%d/%d)",
+					len(messageTopicPeers), len(peers), len(hbTopicPeers), len(peers))
+			} else {
+				log.Infof("✅ All network connections and topic subscriptions are healthy")
 			}
 
 		case <-ctx.Done():
