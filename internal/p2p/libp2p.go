@@ -45,6 +45,9 @@ var currentHBSub *pubsub.Subscription
 
 type LibP2PService struct {
 	state *state.State
+	// Add context cancellation for goroutines
+	topicsCancel context.CancelFunc
+	topicsCtx    context.Context
 }
 
 func NewLibP2PService(state *state.State) *LibP2PService {
@@ -109,6 +112,7 @@ func (lp *LibP2PService) Start(ctx context.Context) {
 	<-ctx.Done()
 
 	log.Info("LibP2PService is stopping...")
+	lp.Stop()
 	if err := node.Close(); err != nil {
 		log.Errorf("Error closing libp2p node: %v", err)
 	}
@@ -118,6 +122,9 @@ func (lp *LibP2PService) Start(ctx context.Context) {
 // initializeTopics sets up topic subscriptions and message handlers
 func (lp *LibP2PService) initializeTopics(ctx context.Context, node host.Host) error {
 	var err error
+
+	// Create a cancellable context for this topics initialization
+	lp.topicsCtx, lp.topicsCancel = context.WithCancel(ctx)
 
 	// Join message topic
 	messageTopic, err = pubsubService.Join(messageTopicName)
@@ -143,10 +150,10 @@ func (lp *LibP2PService) initializeTopics(ctx context.Context, node host.Host) e
 		return fmt.Errorf("failed to subscribe to heartbeat topic: %v", err)
 	}
 
-	// Start message handlers
-	go lp.handlePubSubMessages(ctx, currentMessageSub, node)
-	go lp.handleHeartbeatMessages(ctx, currentHBSub, node)
-	go startHeartbeat(ctx, node, hbTopic)
+	// Start message handlers with the topics-specific context
+	go lp.handlePubSubMessages(lp.topicsCtx, currentMessageSub, node)
+	go lp.handleHeartbeatMessages(lp.topicsCtx, currentHBSub, node)
+	go startHeartbeat(lp.topicsCtx, node)
 
 	log.Infof("✅ Topics initialized successfully")
 	return nil
@@ -155,6 +162,14 @@ func (lp *LibP2PService) initializeTopics(ctx context.Context, node host.Host) e
 // reconnectTopics handles topic reconnection when subscriptions are lost
 func (lp *LibP2PService) reconnectTopics(ctx context.Context, node host.Host) error {
 	log.Warnf("🔄 Attempting to reconnect topics...")
+
+	// Cancel existing goroutines first
+	if lp.topicsCancel != nil {
+		log.Debugf("Cancelling existing topic goroutines...")
+		lp.topicsCancel()
+		// Wait a moment for goroutines to exit
+		time.Sleep(1 * time.Second)
+	}
 
 	// Close existing subscriptions if they exist
 	if currentMessageSub != nil {
@@ -576,7 +591,7 @@ func printNodeAddrInfo(node host.Host) {
 
 	for _, addr := range addrs {
 		fullAddr := fmt.Sprintf("%s/p2p/%s", addr, peerID)
-		log.Infof("Bootnode address: %s", fullAddr)
+		log.Infof("Listening on: %s", fullAddr)
 	}
 }
 
@@ -597,9 +612,13 @@ func (lp *LibP2PService) startNetworkDiagnosisWithRecovery(ctx context.Context, 
 			var messageTopicPeers, hbTopicPeers []peer.ID
 			if messageTopic != nil {
 				messageTopicPeers = messageTopic.ListPeers()
+			} else {
+				log.Warnf("⚠️ Message topic is nil, cannot publish message")
 			}
 			if hbTopic != nil {
 				hbTopicPeers = hbTopic.ListPeers()
+			} else {
+				log.Warnf("⚠️ Heartbeat topic is nil, cannot publish heartbeat")
 			}
 
 			log.Infof("📊 Network Status Report:")
@@ -652,4 +671,37 @@ func (lp *LibP2PService) startNetworkDiagnosisWithRecovery(ctx context.Context, 
 			return
 		}
 	}
+}
+
+// Stop gracefully stops the LibP2P service and cancels all goroutines
+func (lp *LibP2PService) Stop() {
+	log.Infof("🛑 Stopping LibP2P service...")
+
+	// Cancel topic goroutines
+	if lp.topicsCancel != nil {
+		log.Debugf("Cancelling topic goroutines...")
+		lp.topicsCancel()
+	}
+
+	// Close subscriptions
+	if currentMessageSub != nil {
+		currentMessageSub.Cancel()
+		currentMessageSub = nil
+	}
+	if currentHBSub != nil {
+		currentHBSub.Cancel()
+		currentHBSub = nil
+	}
+
+	// Close topics
+	if messageTopic != nil {
+		messageTopic.Close()
+		messageTopic = nil
+	}
+	if hbTopic != nil {
+		hbTopic.Close()
+		hbTopic = nil
+	}
+
+	log.Infof("✅ LibP2P service stopped")
 }
