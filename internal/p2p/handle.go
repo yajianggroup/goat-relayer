@@ -179,7 +179,7 @@ func convertMsgData(msg Message[json.RawMessage]) any {
 	return unmarshal[any](msg.Data)
 }
 
-func startHeartbeat(ctx context.Context, node host.Host, topic *pubsub.Topic) {
+func startHeartbeat(ctx context.Context, node host.Host) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
@@ -189,6 +189,11 @@ func startHeartbeat(ctx context.Context, node host.Host, topic *pubsub.Topic) {
 			peers := node.Network().Peers()
 			if len(peers) == 0 {
 				log.Warnf("No peers, please check your network connection")
+				continue
+			}
+
+			if hbTopic == nil {
+				log.Error("Heartbeat topic is nil, cannot publish heartbeat")
 				continue
 			}
 
@@ -204,7 +209,7 @@ func startHeartbeat(ctx context.Context, node host.Host, topic *pubsub.Topic) {
 				continue
 			}
 
-			if err := topic.Publish(ctx, msgBytes); err != nil {
+			if err := hbTopic.Publish(ctx, msgBytes); err != nil {
 				log.Errorf("Failed to publish heartbeat message: %v", err)
 			} else {
 				log.Infof("Heartbeat message sent by %s", hbMsg.PeerID)
