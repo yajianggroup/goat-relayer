@@ -170,9 +170,17 @@ func (bn *BTCNotifier) checkConfirmations(ctx context.Context, blockDoneCh chan 
 			bn.poller.state.UpdateBtcSyncing(true)
 
 			newSyncHeight := syncConfirmedHeight
-			log.Infof("BTC sync started: best height=%d, from=%d, to=%d", bestHeight, syncConfirmedHeight+1, confirmedHeight)
 
-			for height := syncConfirmedHeight + 1; height <= confirmedHeight; height++ {
+			// calculate the max range of this sync
+			maxRange := int64(config.AppConfig.BTCMaxRange)
+			endHeight := syncConfirmedHeight + maxRange
+			if endHeight > confirmedHeight {
+				endHeight = confirmedHeight
+			}
+
+			log.Infof("BTC sync started: best height=%d, from=%d, to=%d, max_range=%d", bestHeight, syncConfirmedHeight+1, endHeight, maxRange)
+
+			for height := syncConfirmedHeight + 1; height <= endHeight; height++ {
 				if err := bn.processBlockAtHeight(height, blockDoneCh); err != nil {
 					break
 				}
@@ -184,7 +192,7 @@ func (bn *BTCNotifier) checkConfirmations(ctx context.Context, blockDoneCh chan 
 			if syncConfirmedHeight != newSyncHeight {
 				bn.saveSyncStatus(newSyncHeight, confirmedHeight)
 			}
-			log.Infof("BTC sync finished: best height=%d, from=%d, to=%d, syncing=%t", bestHeight, syncConfirmedHeight+1, confirmedHeight, bn.poller.state.GetBtcHead().Syncing)
+			log.Infof("BTC sync finished: best height=%d, from=%d, to=%d, syncing=%t", bestHeight, syncConfirmedHeight+1, newSyncHeight, bn.poller.state.GetBtcHead().Syncing)
 		}
 	}
 }
