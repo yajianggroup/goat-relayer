@@ -51,10 +51,9 @@ type BTCPoller struct {
 	once         sync.Once
 }
 
-func NewBTCPoller(state *state.State, db *gorm.DB, rpcService *BTCRPCService) *BTCPoller {
+func NewBTCPoller(state *state.State, rpcService *BTCRPCService) *BTCPoller {
 	return &BTCPoller{
 		state:       state,
-		db:          db,
 		confirmChan: make(chan *types.BtcBlockExt, 64),
 		rpcService:  rpcService,
 

@@ -23,16 +23,13 @@ import (
 )
 
 type BTCNotifier struct {
-	client         *rpcclient.Client
-	confirmations  int64
-	currentHeight  uint64
-	reindexBlocks  []string
-	bestHeight     int64
-	catchingStatus bool
-	catchingMu     sync.Mutex
-	syncStatus     *db.BtcSyncStatus
-	syncMu         sync.Mutex
-	initOnce       sync.Once
+	client        *rpcclient.Client
+	confirmations int64
+	currentHeight uint64
+	reindexBlocks []string
+	syncStatus    *db.BtcSyncStatus
+	syncMu        sync.Mutex
+	initOnce      sync.Once
 
 	poller     *BTCPoller
 	feeFetcher NetworkFeeFetcher
@@ -94,14 +91,13 @@ func NewBTCNotifier(client *rpcclient.Client, poller *BTCPoller) *BTCNotifier {
 	log.Infof("New btc notify sync status confirmed height is %d", syncStatus.ConfirmedHeight)
 
 	return &BTCNotifier{
-		client:         client,
-		confirmations:  int64(config.AppConfig.BTCConfirmations),
-		currentHeight:  uint64(maxBlockHeight + 1),
-		reindexBlocks:  reindexBlocks,
-		catchingStatus: true,
-		syncStatus:     syncStatus,
-		poller:         poller,
-		feeFetcher:     NewMemPoolFeeFetcher(client),
+		client:        client,
+		confirmations: int64(config.AppConfig.BTCConfirmations),
+		currentHeight: uint64(maxBlockHeight + 1),
+		reindexBlocks: reindexBlocks,
+		syncStatus:    syncStatus,
+		poller:        poller,
+		feeFetcher:    NewMemPoolFeeFetcher(client),
 	}
 }
 
@@ -157,17 +153,6 @@ func (bn *BTCNotifier) checkConfirmations(ctx context.Context, blockDoneCh chan 
 				}
 			})
 
-			if bestHeight <= bn.bestHeight {
-				// no need to sync
-				log.Debugf("No need to sync, remote best height: %d, local best height: %d", bestHeight, bn.bestHeight)
-				continue
-			}
-			defer func() {
-				bn.bestHeight = bestHeight
-			}()
-
-			bn.updateCatchingStatus(bestHeight)
-
 			confirmedHeight := bestHeight - bn.confirmations
 			log.Debugf("BTC block confirmation: best height=%d, confirmed height=%d, current height=%d", bestHeight, confirmedHeight, bn.currentHeight)
 
@@ -199,16 +184,9 @@ func (bn *BTCNotifier) checkConfirmations(ctx context.Context, blockDoneCh chan 
 			if syncConfirmedHeight != newSyncHeight {
 				bn.saveSyncStatus(newSyncHeight, confirmedHeight)
 			}
+			log.Infof("BTC sync finished: best height=%d, from=%d, to=%d, syncing=%t", bestHeight, syncConfirmedHeight+1, confirmedHeight, bn.poller.state.GetBtcHead().Syncing)
 		}
 	}
-}
-
-// update catching status
-func (bn *BTCNotifier) updateCatchingStatus(bestHeight int64) {
-	catchingStatus := int64(bn.currentHeight)+bn.confirmations < bestHeight
-	bn.catchingMu.Lock()
-	bn.catchingStatus = catchingStatus
-	bn.catchingMu.Unlock()
 }
 
 // handle deposit results need fetch sub script
