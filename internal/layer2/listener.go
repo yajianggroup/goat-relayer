@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/cosmos/cosmos-sdk/std"
@@ -27,6 +28,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/goatnetwork/goat-relayer/internal/btc"
 	"github.com/goatnetwork/goat-relayer/internal/config"
 	"github.com/goatnetwork/goat-relayer/internal/db"
 	"github.com/goatnetwork/goat-relayer/internal/layer2/abis"
@@ -91,9 +93,10 @@ type Layer2Listener struct {
 	sigFinishChan chan interface{}
 
 	tssSigner *tss.Signer
+	btcRPC    *btc.BTCRPCService
 }
 
-func NewLayer2Listener(libp2p *p2p.LibP2PService, state *state.State, db *db.DatabaseManager) *Layer2Listener {
+func NewLayer2Listener(libp2p *p2p.LibP2PService, state *state.State, db *db.DatabaseManager, btcClient *rpcclient.Client) *Layer2Listener {
 	ethClient, err := DialEthClient()
 	if err != nil {
 		log.Fatalf("Error creating Layer2 EVM RPC client: %v", err)
@@ -131,6 +134,9 @@ func NewLayer2Listener(libp2p *p2p.LibP2PService, state *state.State, db *db.Dat
 	// Initialize TSS signer
 	tssSigner := tss.NewSigner(config.AppConfig.TssEndpoint, big.NewInt(config.AppConfig.L2ChainId.Int64()))
 
+	// Initialize BTC RPC service
+	btcRPC := btc.NewBTCRPCService(btcClient)
+
 	return &Layer2Listener{
 		libp2p:    libp2p,
 		db:        db,
@@ -150,6 +156,7 @@ func NewLayer2Listener(libp2p *p2p.LibP2PService, state *state.State, db *db.Dat
 
 		sigFinishChan: make(chan interface{}, 256),
 		tssSigner:     tssSigner,
+		btcRPC:        btcRPC,
 	}
 }
 

@@ -18,6 +18,7 @@ import (
 	"github.com/btcsuite/btcd/btcutil"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/rpcclient"
+	"github.com/goatnetwork/goat-relayer/internal/btc"
 	"github.com/goatnetwork/goat-relayer/internal/state"
 	bitcointypes "github.com/goatnetwork/goat/x/bitcoin/types"
 	log "github.com/sirupsen/logrus"
@@ -48,18 +49,19 @@ type BaseDepositProcessor struct {
 
 	btcClient     *rpcclient.Client
 	nextUnfirmIdx uint64
+	rpcService    *btc.BTCRPCService
 }
 
 var (
 	_ DepositProcessor = (*BaseDepositProcessor)(nil)
 )
 
-func NewDepositProcessor(btcClient *rpcclient.Client, state *state.State) DepositProcessor {
+func NewDepositProcessor(btcClient *rpcclient.Client, state *state.State, rpcService *btc.BTCRPCService) DepositProcessor {
 	return &BaseDepositProcessor{
-		state:     state,
-		btcClient: btcClient,
-
-		depositCh: make(chan interface{}, 100),
+		state:      state,
+		btcClient:  btcClient,
+		rpcService: rpcService,
+		depositCh:  make(chan interface{}, 100),
 
 		depositSigFailChan:    make(chan interface{}, 10),
 		depositSigFinishChan:  make(chan interface{}, 10),
@@ -245,13 +247,13 @@ func (b *BaseDepositProcessor) initDepositSig() {
 	}
 
 	// 6. get block headers
-	blockData, err := b.state.QueryBtcBlockDataByBlockHashes(verifiedBlockHashes)
-	if err != nil {
-		log.Errorf("QueryBtcBlockDataByBlockHashes error: %v", err)
-		return
-	}
 	msgBlockHeaders := make([]types.MsgBlockHeader, 0)
-	for _, blockData := range blockData {
+	for _, blockHash := range verifiedBlockHashes {
+		blockData, err := b.rpcService.GetBlockDataByHash(blockHash)
+		if err != nil {
+			log.Errorf("GetBlockDataByHash error: %v", err)
+			continue
+		}
 		msgBlockHeaders = append(msgBlockHeaders, types.MsgBlockHeader{
 			Raw:    blockData.Header,
 			Height: blockData.BlockHeight,

@@ -23,33 +23,28 @@ import (
 )
 
 type BTCNotifier struct {
-	client         *rpcclient.Client
-	confirmations  int64
-	currentHeight  uint64
-	reindexBlocks  []string
-	bestHeight     int64
-	catchingStatus bool
-	catchingMu     sync.Mutex
-	syncStatus     *db.BtcSyncStatus
-	syncMu         sync.Mutex
-	initOnce       sync.Once
+	client        *rpcclient.Client
+	confirmations int64
+	currentHeight uint64
+	reindexBlocks []string
+	syncStatus    *db.BtcSyncStatus
+	syncMu        sync.Mutex
+	initOnce      sync.Once
 
-	cache      *BTCCache
 	poller     *BTCPoller
 	feeFetcher NetworkFeeFetcher
 }
 
-func NewBTCNotifier(client *rpcclient.Client, cache *BTCCache, poller *BTCPoller) *BTCNotifier {
+func NewBTCNotifier(client *rpcclient.Client, poller *BTCPoller) *BTCNotifier {
 	var maxBlockHeight int64 = -1
 	var reindexBlocks []string
-	var lastBlock db.BtcBlockData
-	result := cache.db.Order("block_height desc").First(&lastBlock)
-	if result.Error != nil && result.Error != gorm.ErrRecordNotFound {
-		log.Fatalf("Failed to get max block height from db, %v", result.Error)
+
+	// No longer retrieve the maximum block height from the cache database, switch to getting it from RPC
+	blockCount, err := client.GetBlockCount()
+	if err != nil {
+		log.Fatalf("Failed to get block count from RPC, %v", err)
 	}
-	if result.Error == nil {
-		maxBlockHeight = int64(lastBlock.BlockHeight) - 1
-	}
+	maxBlockHeight = blockCount - 1
 
 	if maxBlockHeight < int64(config.AppConfig.BTCStartHeight) {
 		maxBlockHeight = int64(config.AppConfig.BTCStartHeight) - 1
@@ -61,15 +56,16 @@ func NewBTCNotifier(client *rpcclient.Client, cache *BTCCache, poller *BTCPoller
 		log.Infof("New btc notify reindex blocks are %v", reindexBlocks)
 	}
 
-	var syncStatus db.BtcSyncStatus
-	resultQuery := cache.db.First(&syncStatus)
-	if resultQuery.Error != nil && resultQuery.Error == gorm.ErrRecordNotFound {
-		syncStatus.ConfirmedHeight = int64(config.AppConfig.BTCStartHeight - 1)
-		syncStatus.UnconfirmHeight = int64(config.AppConfig.BTCStartHeight - 1)
-		syncStatus.UpdatedAt = time.Now()
-		cache.db.Create(&syncStatus)
+	var syncStatus *db.BtcSyncStatus
+	resultQuery, err := poller.state.GetBtcSyncStatus()
+	if err != nil && err == gorm.ErrRecordNotFound {
+		syncStatus, err = poller.state.CreateBtcSyncStatus(int64(config.AppConfig.BTCStartHeight-1), int64(config.AppConfig.BTCStartHeight-1))
+		if err != nil {
+			log.Errorf("New btc notify failed to create sync status: %v", err)
+		}
 		log.Info("New btc notify sync status not found, create one")
-	} else if resultQuery.Error == nil {
+	} else if err == nil {
+		syncStatus = resultQuery
 		// check btc light db latest block
 		confirmedBlock, err := poller.state.GetLatestConfirmedBtcBlock()
 		if err != nil {
@@ -81,23 +77,31 @@ func NewBTCNotifier(client *rpcclient.Client, cache *BTCCache, poller *BTCPoller
 			log.Warnf("New btc notify sync status set confirmed height to %d", confirmedBlock.Height)
 		}
 	}
+
+	confirmedBlock, err := poller.state.GetLatestConfirmedBtcBlock()
+	if err != nil {
+		log.Warnf("New btc notify sync status GetLatestConfirmedBtcBlock error: %v", err)
+	}
+	if confirmedBlock != nil && confirmedBlock.Height < uint64(syncStatus.ConfirmedHeight) {
+		syncStatus.ConfirmedHeight = int64(confirmedBlock.Height)
+		syncStatus.UpdatedAt = time.Now()
+		log.Warnf("New btc notify sync status set confirmed height to %d", confirmedBlock.Height)
+	}
+
 	log.Infof("New btc notify sync status confirmed height is %d", syncStatus.ConfirmedHeight)
 
 	return &BTCNotifier{
-		client:         client,
-		confirmations:  int64(config.AppConfig.BTCConfirmations),
-		currentHeight:  uint64(maxBlockHeight + 1),
-		reindexBlocks:  reindexBlocks,
-		catchingStatus: true,
-		syncStatus:     &syncStatus,
-		cache:          cache,
-		poller:         poller,
-		feeFetcher:     NewMemPoolFeeFetcher(client),
+		client:        client,
+		confirmations: int64(config.AppConfig.BTCConfirmations),
+		currentHeight: uint64(maxBlockHeight + 1),
+		reindexBlocks: reindexBlocks,
+		syncStatus:    syncStatus,
+		poller:        poller,
+		feeFetcher:    NewMemPoolFeeFetcher(client),
 	}
 }
 
 func (bn *BTCNotifier) Start(ctx context.Context, blockDoneCh chan struct{}) {
-	bn.cache.Start(ctx)
 	go bn.poller.Start(ctx)
 	go bn.checkConfirmations(ctx, blockDoneCh)
 }
@@ -149,17 +153,6 @@ func (bn *BTCNotifier) checkConfirmations(ctx context.Context, blockDoneCh chan 
 				}
 			})
 
-			if bestHeight <= bn.bestHeight {
-				// no need to sync
-				log.Debugf("No need to sync, remote best height: %d, local best height: %d", bestHeight, bn.bestHeight)
-				continue
-			}
-			defer func() {
-				bn.bestHeight = bestHeight
-			}()
-
-			bn.updateCatchingStatus(bestHeight)
-
 			confirmedHeight := bestHeight - bn.confirmations
 			log.Debugf("BTC block confirmation: best height=%d, confirmed height=%d, current height=%d", bestHeight, confirmedHeight, bn.currentHeight)
 
@@ -177,9 +170,17 @@ func (bn *BTCNotifier) checkConfirmations(ctx context.Context, blockDoneCh chan 
 			bn.poller.state.UpdateBtcSyncing(true)
 
 			newSyncHeight := syncConfirmedHeight
-			log.Infof("BTC sync started: best height=%d, from=%d, to=%d", bestHeight, syncConfirmedHeight+1, confirmedHeight)
 
-			for height := syncConfirmedHeight + 1; height <= confirmedHeight; height++ {
+			// calculate the max range of this sync
+			maxRange := int64(config.AppConfig.BTCMaxRange)
+			endHeight := syncConfirmedHeight + maxRange
+			if endHeight > confirmedHeight {
+				endHeight = confirmedHeight
+			}
+
+			log.Infof("BTC sync started: best height=%d, from=%d, to=%d, max_range=%d", bestHeight, syncConfirmedHeight+1, endHeight, maxRange)
+
+			for height := syncConfirmedHeight + 1; height <= endHeight; height++ {
 				if err := bn.processBlockAtHeight(height, blockDoneCh); err != nil {
 					break
 				}
@@ -191,16 +192,9 @@ func (bn *BTCNotifier) checkConfirmations(ctx context.Context, blockDoneCh chan 
 			if syncConfirmedHeight != newSyncHeight {
 				bn.saveSyncStatus(newSyncHeight, confirmedHeight)
 			}
+			log.Infof("BTC sync finished: best height=%d, from=%d, to=%d, syncing=%t", bestHeight, syncConfirmedHeight+1, newSyncHeight, bn.poller.state.GetBtcHead().Syncing)
 		}
 	}
-}
-
-// update catching status
-func (bn *BTCNotifier) updateCatchingStatus(bestHeight int64) {
-	catchingStatus := int64(bn.currentHeight)+bn.confirmations < bestHeight
-	bn.catchingMu.Lock()
-	bn.catchingStatus = catchingStatus
-	bn.catchingMu.Unlock()
 }
 
 // handle deposit results need fetch sub script
@@ -247,7 +241,6 @@ func (bn *BTCNotifier) processBlockAtHeight(height int64, blockDoneCh chan struc
 		log.Errorf("Error fetching block at height %d: %v", height, err)
 		return err
 	}
-	bn.cache.blockChan <- BlockWithHeight{Block: block, Height: uint64(height)}
 	bn.poller.confirmChan <- &types.BtcBlockExt{MsgBlock: *block, BlockNumber: uint64(height)}
 
 	<-blockDoneCh
@@ -262,7 +255,11 @@ func (bn *BTCNotifier) saveSyncStatus(newSyncHeight, confirmedHeight int64) {
 
 	bn.syncStatus.ConfirmedHeight = newSyncHeight
 	bn.syncStatus.UpdatedAt = time.Now()
-	bn.cache.db.Save(bn.syncStatus)
+
+	err := bn.poller.state.SaveBtcSyncStatus(bn.syncStatus)
+	if err != nil {
+		log.Errorf("Failed to save sync status: %v", err)
+	}
 
 	if newSyncHeight >= confirmedHeight {
 		bn.poller.state.UpdateBtcSyncing(false)
@@ -278,7 +275,7 @@ func (bn *BTCNotifier) fetchSubScriptForDeposit(depositResult *db.DepositResult)
 		return
 	}
 
-	tx, err := bn.client.GetRawTransactionVerbose(txHash)
+	tx, err := bn.poller.rpcService.GetRawTransactionVerbose(txHash)
 	if err != nil {
 		log.Errorf("Failed to fetch transaction details for Txid: %s, error: %v", depositResult.Txid, err)
 		return
@@ -287,7 +284,7 @@ func (bn *BTCNotifier) fetchSubScriptForDeposit(depositResult *db.DepositResult)
 	if len(tx.Vout) > int(depositResult.TxOut) {
 		blockHash, _ := chainhash.NewHashFromStr(tx.BlockHash)
 		// get deposit key by btc block height
-		block, err := bn.client.GetBlockVerbose(blockHash)
+		block, err := bn.poller.rpcService.GetBlockVerbose(blockHash)
 		if err != nil {
 			log.Errorf("Failed to get block details for Txid: %s, error: %v", depositResult.Txid, err)
 			return

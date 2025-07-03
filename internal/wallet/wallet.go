@@ -6,6 +6,7 @@ import (
 
 	"github.com/btcsuite/btcd/rpcclient"
 	"github.com/goatnetwork/goat-relayer/internal/bls"
+	"github.com/goatnetwork/goat-relayer/internal/btc"
 	"github.com/goatnetwork/goat-relayer/internal/p2p"
 	"github.com/goatnetwork/goat-relayer/internal/state"
 	log "github.com/sirupsen/logrus"
@@ -35,14 +36,16 @@ type WalletServer struct {
 	withdrawSigFailChan    chan interface{}
 	withdrawSigFinishChan  chan interface{}
 	withdrawSigTimeoutChan chan interface{}
+
+	rpcService *btc.BTCRPCService
 }
 
-func NewWalletServer(libp2p *p2p.LibP2PService, st *state.State, signer *bls.Signer, btcClient *rpcclient.Client) *WalletServer {
+func NewWalletServer(libp2p *p2p.LibP2PService, st *state.State, signer *bls.Signer, btcClient *rpcclient.Client, rpcService *btc.BTCRPCService) *WalletServer {
 	return &WalletServer{
 		libp2p:           libp2p,
 		state:            st,
 		signer:           signer,
-		depositProcessor: NewDepositProcessor(btcClient, st),
+		depositProcessor: NewDepositProcessor(btcClient, st, rpcService),
 		orderBroadcaster: NewOrderBroadcaster(btcClient, st),
 		blockCh:          make(chan interface{}, state.BTC_BLOCK_CHAN_LENGTH),
 
@@ -51,6 +54,7 @@ func NewWalletServer(libp2p *p2p.LibP2PService, st *state.State, signer *bls.Sig
 		withdrawSigFailChan:    make(chan interface{}, 10),
 		withdrawSigFinishChan:  make(chan interface{}, 10),
 		withdrawSigTimeoutChan: make(chan interface{}, 10),
+		rpcService:             rpcService,
 	}
 }
 

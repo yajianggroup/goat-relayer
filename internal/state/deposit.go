@@ -1,9 +1,7 @@
 package state
 
 import (
-	"encoding/json"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/goatnetwork/goat-relayer/internal/db"
@@ -512,46 +510,13 @@ func (s *State) QueryUnConfirmDeposit(startId uint64, size int) ([]db.Deposit, e
 	return deposit, nil
 }
 
-// QueryBtcBlockDataByHeight query btc block data by height
-func (s *State) QueryBtcBlockDataByHeight(height uint64) (db.BtcBlockData, error) {
-	var btcBlockData db.BtcBlockData
-	result := s.dbm.GetBtcCacheDB().Where("block_height = ?", height).First(&btcBlockData)
-	if result.Error != nil {
-		return db.BtcBlockData{}, result.Error
-	}
-	return btcBlockData, nil
-}
-
-func (s *State) QueryBtcBlockDataByBlockHashes(blockHashes []string) ([]db.BtcBlockData, error) {
-	var btcBlockData []db.BtcBlockData
-	result := s.dbm.GetBtcCacheDB().Where("block_hash IN (?)", blockHashes).Find(&btcBlockData)
-	if result.Error != nil {
-		return nil, result.Error
-	}
-	return btcBlockData, nil
-}
-
-func (s *State) UpdateConfirmedDepositsByBtcHeight(blockHeight uint64, blockHash string) (err error) {
+func (s *State) UpdateConfirmedDepositsByBtcHeight(blockHeight uint64, blockHash string, txHashes []string) (err error) {
 	s.depositMu.Lock()
 	defer s.depositMu.Unlock()
 
-	var btcBlockData db.BtcBlockData
-	result := s.dbm.GetBtcCacheDB().Where("block_height = ?", blockHeight).Find(&btcBlockData)
-	if result.Error != nil {
-		return result.Error
-	}
-
 	// Save to confirmed while the block has the deposit tx
-	if err != nil {
-		return err
-	}
-	txHashes := make([]string, 0)
-	err = json.Unmarshal([]byte(btcBlockData.TxHashes), &txHashes)
-	if err != nil {
-		return err
-	}
 	for _, deposit := range s.depositState.UnconfirmQueue {
-		if !strings.Contains(btcBlockData.TxHashes, deposit.TxHash) {
+		if !contains(txHashes, deposit.TxHash) {
 			continue
 		}
 		merkleRoot, proofBytes, txIndex, err := types.GenerateSPVProof(deposit.TxHash, txHashes)
@@ -574,6 +539,15 @@ func (s *State) UpdateConfirmedDepositsByBtcHeight(blockHeight uint64, blockHash
 	}
 
 	return nil
+}
+
+func contains(slice []string, item string) bool {
+	for _, s := range slice {
+		if s == item {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *State) queryDepositByTxHash(txHash string, outputIndex int) (*db.Deposit, error) {

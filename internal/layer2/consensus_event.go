@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/go-errors/errors"
 	"github.com/goatnetwork/goat-relayer/internal/db"
 
@@ -443,7 +444,24 @@ func (lis *Layer2Listener) processNewBtcBlockHash(block uint64, attributes []abc
 		}
 
 		// update deposit state
-		err = lis.state.UpdateConfirmedDepositsByBtcHeight(u64, hash)
+		blockHash, err := chainhash.NewHashFromStr(hash)
+		if err != nil {
+			log.Errorf("Abci processNewBtcBlockHash failed to parse block hash %s: %v", hash, err)
+			return err
+		}
+
+		txHashes, err := lis.btcRPC.GetTxHashes(blockHash)
+		if err != nil {
+			log.Errorf("Abci processNewBtcBlockHash failed to get tx hashes: %v", err)
+			return err
+		}
+
+		txHashStrings := make([]string, len(txHashes))
+		for i, txHash := range txHashes {
+			txHashStrings[i] = txHash.String()
+		}
+
+		err = lis.state.UpdateConfirmedDepositsByBtcHeight(u64, hash, txHashStrings)
 		if err != nil {
 			log.Errorf("Abci processNewBtcBlockHash UpdateConfirmedDepositsByBtcHeight error: %v", err)
 			return err
