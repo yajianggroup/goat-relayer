@@ -19,7 +19,7 @@ jobs:
     strategy:
       matrix:
         module: [ 'goat-relayer' ]
-    environment: testnet
+    environment: mainnet
 
     steps:
       - name: Checkout
@@ -30,7 +30,7 @@ jobs:
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          aws-region: us-west-2
 
       - name: Login to Amazon ECR
         id: login-ecr
@@ -68,3 +68,18 @@ jobs:
           echo "image=$ECR_REGISTRY/$ECR_REPOSITORY/$IMAGE_NAME:${{ env.VERSION }}" >> $GITHUB_OUTPUT
           echo "image_name=$IMAGE_NAME" >>  $GITHUB_OUTPUT
           echo "image_tag=${{ env.VERSION }}" >>  $GITHUB_OUTPUT
+
+      - name: Build and push image to Docker Hub
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY/$IMAGE_NAME:${{ env.VERSION }} goatnetwork/$IMAGE_NAME:${{ env.VERSION }}-develop
+          docker push goatnetwork/$IMAGE_NAME:${{ env.VERSION }}-develop
+
+          echo "docker-image=goatnetwork/$IMAGE_NAME:${{ env.VERSION }}-develop" >> $GITHUB_OUTPUT
+          echo "image_name=$IMAGE_NAME" >>  $GITHUB_OUTPUT
+          echo "docker-image_tag=${{ env.VERSION }}-develop" >>  $GITHUB_OUTPUT
