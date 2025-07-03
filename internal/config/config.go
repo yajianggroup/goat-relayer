@@ -30,7 +30,7 @@ func InitConfig() {
 	viper.SetDefault("BTC_START_HEIGHT", 0)
 	viper.SetDefault("BTC_NETWORK_TYPE", "")
 	viper.SetDefault("BTC_MAX_NETWORK_FEE", 500)
-	viper.SetDefault("BTC_MAX_RANGE", 100)
+	viper.SetDefault("BTC_MAX_RANGE", 50)
 	viper.SetDefault("BTC_REINDEX_BLOCKS", "")
 	viper.SetDefault("CONTRACT_TASK_MANAGER", "0x6827D591faDa19A1274Df0Ab2608901AaaEA14C9")
 	viper.SetDefault("L2_RPC", "http://localhost:8545")
