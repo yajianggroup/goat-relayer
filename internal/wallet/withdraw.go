@@ -279,7 +279,6 @@ func (w *WalletServer) initWithdrawSig() {
 			return
 		}
 	} else if tasks, err := w.state.GetSafeboxTasks(); err == nil && len(tasks) > 0 {
-		safeboxTxFee := networkFee.HalfHourFee
 		selectedTasks, receiverTypes, withdrawAmount, actualPrice, err := SelectSafeboxTasks(tasks, networkFee, SAFEBOX_TASK_MAX_VOUT, SAFEBOX_TASK_IMMEDIATE_COUNT, network)
 		if err != nil {
 			log.Errorf("WalletServer initWithdrawSig SelectSafeboxTasks error: %v", err)
@@ -301,15 +300,17 @@ func (w *WalletServer) initWithdrawSig() {
 
 		// Safebox transaction
 		safeboxParams := &TransactionParams{
-			UTXOs:         selectOptimalUTXOs,
-			Withdrawals:   nil,
-			Tasks:         selectedTasks,
-			ChangeAddress: p2wpkhAddress.EncodeAddress(),
-			EstimatedFee:  estimateFee,
-			WitnessSize:   witnessSize,
-			NetworkFee:    int64(safeboxTxFee),
-			Net:           network,
-			UtxoAmount:    totalSelectedAmount,
+			UTXOs:          selectOptimalUTXOs,
+			Withdrawals:    nil,
+			Tasks:          selectedTasks,
+			ChangeAddress:  p2wpkhAddress.EncodeAddress(),
+			ChangeAmount:   changeAmount,
+			EstimatedFee:   estimateFee,
+			WitnessSize:    witnessSize,
+			NetworkFee:     actualPrice,
+			Net:            network,
+			UtxoAmount:     totalSelectedAmount,
+			WithdrawAmount: withdrawAmount,
 		}
 		tx, actualFee, err := CreateRawTransaction(safeboxParams)
 		if err != nil {

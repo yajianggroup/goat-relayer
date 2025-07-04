@@ -25,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
 	tssCrypto "github.com/goatnetwork/tss/pkg/crypto"
+	tssTypes "github.com/goatnetwork/tss/pkg/types"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -485,49 +486,74 @@ func (s *SafeboxProcessor) process(ctx context.Context) {
 			return
 		}
 		s.logger.Infof("SafeboxProcessor process - Querying TSS sign status, RequestId: %s", s.tssSession.GetRequestId())
-		resp, err := s.tssSigner.QuerySignResult(ctx, s.tssSession.GetRequestId())
-		if err != nil {
-			s.logger.Errorf("SafeboxProcessor process - Failed to query TSS sign status: %v", err)
-			return
-		}
-		if resp.Signature != nil {
-			s.logger.Infof("SafeboxProcessor process - Signature received, applying to transaction, RequestId: %s", s.tssSession.GetRequestId())
 
-			// Record signature information
-			s.logger.Debugf("SafeboxProcessor process - SIGNATURE INFO")
-			s.logger.Debugf("SafeboxProcessor process - SIGNATURE TYPE: %T", resp.Signature)
-			s.logger.Debugf("SafeboxProcessor process - UNSIGNED TX TYPE: %T", s.tssSession.GetUnsignedTx())
-
-			unsignedTx := s.tssSession.GetUnsignedTx()
-			if unsignedTx == nil {
-				s.logger.Errorf("SafeboxProcessor process - Unsigned transaction is nil")
+		// retry query tss sign status
+		var resp *tssTypes.EvmSignQueryResponse
+		var err error
+		for i := 0; i <= config.AppConfig.L2SubmitRetry; i++ {
+			// add 2 seconds delay
+			select {
+			case <-ctx.Done():
 				return
+			case <-time.After(time.Second * 2):
 			}
 
-			signedTx, err := s.tssSigner.ApplySignResult(ctx, unsignedTx, resp.Signature)
+			resp, err = s.tssSigner.QuerySignResult(ctx, s.tssSession.GetRequestId())
 			if err != nil {
-				s.logger.Errorf("SafeboxProcessor process - Failed to apply TSS sign result: %v, RequestId: %s", err, s.tssSession.GetRequestId())
+				s.logger.Warnf("SafeboxProcessor process - Failed to query TSS sign status, attempt %d: %v, RequestId: %s", i+1, err, s.tssSession.GetRequestId())
+				continue
+			}
+
+			if resp == nil {
+				s.logger.Warnf("SafeboxProcessor process - Query response is nil, attempt %d, RequestId: %s", i+1, s.tssSession.GetRequestId())
+				continue
+			}
+
+			if resp.Signature != nil {
+				s.logger.Infof("SafeboxProcessor process - Signature received, applying to transaction, RequestId: %s", s.tssSession.GetRequestId())
+
+				// Record signature information
+				s.logger.Debugf("SafeboxProcessor process - SIGNATURE INFO")
+				s.logger.Debugf("SafeboxProcessor process - SIGNATURE TYPE: %T", resp.Signature)
+				s.logger.Debugf("SafeboxProcessor process - UNSIGNED TX TYPE: %T", s.tssSession.GetUnsignedTx())
+
+				unsignedTx := s.tssSession.GetUnsignedTx()
+				if unsignedTx == nil {
+					s.logger.Errorf("SafeboxProcessor process - Unsigned transaction is nil")
+					return
+				}
+
+				signedTx, err := s.tssSigner.ApplySignResult(ctx, unsignedTx, resp.Signature)
+				if err != nil {
+					s.logger.Errorf("SafeboxProcessor process - Failed to apply TSS sign result: %v, RequestId: %s", err, s.tssSession.GetRequestId())
+					return
+				}
+
+				// Compare transaction information before and after signing
+				s.logger.Debugf("SafeboxProcessor process - TX BEFORE/AFTER SIGNING")
+				s.logger.Debugf("SafeboxProcessor process - UNSIGNED TX HASH: %s", s.tssSession.GetUnsignedTx().Hash().Hex())
+				s.logger.Debugf("SafeboxProcessor process - SIGNED TX HASH: %s", signedTx.Hash().Hex())
+
+				s.tssSession.SetSignedTx(signedTx)
+				s.logger.Infof("SafeboxProcessor process - Successfully applied signature to transaction, RequestId: %s", s.tssSession.GetRequestId())
+
+				// Submit signed tx to layer2
+				err = s.SendRawTx(ctx, s.tssSession.GetSignedTx())
+				if err != nil {
+					s.logger.Errorf("SafeboxProcessor process - Failed to send signed transaction: %v, RequestId: %s", err, s.tssSession.GetRequestId())
+					return
+				}
 				return
 			}
 
-			// Compare transaction information before and after signing
-			s.logger.Debugf("SafeboxProcessor process - TX BEFORE/AFTER SIGNING")
-			s.logger.Debugf("SafeboxProcessor process - UNSIGNED TX HASH: %s", s.tssSession.GetUnsignedTx().Hash().Hex())
-			s.logger.Debugf("SafeboxProcessor process - SIGNED TX HASH: %s", signedTx.Hash().Hex())
-
-			s.tssSession.SetSignedTx(signedTx)
-			s.logger.Infof("SafeboxProcessor process - Successfully applied signature to transaction, RequestId: %s", s.tssSession.GetRequestId())
-
-			// Submit signed tx to layer2
-			err = s.SendRawTx(ctx, s.tssSession.GetSignedTx())
-			if err != nil {
-				s.logger.Errorf("SafeboxProcessor process - Failed to send signed transaction: %v, RequestId: %s", err, s.tssSession.GetRequestId())
-				return
-			}
-			return
+			s.logger.Infof("SafeboxProcessor process - No signature received yet, attempt %d, RequestId: %s", i+1, s.tssSession.GetRequestId())
 		}
-		s.logger.Infof("SafeboxProcessor process - No signature received yet, RequestId: %s", s.tssSession.GetRequestId())
-		s.ResetTssAndSession(ctx)
+
+		// After all retries, if still no signature, reset session
+		if resp == nil || resp.Signature == nil {
+			s.logger.Errorf("SafeboxProcessor process - Failed to get valid signature after %d retries, RequestId: %s", config.AppConfig.L2SubmitRetry, s.tssSession.GetRequestId())
+			s.ResetTssAndSession(ctx)
+		}
 		return
 	}
 
