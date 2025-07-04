@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -130,28 +129,6 @@ func (bn *BTCNotifier) checkConfirmations(ctx context.Context, blockDoneCh chan 
 				log.Errorf("Failed to update network fee at best height: %d, error: %v", bestHeight, err)
 				continue
 			}
-
-			bn.initOnce.Do(func() {
-				for len(bn.reindexBlocks) > 0 {
-					height := bn.reindexBlocks[0]
-					log.Infof("Reindex block: %s", height)
-					heightInt, err := strconv.ParseInt(height, 10, 64)
-					if err != nil {
-						log.Warnf("Failed to parse reindex block: %s, error: %v", height, err)
-						break
-					}
-					if heightInt > bestHeight {
-						log.Warnf("Reindex block height is larger than best height %d, skip", bestHeight)
-						break
-					}
-					if err := bn.processBlockAtHeight(heightInt, blockDoneCh); err != nil {
-						break
-					}
-					time.Sleep(catchUpInterval)
-					// remove the processed block
-					bn.reindexBlocks = bn.reindexBlocks[1:]
-				}
-			})
 
 			confirmedHeight := bestHeight - bn.confirmations
 			log.Debugf("BTC block confirmation: best height=%d, confirmed height=%d, current height=%d", bestHeight, confirmedHeight, bn.currentHeight)
