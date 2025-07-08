@@ -24,4 +24,5 @@ const (
 	MessageTypeSendOrderBroadcasted
 	MessageTypeNewVoter
 	MessageTypeSafeboxTask
+	MessageTypeHeartbeat
 )

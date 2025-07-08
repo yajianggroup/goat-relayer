@@ -30,6 +30,7 @@ func InitConfig() {
 	viper.SetDefault("BTC_START_HEIGHT", 0)
 	viper.SetDefault("BTC_NETWORK_TYPE", "")
 	viper.SetDefault("BTC_MAX_NETWORK_FEE", 500)
+	viper.SetDefault("BTC_MAX_RANGE", 50)
 	viper.SetDefault("BTC_REINDEX_BLOCKS", "")
 	viper.SetDefault("CONTRACT_TASK_MANAGER", "0x6827D591faDa19A1274Df0Ab2608901AaaEA14C9")
 	viper.SetDefault("L2_RPC", "http://localhost:8545")
@@ -88,6 +89,7 @@ func InitConfig() {
 		BTCConfirmations:       viper.GetInt("BTC_CONFIRMATIONS"),
 		BTCNetworkType:         viper.GetString("BTC_NETWORK_TYPE"),
 		BTCMaxNetworkFee:       viper.GetInt("BTC_MAX_NETWORK_FEE"),
+		BTCMaxRange:            viper.GetInt("BTC_MAX_RANGE"),
 		ContractTaskManager:    viper.GetString("CONTRACT_TASK_MANAGER"),
 		L2RPC:                  viper.GetString("L2_RPC"),
 		L2JwtSecret:            viper.GetString("L2_JWT_SECRET"),
@@ -144,6 +146,7 @@ type Config struct {
 	BTCConfirmations       int
 	BTCNetworkType         string
 	BTCMaxNetworkFee       int
+	BTCMaxRange            int
 	BTCReindexBlocks       string
 	ContractTaskManager    string
 	L2RPC                  string

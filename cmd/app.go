@@ -55,12 +55,13 @@ func NewApplication() *Application {
 	dbm := db.NewDatabaseManager()
 	state := state.InitializeState(dbm)
 	libP2PService := p2p.NewLibP2PService(state)
-	layer2Listener := layer2.NewLayer2Listener(libP2PService, state, dbm)
+	layer2Listener := layer2.NewLayer2Listener(libP2PService, state, dbm, btcClient)
 	signer := bls.NewSigner(libP2PService, layer2Listener, state, btcClient)
 	httpServer := http.NewHTTPServer(libP2PService, state, dbm)
-	btcListener := btc.NewBTCListener(libP2PService, state, dbm, btcClient)
+	btcListener := btc.NewBTCListener(libP2PService, state, btcClient)
 	utxoService := rpc.NewUtxoServer(state, layer2Listener, btcClient)
-	walletService := wallet.NewWalletServer(libP2PService, state, signer, btcClient)
+	btcRPCService := btc.NewBTCRPCService(btcClient)
+	walletService := wallet.NewWalletServer(libP2PService, state, signer, btcClient, btcRPCService)
 	voterProcessor := voter.NewVoterProcessor(libP2PService, state, signer)
 
 	return &Application{
