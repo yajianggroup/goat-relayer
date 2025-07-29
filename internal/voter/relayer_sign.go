@@ -147,10 +147,18 @@ func (p *RelayerSignProcessor) beginSigNewVoter() {
 	reqMsg := relayertypes.NewOnBoardingVoterRequest(foundVoter.Epoch, addrRaw, blsPk)
 	sigMsg := relayertypes.VoteSignDoc(
 		reqMsg.MethodName(), config.AppConfig.GoatChainID, epochVoter.Proposer, 0 /* sequence */, epochVoter.Epoch, reqMsg.SignDoc())
-	txKeyProof, err := privKey.Sign(sigMsg)
+	// Use go-ethereum's signing function to generate a 65-byte signature that includes the recovery ID,
+	// then remove the last byte (recovery ID) to convert it to a 64-byte signature,
+	// to meet the requirements of crypto.VerifySignature for signature verification.
+	ecdsaPriv, err := crypto.ToECDSA(privKeyBytes)
+	if err != nil {
+		log.Fatalf("RelayerSignProcessor BeginSig convert private key failed: %v", err)
+	}
+	sig65, err := crypto.Sign(sigMsg, ecdsaPriv)
 	if err != nil {
 		log.Fatalf("RelayerSignProcessor BeginSig sign tx key proof failed: %v", err)
 	}
+	txKeyProof := sig65[:64]
 	blsKeyProof := goatcryp.Sign(blsSk, sigMsg)
 	msgSignNewVoter := types.MsgSignNewVoter{
 		MsgSign: types.MsgSign{
