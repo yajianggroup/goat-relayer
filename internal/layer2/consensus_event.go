@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
-	"github.com/go-errors/errors"
 	"github.com/goatnetwork/goat-relayer/internal/db"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -601,8 +600,8 @@ func (lis *Layer2Listener) processVoterEvent(block uint64, eventType string, att
 		lis.voterUpdateMu.Lock()
 		lis.hasVoterUpdate = false
 		lis.voterUpdateMu.Unlock()
-		// abort getGoatBlock loop by return error
-		return errors.New("voter update should abort getGoatBlock loop")
+		// Note: every epoch, there is a voter update event, so we need to return nil to continue the loop
+		return nil
 	}
 
 	var voter string
