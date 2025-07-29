@@ -144,7 +144,8 @@ func (p *RelayerSignProcessor) beginSigNewVoter() {
 
 	blsSk := new(goatcryp.PrivateKey).Deserialize(blsBytes)
 	blsPk := new(goatcryp.PublicKey).From(blsSk).Compress()
-	reqMsg := relayertypes.NewOnBoardingVoterRequest(foundVoter.Epoch, addrRaw, blsPk)
+	blsKeyHash := goatcryp.SHA256Sum(blsPk)
+	reqMsg := relayertypes.NewOnBoardingVoterRequest(foundVoter.Epoch, addrRaw, blsKeyHash)
 	sigMsg := relayertypes.VoteSignDoc(
 		reqMsg.MethodName(), config.AppConfig.GoatChainID, epochVoter.Proposer, 0 /* sequence */, epochVoter.Epoch, reqMsg.SignDoc())
 	// Use go-ethereum's signing function to generate a 65-byte signature that includes the recovery ID,

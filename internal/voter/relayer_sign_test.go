@@ -48,7 +48,8 @@ func TestValidateNewVoterSignatures(t *testing.T) {
 	t.Logf("Epoch: %d", epoch)
 
 	// Construct OnBoardingVoterRequest
-	reqMsg := relayertypes.NewOnBoardingVoterRequest(epoch, addrRaw, blsPk)
+	blsKeyHash := goatcryp.SHA256Sum(blsPk)
+	reqMsg := relayertypes.NewOnBoardingVoterRequest(epoch, addrRaw, blsKeyHash)
 
 	// Construct signature document
 	sigMsg := relayertypes.VoteSignDoc(
