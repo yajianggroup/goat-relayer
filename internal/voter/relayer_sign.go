@@ -128,7 +128,7 @@ func (p *RelayerSignProcessor) beginSigNewVoter() {
 		log.Fatalf("RelayerSignProcessor BeginSig decode private key failed: %v", err)
 	}
 	privKey := &secp256k1.PrivKey{Key: privKeyBytes}
-	addrRaw := cosmossdktypes.AccAddress(privKey.PubKey().Address().Bytes())
+	addrRaw := cosmossdktypes.AccAddress(goatcryp.Hash160Sum(privKey.PubKey().Bytes()))
 	blsBytes, err := hex.DecodeString(config.AppConfig.RelayerBlsSk)
 	if err != nil {
 		log.Fatalf("Decode bls sk error: %v", err)
