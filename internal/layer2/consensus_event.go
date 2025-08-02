@@ -141,6 +141,13 @@ func (lis *Layer2Listener) processBlockVoters(block uint64) error {
 		})
 	}
 
+	voters = append(voters, &db.Voter{
+		VoteAddr:  respRelayer.Relayer.Proposer,
+		VoteKey:   "", // hex.EncodeToString(voter.VoteKey)
+		Height:    block,
+		UpdatedAt: time.Now(),
+	})
+
 	err = lis.state.UpdateL2InfoVoters(block, respRelayer.Relayer.Epoch, respRelayer.Sequence, respRelayer.Relayer.Proposer, voters)
 	if err != nil {
 		log.Errorf("Abci voters update error, %v", err)
