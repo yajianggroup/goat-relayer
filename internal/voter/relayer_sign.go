@@ -10,6 +10,7 @@ import (
 
 	"github.com/cosmos/cosmos-sdk/crypto/keys/secp256k1"
 	cosmossdktypes "github.com/cosmos/cosmos-sdk/types"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/goatnetwork/goat-relayer/internal/bls"
 	"github.com/goatnetwork/goat-relayer/internal/config"
 	"github.com/goatnetwork/goat-relayer/internal/db"
@@ -19,6 +20,13 @@ import (
 	goatcryp "github.com/goatnetwork/goat/pkg/crypto"
 	relayertypes "github.com/goatnetwork/goat/x/relayer/types"
 	log "github.com/sirupsen/logrus"
+)
+
+const (
+	// Secp256k1CompressedPubKeyLength is the length of a compressed secp256k1 public key
+	Secp256k1CompressedPubKeyLength = 33
+	// BLSCompressedPubKeyLength is the length of a compressed BLS public key
+	BLSCompressedPubKeyLength = 96
 )
 
 var (
@@ -128,7 +136,7 @@ func (p *RelayerSignProcessor) beginSigNewVoter() {
 		log.Fatalf("RelayerSignProcessor BeginSig decode private key failed: %v", err)
 	}
 	privKey := &secp256k1.PrivKey{Key: privKeyBytes}
-	addrRaw := cosmossdktypes.AccAddress(privKey.PubKey().Address().Bytes())
+	addrRaw := cosmossdktypes.AccAddress(goatcryp.Hash160Sum(privKey.PubKey().Bytes()))
 	blsBytes, err := hex.DecodeString(config.AppConfig.RelayerBlsSk)
 	if err != nil {
 		log.Fatalf("Decode bls sk error: %v", err)
@@ -136,13 +144,22 @@ func (p *RelayerSignProcessor) beginSigNewVoter() {
 
 	blsSk := new(goatcryp.PrivateKey).Deserialize(blsBytes)
 	blsPk := new(goatcryp.PublicKey).From(blsSk).Compress()
-	reqMsg := relayertypes.NewOnBoardingVoterRequest(foundVoter.Epoch, addrRaw, blsPk)
+	blsKeyHash := goatcryp.SHA256Sum(blsPk)
+	reqMsg := relayertypes.NewOnBoardingVoterRequest(foundVoter.Epoch, addrRaw, blsKeyHash)
 	sigMsg := relayertypes.VoteSignDoc(
 		reqMsg.MethodName(), config.AppConfig.GoatChainID, epochVoter.Proposer, 0 /* sequence */, epochVoter.Epoch, reqMsg.SignDoc())
-	txKeyProof, err := privKey.Sign(sigMsg)
+	// Use go-ethereum's signing function to generate a 65-byte signature that includes the recovery ID,
+	// then remove the last byte (recovery ID) to convert it to a 64-byte signature,
+	// to meet the requirements of crypto.VerifySignature for signature verification.
+	ecdsaPriv, err := crypto.ToECDSA(privKeyBytes)
+	if err != nil {
+		log.Fatalf("RelayerSignProcessor BeginSig convert private key failed: %v", err)
+	}
+	sig65, err := crypto.Sign(sigMsg, ecdsaPriv)
 	if err != nil {
 		log.Fatalf("RelayerSignProcessor BeginSig sign tx key proof failed: %v", err)
 	}
+	txKeyProof := sig65[:64]
 	blsKeyProof := goatcryp.Sign(blsSk, sigMsg)
 	msgSignNewVoter := types.MsgSignNewVoter{
 		MsgSign: types.MsgSign{
@@ -158,8 +175,67 @@ func (p *RelayerSignProcessor) beginSigNewVoter() {
 		VoterBlsKeyProof: blsKeyProof,
 		VoterTxKeyProof:  txKeyProof,
 	}
+
+	// Validate signatures before submitting to P2P
+	if !p.validateNewVoterSignatures(sigMsg, txKeyProof, blsKeyProof, privKey.PubKey().Bytes(), blsPk, addrRaw) {
+		log.Errorf("RelayerSignProcessor BeginSig signature validation failed, aborting P2P submission")
+		return
+	}
+
+	log.Infof("RelayerSignProcessor BeginSig all validations passed, submitting to P2P")
 	p.state.EventBus.Publish(state.SigStart, msgSignNewVoter)
 	p.sigStatus = true
+}
+
+// validateNewVoterSignatures validates all signatures before P2P submission
+func (p *RelayerSignProcessor) validateNewVoterSignatures(sigMsg []byte, txKeyProof []byte, blsKeyProof []byte, voterTxKey []byte, voterBlsKey []byte, addrRaw cosmossdktypes.AccAddress) bool {
+	log.Infof("RelayerSignProcessor BeginSig starting signature validation...")
+
+	// Validate TX Key Proof
+	txKeyValid := crypto.VerifySignature(voterTxKey, sigMsg, txKeyProof)
+	if !txKeyValid {
+		log.Errorf("RelayerSignProcessor BeginSig TX Key Proof validation failed")
+		log.Errorf("Signature document: %s", hex.EncodeToString(sigMsg))
+		log.Errorf("TX Key Proof: %s", hex.EncodeToString(txKeyProof))
+		log.Errorf("Voter TX Key: %s", hex.EncodeToString(voterTxKey))
+		return false
+	}
+	log.Infof("RelayerSignProcessor BeginSig TX Key Proof validation successful")
+
+	// Validate BLS Key Proof
+	blsKeyValid := goatcryp.Verify(voterBlsKey, sigMsg, blsKeyProof)
+	if !blsKeyValid {
+		log.Errorf("RelayerSignProcessor BeginSig BLS Key Proof validation failed")
+		log.Errorf("Signature document: %s", hex.EncodeToString(sigMsg))
+		log.Errorf("BLS Key Proof: %s", hex.EncodeToString(blsKeyProof))
+		log.Errorf("Voter BLS Key: %s", hex.EncodeToString(voterBlsKey))
+		return false
+	}
+	log.Infof("RelayerSignProcessor BeginSig BLS Key Proof validation successful")
+
+	// Validate address calculation
+	calculatedAddr := cosmossdktypes.AccAddress(goatcryp.Hash160Sum(voterTxKey))
+	log.Infof("RelayerSignProcessor BeginSig calculated address: %s", calculatedAddr.String())
+	log.Infof("RelayerSignProcessor BeginSig expected address: %s", addrRaw.String())
+
+	if !strings.EqualFold(calculatedAddr.String(), addrRaw.String()) {
+		log.Errorf("RelayerSignProcessor BeginSig address calculation error")
+		return false
+	}
+	log.Infof("RelayerSignProcessor BeginSig address validation successful")
+
+	// Validate parameter format
+	if len(voterTxKey) != Secp256k1CompressedPubKeyLength {
+		log.Errorf("RelayerSignProcessor BeginSig Voter TX Key length error: expected %d bytes, got %d bytes", Secp256k1CompressedPubKeyLength, len(voterTxKey))
+		return false
+	}
+	if len(voterBlsKey) != BLSCompressedPubKeyLength {
+		log.Errorf("RelayerSignProcessor BeginSig Voter BLS Key length error: expected %d bytes, got %d bytes", BLSCompressedPubKeyLength, len(voterBlsKey))
+		return false
+	}
+	log.Infof("RelayerSignProcessor BeginSig parameter format validation successful")
+
+	return true
 }
 
 func (p *RelayerSignProcessor) HandleSigFinish(msgSign interface{}) {
